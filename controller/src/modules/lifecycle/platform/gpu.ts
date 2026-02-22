@@ -1,9 +1,9 @@
 // CRITICAL
-import type { GpuInfo, RuntimeGpuMonitoringTool } from "./types";
-import { runCommand } from "../../core/command";
-import { getGpuInfoFromAmdSmi, getGpuInfoFromRocmSmi } from "./platform/amd-gpu";
-import { resolveRocmSmiTool } from "./platform/rocm-info";
-import { resolveForcedGpuMonitoringTool, resolveNvidiaSmiBinary } from "./platform/smi-tools";
+import type { GpuInfo, RuntimeGpuMonitoringTool } from "../types";
+import { runCommand } from "../../../core/command";
+import { getGpuInfoFromAmdSmi, getGpuInfoFromRocmSmi } from "./amd-gpu";
+import { resolveRocmSmiTool } from "./rocm-info";
+import { resolveForcedGpuMonitoringTool, resolveNvidiaSmiBinary } from "./smi-tools";
 
 export const getGpuInfoFromNvidiaSmi = (): GpuInfo[] => {
   const query = [

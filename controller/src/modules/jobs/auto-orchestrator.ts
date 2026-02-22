@@ -12,11 +12,21 @@ export class AutoOrchestrator implements Orchestrator {
   private readonly memory: MemoryOrchestrator;
   private readonly context: AppContext;
 
+  /**
+   * Construct an orchestrator tied to the app context.
+   *
+   * @param context
+   */
   public constructor(context: AppContext) {
     this.context = context;
     this.memory = new MemoryOrchestrator(context);
   }
 
+  /**
+   * Check whether the Temporal API endpoint is reachable.
+   *
+   * @returns `true` when Temporal is reachable on the configured address.
+   */
   private async isTemporalReachable(): Promise<boolean> {
     const host = process.env["TEMPORAL_ADDRESS"] ?? "localhost:7233";
     const [h, p] = host.split(":");
@@ -44,6 +54,15 @@ export class AutoOrchestrator implements Orchestrator {
     }
   }
 
+  /**
+   * Execute a workflow using the chosen orchestrator.
+   *
+   * @returns Workflow result payload.
+   * @param jobId
+   * @param type
+   * @param input
+   * @param reporter
+  */
   public async execute(
     jobId: string,
     type: string,

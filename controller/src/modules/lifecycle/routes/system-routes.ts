@@ -4,15 +4,15 @@ import { connect } from "node:net";
 import { hostname } from "node:os";
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
-import type { AppContext } from "../../types/context";
-import type { HealthResponse, SystemConfigResponse } from "./types";
-import { badRequest, notFound } from "../../core/errors";
-import { estimateWeightsSizeBytes } from "../models/model-browser";
-import { getGpuInfo } from "./gpu";
-import { getSystemRuntimeInfo } from "./runtime-info";
-import { buildCompatibilityReport } from "./platform/compatibility-report";
-import { fetchInference } from "../../services/inference/inference-client";
-import { fetchLocal } from "../../http/local-fetch";
+import type { AppContext } from "../../../types/context";
+import type { HealthResponse, SystemConfigResponse } from "../types";
+import { badRequest, notFound } from "../../../core/errors";
+import { estimateWeightsSizeBytes } from "../../models/model-browser";
+import { getGpuInfo } from "../platform/gpu";
+import { getSystemRuntimeInfo } from "../runtime/runtime-info";
+import { buildCompatibilityReport } from "../platform/compatibility-report";
+import { fetchInference } from "../../../services/inference/inference-client";
+import { fetchLocal } from "../../../http/local-fetch";
 
 /**
  * Register system routes.

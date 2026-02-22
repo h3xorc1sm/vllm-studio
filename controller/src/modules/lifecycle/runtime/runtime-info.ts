@@ -8,15 +8,15 @@ import type {
   RuntimePlatformKind,
   RuntimeTorchBuildInfo,
   SystemRuntimeInfo,
-} from "./types";
-import type { Config } from "../../config/env";
-import { resolveBinary, runCommand } from "../../core/command";
-import { getGpuInfo } from "./gpu";
+} from "../types";
+import type { Config } from "../../../config/env";
+import { resolveBinary, runCommand } from "../../../core/command";
+import { getGpuInfo } from "../platform/gpu";
 import { getVllmRuntimeInfo } from "./vllm-runtime";
-import { probeGpuMonitoring } from "./platform/compatibility-report";
-import { getRocmInfo, resolveRocmSmiTool } from "./platform/rocm-info";
-import { resolveNvidiaSmiBinary } from "./platform/smi-tools";
-import { getTorchBuildInfo } from "./platform/torch-info";
+import { probeGpuMonitoring } from "../platform/compatibility-report";
+import { getRocmInfo, resolveRocmSmiTool } from "../platform/rocm-info";
+import { resolveNvidiaSmiBinary } from "../platform/smi-tools";
+import { getTorchBuildInfo } from "../platform/torch-info";
 import { resolveVllmPythonPath } from "./vllm-python-path";
 import { isUpgradeCommandConfigured, CUDA_UPGRADE_ENV, LLAMACPP_UPGRADE_ENV } from "./runtime-upgrade-config";
 
@@ -128,6 +128,52 @@ const parseLlamaVersion = (output: string): string | null => {
   return fallback || null;
 };
 
+const splitCommand = (command: string): string[] => {
+  const tokens = command.match(/(?:[^\s"]+|"[^"]*"|'[^']*')+/g) ?? [];
+  return tokens.map((token) => token.replace(/^['"]|['"]$/g, ""));
+};
+
+const resolveExllamav3Binary = (config: Config): string | null => {
+  const template = config.exllamav3_command?.trim();
+  if (!template) {
+    return null;
+  }
+  const parsed = splitCommand(template);
+  const executable = parsed[0];
+  if (!executable) {
+    return null;
+  }
+  return resolveBinary(executable) ?? (existsSync(executable) ? resolve(executable) : null);
+};
+
+export const getExllamav3RuntimeInfo = (config: Config): RuntimeBackendInfo => {
+  const binary = resolveExllamav3Binary(config);
+  if (!binary) {
+    return {
+      installed: false,
+      version: null,
+      binary_path: null,
+      upgrade_command_available: false,
+    };
+  }
+
+  const versionResult = runCommand(binary, ["--version"]);
+  let version = parseLlamaVersion(versionResult.stdout) ?? parseLlamaVersion(versionResult.stderr);
+  let installed = versionResult.status === 0;
+  if (!installed) {
+    const helpResult = runCommand(binary, ["--help"]);
+    installed = helpResult.status === 0;
+    version = version ?? parseLlamaVersion(helpResult.stdout) ?? parseLlamaVersion(helpResult.stderr);
+  }
+
+  return {
+    installed,
+    version,
+    binary_path: binary,
+    upgrade_command_available: false,
+  };
+};
+
 export const getLlamacppRuntimeInfo = (config: Config): RuntimeBackendInfo => {
   const configured = config.llama_bin || "llama-server";
   const resolved =
@@ -215,6 +261,7 @@ export const getSystemRuntimeInfo = async (config: Config): Promise<SystemRuntim
       },
       sglang: sglangInfo,
       llamacpp: llamaInfo,
+      exllamav3: getExllamav3RuntimeInfo(config),
     },
   };
 };

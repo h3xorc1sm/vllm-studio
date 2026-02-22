@@ -97,6 +97,9 @@ describe("audio routes", () => {
         findInferenceProcess,
         evictModel,
       },
+      lifecycleCoordinator: {
+        evict: async () => ({ success: true, evicted_pid: await evictModel() }),
+      },
     } as unknown as AppContext;
 
     registerAudioRoutes(app, context, {

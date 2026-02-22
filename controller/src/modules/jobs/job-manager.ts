@@ -8,6 +8,10 @@ const SUPPORTED_TYPES = new Set(["voice_assistant_turn"]);
 
 /**
  * Creates a JobReporter that persists updates to the store and emits events.
+ * @returns Reporter implementation used to emit progress and logs.
+ * @param jobId
+ * @param store
+ * @param context
  */
 function createReporter(
   jobId: string,
@@ -15,20 +19,28 @@ function createReporter(
   context: AppContext,
 ): JobReporter {
   return {
-    progress(pct: number) {
+    progress(pct: number): void {
       store.update(jobId, { progress: Math.min(100, Math.max(0, pct)) });
       void emitJobUpdate(jobId, store, context);
     },
-    log(message: string) {
+    log(message: string): void {
       store.appendLog(jobId, message);
     },
-    status(status: "running" | "completed" | "failed") {
+    status(status: "running" | "completed" | "failed"): void {
       store.update(jobId, { status });
       void emitJobUpdate(jobId, store, context);
     },
   };
 }
 
+/**
+ * Emit a job update event for listeners after persistence.
+ *
+ * @param jobId
+ * @param store
+ * @param context
+ * @returns Promise that resolves when update event is published.
+ */
 async function emitJobUpdate(
   jobId: string,
   store: JobStore,
@@ -42,6 +54,8 @@ async function emitJobUpdate(
 
 /**
  * Serialize a job record for API/event transport.
+ * @returns Serialized job payload used by API and event consumers.
+ * @param job
  */
 export function serializeJob(job: JobRecord): Record<string, unknown> {
   let logs: string[] = [];
@@ -86,6 +100,13 @@ export class JobManager {
   private readonly store: JobStore;
   private readonly orchestrator: AutoOrchestrator;
 
+  /**
+   * Create a new job instance and start execution.
+   *
+   * @returns Serialized created job payload.
+   * @param context
+   * @param store
+   */
   public constructor(context: AppContext, store: JobStore) {
     this.context = context;
     this.store = store;
@@ -116,6 +137,15 @@ export class JobManager {
     return serializeJob(job);
   }
 
+  /**
+   * Execute a job and persist final state.
+   *
+   * @returns Promise that resolves when job persistence has been updated.
+   * @param id
+   * @param type
+   * @param input
+   * @param reporter
+   */
   private async runJob(
     id: string,
     type: string,
@@ -129,12 +159,12 @@ export class JobManager {
         progress: 100,
         result: JSON.stringify(result),
       });
-    } catch (err) {
+    } catch (error) {
       this.store.update(id, {
         status: "failed",
-        error: err instanceof Error ? err.message : String(err),
+        error: error instanceof Error ? error.message : String(error),
       });
-      reporter.log(`Job failed: ${String(err)}`);
+      reporter.log(`Job failed: ${String(error)}`);
     }
     void emitJobUpdate(id, this.store, this.context);
   }

@@ -1,9 +1,9 @@
 // CRITICAL
 import { existsSync, readFileSync } from "node:fs";
 import { parseRecipe } from "./recipe-serializer";
-import type { Recipe } from "./types";
-import { openSqliteDatabase } from "../../stores/sqlite";
-import { resolveVllmRecipePythonPath } from "./vllm-python-path";
+import type { Recipe } from "../types";
+import { openSqliteDatabase } from "../../../stores/sqlite";
+import { resolveVllmRecipePythonPath } from "../runtime/vllm-python-path";
 
 /**
  * SQLite-backed recipe storage.
@@ -52,6 +52,11 @@ export class RecipeStore {
     this.useJsonColumn = false;
   }
 
+  /**
+   * Normalize all stored vLLM recipes to a valid runtime Python path.
+   *
+   * Migrates legacy values on startup so stale/invalid paths are corrected.
+   */
   private normalizeVllmRecipes(): void {
     const update = this.db.prepare(
       `UPDATE recipes SET ${this.useJsonColumn ? "json" : "data"} = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`

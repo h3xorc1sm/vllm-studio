@@ -12,10 +12,24 @@ export class MemoryOrchestrator implements Orchestrator {
   public readonly name = "memory";
   private readonly context: AppContext;
 
+  /**
+   * Construct an in-process orchestrator for immediate execution.
+   *
+   * @param context
+   */
   public constructor(context: AppContext) {
     this.context = context;
   }
 
+  /**
+   * Execute the requested workflow in the controller process.
+   *
+   * @returns Workflow output payload.
+   * @param jobId
+   * @param type
+   * @param input
+   * @param reporter
+  */
   public async execute(
     jobId: string,
     type: string,

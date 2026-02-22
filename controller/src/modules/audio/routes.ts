@@ -146,7 +146,7 @@ const ensureServiceLease = async (
   }
 
   if (replace) {
-    await context.processManager.evictModel(true);
+    await context.lifecycleCoordinator.evict(true);
     return null;
   }
 

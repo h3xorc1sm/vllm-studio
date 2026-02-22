@@ -1,6 +1,6 @@
 // CRITICAL
 import { basename } from "node:path";
-import type { ProcessInfo, Recipe } from "./types";
+import type { ProcessInfo, Recipe } from "../types";
 
 export interface RecipeMatchOptions {
   allowCurrentContainsRecipePath?: boolean;

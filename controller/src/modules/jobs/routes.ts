@@ -7,6 +7,7 @@ import { badRequest, notFound } from "../../core/errors";
 /**
  * Register jobs API routes.
  * @param app - Hono application.
+ * @param _context
  * @param jobManager - Job manager instance.
  */
 export const registerJobsRoutes = (
@@ -33,9 +34,9 @@ export const registerJobsRoutes = (
     try {
       const job = await jobManager.createJob(type, input);
       return ctx.json({ job }, { status: 201 });
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      throw badRequest(msg);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw badRequest(message);
     }
   });
 

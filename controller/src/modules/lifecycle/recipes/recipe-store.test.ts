@@ -1,8 +1,8 @@
 // CRITICAL
 import { describe, it, expect, beforeEach } from "bun:test";
 import { RecipeStore } from "./recipe-store";
-import type { Recipe } from "./types";
-import { asRecipeId } from "../../types/brand";
+import type { Recipe } from "../types";
+import { asRecipeId } from "../../../types/brand";
 
 /**
  * Create a minimal test recipe with required fields.

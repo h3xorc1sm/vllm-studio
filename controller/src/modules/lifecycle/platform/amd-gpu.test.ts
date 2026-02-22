@@ -3,7 +3,7 @@ import { afterAll, describe, expect, it } from "bun:test";
 import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { getGpuInfo } from "../gpu";
+import { getGpuInfo } from "./gpu";
 import { parseAmdSmiMetricJson, parseAmdSmiStaticJson, parseRocmSmiText } from "./amd-gpu";
 
 describe("AMD/ROCm GPU telemetry parsing", () => {

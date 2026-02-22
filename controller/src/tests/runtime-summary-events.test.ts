@@ -1,6 +1,7 @@
 // CRITICAL
 import { describe, expect, it } from "bun:test";
-import { createEventManager, Event } from "../modules/monitoring/event-manager";
+import type { Event } from "../modules/monitoring/event-manager";
+import { createEventManager } from "../modules/monitoring/event-manager";
 
 describe("runtime_summary event contract", () => {
   it("publishRuntimeSummary emits event with required keys", async () => {
@@ -8,7 +9,7 @@ describe("runtime_summary event contract", () => {
     const collected: Event[] = [];
 
     // Subscribe in background
-    const sub = (async () => {
+    const sub = (async (): Promise<void> => {
       for await (const event of em.subscribe()) {
         collected.push(event);
         break; // one event is enough
@@ -29,22 +30,22 @@ describe("runtime_summary event contract", () => {
     await sub;
 
     expect(collected.length).toBe(1);
-    const evt = collected[0]!;
-    expect(evt.type).toBe("runtime_summary");
-    expect(evt.data["platform"]).toBeDefined();
+    const event = collected[0]!;
+    expect(event.type).toBe("runtime_summary");
+    expect(event.data["platform"]).toBeDefined();
 
-    const platform = evt.data["platform"] as { kind: string };
+    const platform = event.data["platform"] as { kind: string };
     expect(platform.kind).toBe("rocm");
 
-    const gpuMon = evt.data["gpu_monitoring"] as { available: boolean; tool: string };
+    const gpuMon = event.data["gpu_monitoring"] as { available: boolean; tool: string };
     expect(gpuMon.available).toBe(true);
     expect(gpuMon.tool).toBe("amd-smi");
 
-    const backends = evt.data["backends"] as Record<string, { installed: boolean }>;
+    const backends = event.data["backends"] as Record<string, { installed: boolean }>;
     expect(backends["vllm"]!.installed).toBe(true);
     expect(backends["sglang"]!.installed).toBe(false);
 
-    const lease = evt.data["lease"] as { holder: string };
+    const lease = event.data["lease"] as { holder: string };
     expect(lease.holder).toBe("test-model");
   });
 
@@ -52,7 +53,7 @@ describe("runtime_summary event contract", () => {
     const em = createEventManager();
     const collected: Event[] = [];
 
-    const sub = (async () => {
+    const sub = (async (): Promise<void> => {
       for await (const event of em.subscribe()) {
         collected.push(event);
         break;

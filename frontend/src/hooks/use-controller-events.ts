@@ -188,6 +188,10 @@ export function useControllerEvents(
             dispatchCustomEvent("vllm:runtime-event", { type: eventType, data });
             break;
           }
+          case "model_switch": {
+            dispatchCustomEvent("vllm:controller-event", { type: eventType, data });
+            break;
+          }
           case "distributed_node_updated":
           case "distributed_topology_updated": {
             dispatchCustomEvent("vllm:distributed-event", { type: eventType, data });

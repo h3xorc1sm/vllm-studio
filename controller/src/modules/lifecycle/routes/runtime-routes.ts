@@ -1,19 +1,22 @@
 // CRITICAL
 import type { Hono } from "hono";
-import type { AppContext } from "../../types/context";
-import { badRequest } from "../../core/errors";
-import { getLlamacppConfigHelp } from "./llamacpp-runtime";
-import { getVllmRuntimeInfo, upgradeVllmRuntime } from "./vllm-runtime";
-import { getVllmConfigHelp } from "./vllm-runtime";
-import { getLlamacppRuntimeInfo, getSglangRuntimeInfo } from "./runtime-info";
-import { getCudaInfo } from "./runtime-info";
-import { getRocmInfo, resolveRocmSmiTool } from "./platform/rocm-info";
+import type { AppContext } from "../../../types/context";
+import { badRequest } from "../../../core/errors";
+import { getLlamacppConfigHelp } from "../runtime/llamacpp-runtime";
+import { getVllmRuntimeInfo, upgradeVllmRuntime, getVllmConfigHelp } from "../runtime/vllm-runtime";
+import {
+  getCudaInfo,
+  getExllamav3RuntimeInfo,
+  getLlamacppRuntimeInfo,
+  getSglangRuntimeInfo,
+} from "../runtime/runtime-info";
+import { getRocmInfo, resolveRocmSmiTool } from "../platform/rocm-info";
 import {
   runPlatformUpgrade,
   upgradeLlamacppRuntime,
   upgradeSglangRuntime,
-} from "./runtime-upgrade";
-import { Event } from "../monitoring/event-manager";
+} from "../runtime/runtime-upgrade";
+import { Event } from "../../monitoring/event-manager";
 
 export const registerRuntimeRoutes = (app: Hono, context: AppContext): void => {
   app.get("/runtime/vllm", async (ctx) => {
@@ -38,6 +41,11 @@ export const registerRuntimeRoutes = (app: Hono, context: AppContext): void => {
 
   app.get("/runtime/llamacpp", async (ctx) => {
     const info = getLlamacppRuntimeInfo(context.config);
+    return ctx.json(info);
+  });
+
+  app.get("/runtime/exllamav3", async (ctx) => {
+    const info = getExllamav3RuntimeInfo(context.config);
     return ctx.json(info);
   });
 

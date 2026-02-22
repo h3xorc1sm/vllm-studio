@@ -2,8 +2,8 @@
 import { describe, it, expect, beforeEach, afterEach, mock } from "bun:test";
 import { Hono } from "hono";
 import { registerSystemRoutes } from "./system-routes";
-import type { AppContext } from "../../types/context";
-import type { Config } from "../../config/env";
+import type { AppContext } from "../../../types/context";
+import type { Config } from "../../../config/env";
 
 describe("System Routes", () => {
   let app: Hono;
@@ -26,6 +26,7 @@ describe("System Routes", () => {
       data_dir: "./data",
       db_path: ":memory:",
       models_dir: "/models",
+      strict_openai_models: false,
     };
 
     const mockContext = {
@@ -41,9 +42,8 @@ describe("System Routes", () => {
         broadcast: mock(() => undefined),
       },
       launchState: {
-        launching: null,
-        setLaunching: mock(() => undefined),
-        clearLaunching: mock(() => undefined),
+        getLaunchingRecipeId: mock(() => null),
+        setLaunchingRecipeId: mock(() => undefined),
       },
       metrics: {
         requestsTotal: { inc: mock(() => undefined) },

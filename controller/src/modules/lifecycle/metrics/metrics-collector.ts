@@ -1,9 +1,9 @@
 // CRITICAL
-import type { AppContext } from "../../types/context";
-import { getGpuInfo } from "./gpu";
-import { getSystemRuntimeInfo } from "./runtime-info";
-import { delay } from "../../core/async";
-import { fetchLocal } from "../../http/local-fetch";
+import type { AppContext } from "../../../types/context";
+import { getGpuInfo } from "../platform/gpu";
+import { getSystemRuntimeInfo } from "../runtime/runtime-info";
+import { delay } from "../../../core/async";
+import { fetchLocal } from "../../../http/local-fetch";
 
 /**
  * Start background metrics collection.

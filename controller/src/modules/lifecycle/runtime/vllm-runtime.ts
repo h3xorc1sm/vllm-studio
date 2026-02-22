@@ -2,7 +2,7 @@
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { resolveBinary } from "../../core/command";
+import { resolveBinary } from "../../../core/command";
 import { resolveVllmPythonPath } from "./vllm-python-path";
 import { getUpgradeCommandFromEnvironment, getVllmUpgradeVersion, VLLM_UPGRADE_ENV } from "./runtime-upgrade-config";
 

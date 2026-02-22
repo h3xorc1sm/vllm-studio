@@ -1,22 +1,16 @@
 // CRITICAL
 import type { Hono } from "hono";
-import { AsyncLock, delay } from "../../core/async";
-import { HttpStatus, serviceUnavailable } from "../../core/errors";
-import { primaryLogPathFor, readFileTailBytes, sanitizeLogSessionId } from "../../core/log-files";
+import { HttpStatus, notFound, serviceUnavailable } from "../../core/errors";
 import { buildSseHeaders } from "../../http/sse";
 import type { AppContext } from "../../types/context";
 import type { Recipe } from "../lifecycle/types";
 import {
   createToolCallStream,
-  normalizeToolCallsInMessage,
   normalizeReasoningAndContentInMessage,
+  normalizeToolCallsInMessage,
   normalizeToolRequest,
 } from "./tool-call-core";
-import { buildInferenceUrl, fetchInference } from "../../services/inference/inference-client";
-import { pidExists } from "../lifecycle/process-utilities";
-import { isRecipeRunning } from "../lifecycle/recipe-matching";
-
-const switchLock = new AsyncLock();
+import { buildInferenceUrl } from "../../services/inference/inference-client";
 
 export const registerOpenAIRoutes = (app: Hono, context: AppContext): void => {
   const findRecipeByModel = (modelName: string): Recipe | null => {
@@ -32,60 +26,6 @@ export const registerOpenAIRoutes = (app: Hono, context: AppContext): void => {
       }
     }
     return null;
-  };
-
-  const readLogTail = (path: string, limit: number): string => {
-    return readFileTailBytes(path, limit);
-  };
-
-  const ensureModelRunning = async (recipe: Recipe): Promise<string | null> => {
-    const current = await context.processManager.findInferenceProcess(
-      context.config.inference_port
-    );
-    if (current && isRecipeRunning(recipe, current)) {
-      return null;
-    }
-
-    const release = await switchLock.acquire();
-    try {
-      const latest = await context.processManager.findInferenceProcess(
-        context.config.inference_port
-      );
-      if (latest && isRecipeRunning(recipe, latest)) {
-        return null;
-      }
-      await context.processManager.evictModel(false);
-      await delay(2000);
-      const launch = await context.processManager.launchModel(recipe);
-      if (!launch.success) {
-        return `Failed to launch model ${recipe.id}: ${launch.message}`;
-      }
-
-      const start = Date.now();
-      const timeout = 300_000;
-      while (Date.now() - start < timeout) {
-        if (launch.pid && !pidExists(launch.pid)) {
-          const safeRecipeId = sanitizeLogSessionId(recipe.id);
-          const logFile = safeRecipeId
-            ? primaryLogPathFor(context.config.data_dir, safeRecipeId)
-            : primaryLogPathFor(context.config.data_dir, recipe.id);
-          const errorTail = readLogTail(logFile, 500);
-          return `Model ${recipe.id} crashed during startup: ${errorTail.slice(-200)}`;
-        }
-        try {
-          const response = await fetchInference(context, "/health", { timeoutMs: 5000 });
-          if (response.status === 200) {
-            return null;
-          }
-        } catch {
-          await delay(3000);
-        }
-        await delay(3000);
-      }
-      return `Model ${recipe.id} failed to become ready (timeout)`;
-    } finally {
-      release();
-    }
   };
 
   app.post("/v1/chat/completions", async (ctx) => {
@@ -126,10 +66,16 @@ export const registerOpenAIRoutes = (app: Hono, context: AppContext): void => {
       throw new HttpStatus(400, "Invalid JSON body");
     }
 
+    if (!matchedRecipe && requestedModel && context.config.strict_openai_models) {
+      throw notFound(`Model not managed: ${requestedModel}`);
+    }
+
     if (matchedRecipe) {
-      const switchError = await ensureModelRunning(matchedRecipe);
-      if (switchError) {
-        throw serviceUnavailable(switchError);
+      const switchResult = await context.lifecycleCoordinator.ensureActive(matchedRecipe, {
+        force_evict: false,
+      });
+      if (switchResult.error) {
+        throw serviceUnavailable(switchResult.error);
       }
     }
 

@@ -7,17 +7,17 @@ import { createInterface } from "node:readline";
 import { resolve } from "node:path";
 import { setTimeout as delayTimeout } from "node:timers/promises";
 import { parse as parseYaml } from "yaml";
-import type { Config } from "../../config/env";
-import { delay } from "../../core/async";
+import type { Config } from "../../../config/env";
+import { delay } from "../../../core/async";
 import {
   cleanupLogFiles,
   getLogCleanupDefaultsFromEnvironment,
   primaryLogPathFor,
-} from "../../core/log-files";
-import type { Logger } from "../../core/logger";
-import type { LaunchResult, ProcessInfo, Recipe } from "./types";
-import type { EventManager } from "../monitoring/event-manager";
-import { buildLlamacppCommand, buildSglangCommand, buildVllmCommand } from "./backends";
+} from "../../../core/log-files";
+import type { Logger } from "../../../core/logger";
+import type { LaunchResult, ProcessInfo, Recipe } from "../types";
+import type { EventManager } from "../../monitoring/event-manager";
+import { buildBackendCommand } from "../engines/backends";
 import {
   buildEnvironment,
   collectChildren,
@@ -72,9 +72,10 @@ export const createProcessManager = (
         continue;
       }
       let modelPath =
-        extractFlag(proc.args, "--model") ||
-        extractFlag(proc.args, "--model-path") ||
-        extractFlag(proc.args, "-m");
+        extractFlag(proc.args, "--model") || extractFlag(proc.args, "--model-path");
+      if (!modelPath && (backend === "llamacpp" || backend === "exllamav3")) {
+        modelPath = extractFlag(proc.args, "-m");
+      }
       let servedModelName =
         extractFlag(proc.args, "--served-model-name") ||
         extractFlag(proc.args, "--alias") ||
@@ -199,12 +200,26 @@ export const createProcessManager = (
       ...recipe,
       port: config.inference_port,
     };
-    const command =
-      updatedRecipe.backend === "sglang"
-        ? buildSglangCommand(updatedRecipe, config)
-        : updatedRecipe.backend === "llamacpp"
-          ? buildLlamacppCommand(updatedRecipe, config)
-          : buildVllmCommand(updatedRecipe);
+    let command: string[] | null = null;
+    try {
+      command = buildBackendCommand(updatedRecipe, config);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return {
+        success: false,
+        pid: null,
+        message,
+        log_file: primaryLogPathFor(config.data_dir, updatedRecipe.id),
+      };
+    }
+    if (!command) {
+      return {
+        success: false,
+        pid: null,
+        message: "Invalid launch command",
+        log_file: primaryLogPathFor(config.data_dir, updatedRecipe.id),
+      };
+    }
 
     const logFile = primaryLogPathFor(config.data_dir, updatedRecipe.id);
     // Best-effort retention to prevent unbounded growth over long-running installs.

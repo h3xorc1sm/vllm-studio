@@ -32,6 +32,9 @@ export class JobStore {
     this.migrate();
   }
 
+  /**
+   * Create jobs table when missing.
+   */
   private migrate(): void {
     this.db.run(`
       CREATE TABLE IF NOT EXISTS jobs (

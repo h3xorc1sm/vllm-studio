@@ -1,8 +1,8 @@
 import type { Hono } from "hono";
 import type { AppContext } from "../../types/context";
-import { registerSystemRoutes } from "./system-routes";
-import { registerLifecycleRoutes } from "./lifecycle-routes";
-import { registerRuntimeRoutes } from "./runtime-routes";
+import { registerSystemRoutes } from "./routes/system-routes";
+import { registerLifecycleRoutes } from "./routes/lifecycle-routes";
+import { registerRuntimeRoutes } from "./routes/runtime-routes";
 
 /**
  * Register all lifecycle module routes (system, lifecycle, runtime).

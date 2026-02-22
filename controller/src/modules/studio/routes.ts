@@ -14,7 +14,7 @@ import {
 import { basename, resolve, sep } from "node:path";
 import { badRequest, notFound } from "../../core/errors";
 import type { AppContext } from "../../types/context";
-import { getGpuInfo } from "../lifecycle/gpu";
+import { getGpuInfo } from "../lifecycle/platform/gpu";
 import type { GpuInfo } from "../lifecycle/types";
 import { discoverModelDirectories, estimateWeightsSizeBytes } from "../models/model-browser";
 import {
@@ -22,7 +22,7 @@ import {
   loadPersistedConfig,
   savePersistedConfig,
 } from "../../config/persisted-config";
-import { getVllmRuntimeInfo } from "../lifecycle/vllm-runtime";
+import { getVllmRuntimeInfo } from "../lifecycle/runtime/vllm-runtime";
 
 const MODEL_RECOMMENDATIONS = [
   {

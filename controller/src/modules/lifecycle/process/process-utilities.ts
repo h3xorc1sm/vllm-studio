@@ -3,8 +3,9 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { parse as parseYaml } from "yaml";
-import type { Recipe } from "./types";
-import { fetchLocal } from "../../http/local-fetch";
+import type { Recipe } from "../types";
+import { fetchLocal } from "../../../http/local-fetch";
+import type { Backend } from "../../../../../shared/src";
 
 /**
  * Split a command line string into arguments.
@@ -36,7 +37,7 @@ export const extractFlag = (args: string[], flag: string): string | undefined =>
  * @param args - Process args.
  * @returns Backend string or null.
  */
-export const detectBackend = (args: string[]): string | null => {
+export const detectBackend = (args: string[]): Backend | null => {
   if (args.length === 0) {
     return null;
   }
@@ -49,6 +50,10 @@ export const detectBackend = (args: string[]): string | null => {
   }
   if (joined.includes("sglang.launch_server")) {
     return "sglang";
+  }
+  const joinedLower = joined.toLowerCase();
+  if (joinedLower.includes("exllama") || joinedLower.includes("exllamav3")) {
+    return "exllamav3";
   }
   if (joined.includes("tabbyAPI") || (joined.includes("main.py") && joined.includes("--config"))) {
     return "tabbyapi";

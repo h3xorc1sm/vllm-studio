@@ -5,6 +5,7 @@ export const CONTROLLER_EVENT_TYPES = [
   "metrics",
   "runtime_summary",
   "launch_progress",
+  "model_switch",
   "download_progress",
   "download_state",
   "temporal_status",

@@ -1,9 +1,9 @@
 import type { RuntimeGpuMonitoringTool, RuntimeRocmSmiTool } from "../types";
 import { resolveBinary } from "../../../core/command";
 
-type SmiPathEnv = "NVIDIA_SMI_PATH" | "AMD_SMI_PATH" | "ROCM_SMI_PATH";
+type SmiPathEnvironment = "NVIDIA_SMI_PATH" | "AMD_SMI_PATH" | "ROCM_SMI_PATH";
 
-const resolveConfiguredBinary = (envKey: SmiPathEnv, fallback: string): string | null => {
+const resolveConfiguredBinary = (envKey: SmiPathEnvironment, fallback: string): string | null => {
   const configured = process.env[envKey]?.trim();
   return resolveBinary(configured && configured.length > 0 ? configured : fallback);
 };

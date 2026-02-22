@@ -10,7 +10,7 @@ export interface Recipe extends Omit<RecipeBase, "id"> {
 
 export interface ProcessInfo {
   pid: number;
-  backend: string;
+  backend: Backend | "unknown";
   model_path: string | null;
   port: number;
   served_model_name: string | null;
@@ -137,6 +137,7 @@ export interface SystemRuntimeInfo {
     vllm: RuntimeBackendInfo;
     sglang: RuntimeBackendInfo;
     llamacpp: RuntimeBackendInfo;
+    exllamav3?: RuntimeBackendInfo;
   };
 }
 

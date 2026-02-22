@@ -5,7 +5,7 @@ import type { AppContext } from "../../types/context";
 import { badRequest, notFound } from "../../core/errors";
 import { streamAsyncStrings, buildSseHeaders } from "../../http/sse";
 import { Event } from "./event-manager";
-import { isRecipeRunning } from "../lifecycle/recipe-matching";
+import { isRecipeRunning } from "../lifecycle/recipes/recipe-matching";
 import {
   cleanupLogFiles,
   fallbackLogPathFor,

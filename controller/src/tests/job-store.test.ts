@@ -1,16 +1,20 @@
 // CRITICAL
-import { describe, expect, it, beforeEach } from "bun:test";
+import { describe, expect, it, beforeEach, afterEach } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { JobStore } from "../stores/job-store";
 
 let store: JobStore;
-let tmpDir: string;
+let temporaryDirectory: string;
 
 beforeEach(() => {
-  tmpDir = mkdtempSync(join(tmpdir(), "job-store-test-"));
-  store = new JobStore(join(tmpDir, "test.db"));
+  temporaryDirectory = mkdtempSync(join(tmpdir(), "job-store-test-"));
+  store = new JobStore(join(temporaryDirectory, "test.db"));
+});
+
+afterEach(() => {
+  rmSync(temporaryDirectory, { recursive: true, force: true });
 });
 
 describe("JobStore", () => {
@@ -31,7 +35,7 @@ describe("JobStore", () => {
     store.create("j2", "voice_assistant_turn", {});
     const list = store.list();
     expect(list.length).toBe(2);
-    const ids = list.map((j) => j.id).sort();
+    const ids = list.map((index) => index.id).sort();
     expect(ids).toEqual(["j1", "j2"]);
   });
 
@@ -45,8 +49,8 @@ describe("JobStore", () => {
 
   it("appends and truncates logs", () => {
     store.create("j1", "voice_assistant_turn", {});
-    for (let i = 0; i < 250; i++) {
-      store.appendLog("j1", `line ${i}`);
+    for (let index = 0; index < 250; index++) {
+      store.appendLog("j1", `line ${index}`);
     }
     const job = store.get("j1")!;
     const logs = JSON.parse(job.logs) as string[];

@@ -158,14 +158,20 @@ export const buildCompatibilityReport = (args: {
     });
   }
 
-  if (!runtime.backends.vllm.installed && !runtime.backends.sglang.installed && !runtime.backends.llamacpp.installed) {
+  const exllamav3Installed = runtime.backends.exllamav3?.installed ?? false;
+  if (
+    !runtime.backends.vllm.installed &&
+    !runtime.backends.sglang.installed &&
+    !runtime.backends.llamacpp.installed &&
+    !exllamav3Installed
+  ) {
     addCheck(checks, {
       id: "backends.none-installed",
       severity: "info",
       message: "No inference runtime backends appear to be installed.",
       evidence: null,
       suggested_fix:
-        "Install at least one backend runtime (vLLM, SGLang, or llama.cpp), then restart the controller.",
+        "Install at least one backend runtime (vLLM, SGLang, llama.cpp, or ExLLaMA v3), then restart the controller.",
     });
   }
 

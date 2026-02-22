@@ -1,8 +1,8 @@
 // CRITICAL
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
-import type { Config } from "../../config/env";
-import { resolveBinary, runCommand } from "../../core/command";
+import type { Config } from "../../../config/env";
+import { resolveBinary, runCommand } from "../../../core/command";
 
 const DEFAULT_TIMEOUT_MS = 15_000;
 

@@ -21,6 +21,8 @@ export interface Config {
   sglang_python?: string;
   tabby_api_dir?: string;
   llama_bin?: string;
+  exllamav3_command?: string;
+  strict_openai_models: boolean;
 }
 
 /**
@@ -72,9 +74,16 @@ export const createConfig = (): Config => {
     VLLM_STUDIO_SGLANG_PYTHON: z.string().optional(),
     VLLM_STUDIO_TABBY_API_DIR: z.string().optional(),
     VLLM_STUDIO_LLAMA_BIN: z.string().optional(),
+    VLLM_STUDIO_EXLLAMAV3_COMMAND: z.string().optional(),
+    VLLM_STUDIO_STRICT_OPENAI_MODELS: z.string().optional(),
   });
 
   const parsed = schema.parse(process.env);
+
+  const strictOpenAIModels = parsed.VLLM_STUDIO_STRICT_OPENAI_MODELS;
+  const strictOpenAIModelsEnabled = strictOpenAIModels
+    ? ["1", "true", "yes", "on"].includes(strictOpenAIModels.trim().toLowerCase())
+    : false;
 
   const config: Config = {
     host: parsed.VLLM_STUDIO_HOST,
@@ -84,6 +93,7 @@ export const createConfig = (): Config => {
     data_dir: resolve(parsed.VLLM_STUDIO_DATA_DIR),
     db_path: resolve(parsed.VLLM_STUDIO_DB_PATH),
     models_dir: resolve(parsed.VLLM_STUDIO_MODELS_DIR),
+    strict_openai_models: strictOpenAIModelsEnabled,
   };
 
   const litellmDatabaseUrl =
@@ -103,6 +113,12 @@ export const createConfig = (): Config => {
   }
   if (parsed.VLLM_STUDIO_LLAMA_BIN) {
     config.llama_bin = parsed.VLLM_STUDIO_LLAMA_BIN;
+  }
+  if (parsed.VLLM_STUDIO_EXLLAMAV3_COMMAND) {
+    const command = parsed.VLLM_STUDIO_EXLLAMAV3_COMMAND.trim();
+    if (command) {
+      config.exllamav3_command = command;
+    }
   }
 
   const persisted = loadPersistedConfig(config.data_dir);

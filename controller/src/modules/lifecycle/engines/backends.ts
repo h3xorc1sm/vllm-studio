@@ -1,10 +1,10 @@
 // CRITICAL
 import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import type { Recipe } from "./types";
-import type { Config } from "../../config/env";
-import { resolveBinary } from "../../core/command";
-import { resolveVllmRecipePythonPath } from "./vllm-python-path";
+import type { Recipe } from "../types";
+import type { Config } from "../../../config/env";
+import { resolveBinary } from "../../../core/command";
+import { resolveVllmRecipePythonPath } from "../runtime/vllm-python-path";
 
 /**
  * Normalize JSON-like arguments for CLI flags.
@@ -150,6 +150,9 @@ export const appendExtraArguments = (
     "tags",
     "status",
     "llama_bin",
+    "exllama_command",
+    "exllamav3_command",
+    "exllama-cmd",
   ]);
   const jsonStringKeys = new Set(["speculative_config", "default_chat_template_kwargs"]);
 
@@ -264,6 +267,111 @@ export const buildVllmCommand = (recipe: Recipe): string[] => {
   }
 
   return appendExtraArguments(command, recipe.extra_args);
+};
+
+/**
+ * Split a shell command string into argv-style tokens.
+ * Supports quoted tokens to preserve spaces.
+ * @param command - Raw command.
+ * @returns Tokenized command.
+ */
+const splitCommand = (command: string): string[] => {
+  const matches = command.match(/(?:[^\s"]+|"[^"]*")+/g) ?? [];
+  return matches.map((token) => token.replace(/^"|"$/g, ""));
+};
+
+/**
+ * Detect if a command already includes a flag.
+ * @param command - Command tokens.
+ * @param flag - Flag to check.
+ * @returns True if flag exists.
+ */
+const hasCommandFlag = (command: string[], flag: string): boolean => command.includes(flag);
+
+/**
+ * Append model host/port/model arguments if not already present.
+ * @param command - Base command.
+ * @param recipe - Recipe data.
+ * @returns Updated command tokens.
+ */
+const appendRuntimeCoreArgs = (command: string[], recipe: Recipe): string[] => {
+  if (!hasCommandFlag(command, "--host")) {
+    command.push("--host", recipe.host);
+  }
+  if (!hasCommandFlag(command, "--port")) {
+    command.push("--port", String(recipe.port));
+  }
+  if (recipe.served_model_name && !hasCommandFlag(command, "--served-model-name")) {
+    command.push("--served-model-name", recipe.served_model_name);
+  }
+  return command;
+};
+
+/**
+ * Build an ExLLaMA v3 launch command.
+ *
+ * Requires an explicit command template either in recipe.extra_args.exllama_command or
+ * VLLM_STUDIO_EXLLAMAV3_COMMAND.
+ * Extra args are appended for backend-specific tuning.
+ * @param recipe - Recipe data.
+ * @param config - Runtime config.
+ * @returns CLI command array.
+ */
+export const buildExllamav3Command = (recipe: Recipe, config: Config): string[] | null => {
+  const commandTemplate =
+    String(
+      getExtraArgument(recipe.extra_args, "exllama_command") ??
+        getExtraArgument(recipe.extra_args, "exllamav3_command") ??
+        getExtraArgument(recipe.extra_args, "exllama-cmd") ??
+        config.exllamav3_command ??
+        ""
+    ).trim();
+  if (!commandTemplate) {
+    return null;
+  }
+  const command = splitCommand(commandTemplate);
+  if (command.length === 0) {
+    return null;
+  }
+  const commandWithDefaults = appendRuntimeCoreArgs([...command], recipe);
+  if (
+    !hasCommandFlag(commandWithDefaults, "--model") &&
+    !hasCommandFlag(commandWithDefaults, "--model-path") &&
+    !hasCommandFlag(commandWithDefaults, "-m")
+  ) {
+    commandWithDefaults.push("--model", recipe.model_path);
+  }
+
+  return appendExtraArguments(commandWithDefaults, recipe.extra_args);
+};
+
+/**
+ * Build launch command by backend.
+ * @param recipe - Recipe data.
+ * @param config - Runtime config.
+ * @returns Backend-specific command.
+ */
+export const buildBackendCommand = (recipe: Recipe, config: Config): string[] => {
+  if (recipe.backend === "sglang") {
+    return buildSglangCommand(recipe, config);
+  }
+  if (recipe.backend === "llamacpp") {
+    return buildLlamacppCommand(recipe, config);
+  }
+  if (recipe.backend === "exllamav3") {
+    const command = buildExllamav3Command(recipe, config);
+    if (!command) {
+      throw new Error("Missing ExLLaMA v3 command. Set extra_args.exllama_command or VLLM_STUDIO_EXLLAMAV3_COMMAND.");
+    }
+    return command;
+  }
+  if (recipe.backend === "tabbyapi") {
+    throw new Error("TabbyAPI backend launching is not supported by this controller lifecycle path.");
+  }
+  if (recipe.backend === "transformers") {
+    return buildVllmCommand(recipe);
+  }
+  return buildVllmCommand(recipe);
 };
 
 const resolveLlamaBinary = (recipe: Recipe, config: Config): string => {

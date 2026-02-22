@@ -1,9 +1,9 @@
 // CRITICAL
-import type { Config } from "../../config/env";
-import { resolveBinary, runCommand } from "../../core/command";
+import type { Config } from "../../../config/env";
+import { resolveBinary, runCommand } from "../../../core/command";
 import { getLlamacppRuntimeInfo, getSglangRuntimeInfo } from "./runtime-info";
 import { getCudaInfo } from "./runtime-info";
-import { getRocmInfo, resolveRocmSmiTool } from "./platform/rocm-info";
+import { getRocmInfo, resolveRocmSmiTool } from "../platform/rocm-info";
 import { resolveVllmPythonPath } from "./vllm-python-path";
 import {
   CUDA_UPGRADE_ENV,

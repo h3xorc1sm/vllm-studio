@@ -12,7 +12,7 @@ import { fetchInference } from "../../../services/inference/inference-client";
  * 3. Optional TTS (if tts_model provided)
  *
  * @param context - App context.
- * @param jobId - Job identifier.
+ * @param _jobId
  * @param input - Workflow input.
  * @param reporter - Progress/log reporter.
  * @returns Workflow result.
@@ -38,9 +38,9 @@ export async function voiceAssistantTurn(
       userText = sttResult.text;
       result["stt_text"] = userText;
       reporter.log(`STT: transcribed "${userText.slice(0, 80)}"`);
-    } catch (err) {
-      reporter.log(`STT: failed — ${String(err)}`);
-      throw new Error(`STT failed: ${String(err)}`);
+    } catch (error) {
+      reporter.log(`STT: failed — ${String(error)}`);
+      throw new Error(`STT failed: ${String(error)}`);
     }
   }
   reporter.progress(20);
@@ -78,9 +78,9 @@ export async function voiceAssistantTurn(
     const assistantText = data.choices?.[0]?.message?.content ?? "";
     result["llm_text"] = assistantText;
     reporter.log(`LLM: received ${assistantText.length} chars`);
-  } catch (err) {
-    reporter.log(`LLM: failed — ${String(err)}`);
-    throw new Error(`LLM failed: ${String(err)}`);
+  } catch (error) {
+    reporter.log(`LLM: failed — ${String(error)}`);
+    throw new Error(`LLM failed: ${String(error)}`);
   }
   reporter.progress(70);
 
@@ -101,10 +101,10 @@ export async function voiceAssistantTurn(
       });
       result["tts_output_path"] = outputPath;
       reporter.log(`TTS: generated to ${outputPath}`);
-    } catch (err) {
-      reporter.log(`TTS: failed — ${String(err)}`);
+    } catch (error) {
+      reporter.log(`TTS: failed — ${String(error)}`);
       // TTS failure is non-fatal
-      result["tts_error"] = String(err);
+      result["tts_error"] = String(error);
     }
   }
 

@@ -4,8 +4,8 @@ import { Hono } from "hono";
 import { chmodSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Config } from "../../config/env";
-import type { AppContext } from "../../types/context";
+import type { Config } from "../../../config/env";
+import type { AppContext } from "../../../types/context";
 import { registerSystemRoutes } from "./system-routes";
 
 describe("GET /gpus (amd-smi)", () => {
@@ -53,6 +53,7 @@ exit 2
       data_dir: "./data",
       db_path: ":memory:",
       models_dir: "/models",
+      strict_openai_models: false,
     };
 
     const mockContext = {
