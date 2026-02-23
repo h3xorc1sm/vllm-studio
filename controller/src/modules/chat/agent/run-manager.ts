@@ -2,7 +2,7 @@
 import { randomUUID } from "node:crypto";
 import type { AgentMessage, ThinkingLevel } from "@mariozechner/pi-agent-core";
 import { Agent } from "@mariozechner/pi-agent-core";
-import type { AssistantMessage } from "@mariozechner/pi-ai";
+import type { AssistantMessage, ImageContent } from "@mariozechner/pi-ai";
 import { AsyncQueue } from "../../../core/async";
 import { cleanUtf8StreamContent, type Utf8State } from "../../proxy/proxy-parsers";
 import type { AppContext } from "../../../types/context";
@@ -33,6 +33,7 @@ export interface ChatRunOptions {
   agentFiles?: boolean;
   deepResearch?: boolean;
   thinkingLevel?: ThinkingLevel;
+  images?: Array<{ data: string; mimeType: string; name?: string }>;
 }
 
 export interface ChatRunStream {
@@ -111,6 +112,20 @@ export class ChatRunManager {
     const runId = randomUUID();
     const userMessageId = options.messageId ?? randomUUID();
     const userMetadata = { runId };
+
+    // Build user message parts (text + optional images)
+    const userParts: Array<Record<string, unknown>> = [];
+    if (content) {
+      userParts.push({ type: "text", text: content });
+    }
+    const agentImages: ImageContent[] = [];
+    if (options.images && options.images.length > 0) {
+      for (const img of options.images) {
+        userParts.push({ type: "image", data: img.data, mimeType: img.mimeType, name: img.name });
+        agentImages.push({ type: "image", data: img.data, mimeType: img.mimeType });
+      }
+    }
+
     this.context.stores.chatStore.addMessage(
       sessionId,
       userMessageId,
@@ -122,7 +137,7 @@ export class ChatRunManager {
       undefined,
       undefined,
       undefined,
-      [{ type: "text", text: content }],
+      userParts.length > 0 ? userParts : [{ type: "text", text: content }],
       userMetadata
     );
 
@@ -275,7 +290,7 @@ export class ChatRunManager {
     });
 
     const runPromise = agent
-      .prompt(content)
+      .prompt(content, agentImages.length > 0 ? agentImages : undefined)
       .catch((error) => {
         runStatus = abort.signal.aborted ? "aborted" : "error";
         runError = error instanceof Error ? error.message : String(error);

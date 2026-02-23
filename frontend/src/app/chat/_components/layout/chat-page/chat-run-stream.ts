@@ -17,6 +17,7 @@ export interface ChatRunStreamPayload {
   agent_files?: boolean;
   deep_research?: boolean;
   thinking_level?: string;
+  images?: Array<{ data: string; mimeType: string; name?: string }>;
 }
 
 export interface UseChatRunStreamArgs {

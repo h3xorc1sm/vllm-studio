@@ -2,6 +2,7 @@
 import type { AgentMessage } from "@mariozechner/pi-agent-core";
 import type {
   AssistantMessage,
+  ImageContent,
   Message,
   Model,
   TextContent,
@@ -9,6 +10,7 @@ import type {
   ToolCall,
   ToolResultMessage,
   Usage,
+  UserMessage,
 } from "@mariozechner/pi-ai";
 
 type StoredMessageRecord = Record<string, unknown>;
@@ -229,8 +231,24 @@ export const mapStoredMessagesToAgentMessages = (
     const timestamp = parseTimestamp(message["created_at"]);
 
     if (role === "user") {
-      const content = getString(message["content"]) ?? "";
-      mapped.push({ role: "user", content, timestamp });
+      const textContent = getString(message["content"]) ?? "";
+      const rawParts = Array.isArray(message["parts"]) ? (message["parts"] as Array<Record<string, unknown>>) : [];
+      const imageParts: ImageContent[] = [];
+      for (const part of rawParts) {
+        if (getString(part["type"]) === "image" && typeof part["data"] === "string" && typeof part["mimeType"] === "string") {
+          imageParts.push({ type: "image", data: part["data"] as string, mimeType: part["mimeType"] as string });
+        }
+      }
+      if (imageParts.length > 0) {
+        const contentArray: (TextContent | ImageContent)[] = [];
+        if (textContent) {
+          contentArray.push({ type: "text", text: textContent });
+        }
+        contentArray.push(...imageParts);
+        mapped.push({ role: "user", content: contentArray, timestamp } as UserMessage);
+      } else {
+        mapped.push({ role: "user", content: textContent, timestamp });
+      }
       continue;
     }
 

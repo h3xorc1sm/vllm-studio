@@ -47,6 +47,7 @@ export interface ChatMessageMetadata {
 export type ChatMessagePart =
   | { type: "text"; text: string }
   | { type: "reasoning"; text: string }
+  | { type: "image"; url: string; name?: string; mimeType?: string }
   | {
       type: "dynamic-tool";
       toolCallId: string;

@@ -48,6 +48,7 @@ export interface UseChatSendUserMessageArgs {
       agent_mode?: boolean;
       agent_files?: boolean;
       deep_research?: boolean;
+      images?: Array<{ data: string; mimeType: string; name?: string }>;
     },
   ) => Promise<void>;
   loadAgentFiles: (args: { sessionId: string }) => void;
@@ -151,18 +152,38 @@ export function useChatSendUserMessage({
       try {
         lastUserInputRef.current = text;
 
+        // Separate images from non-image attachments
+        const imageAttachments = attachments?.filter((a) => a.type === "image") ?? [];
+        const fileAttachments = attachments?.filter((a) => a.type !== "image") ?? [];
+
+        // Build parts for local display
         const parts: ChatMessagePart[] = [];
         if (text.trim()) {
           parts.push({ type: "text", text });
         }
+        for (const img of imageAttachments) {
+          if (img.base64) {
+            parts.push({
+              type: "image",
+              url: img.url ?? `data:${img.file?.type ?? "image/png"};base64,${img.base64}`,
+              name: img.name,
+              mimeType: img.file?.type ?? "image/png",
+            } as ChatMessagePart);
+          }
+        }
+        for (const att of fileAttachments) {
+          parts.push({ type: "text", text: `[File: ${att.name}]` });
+        }
 
-        if (attachments) {
-          for (const att of attachments) {
-            if (att.type === "image" && att.base64) {
-              parts.push({ type: "text", text: `[Image: ${att.name}]` });
-            } else if (att.type === "file" && att.file) {
-              parts.push({ type: "text", text: `[File: ${att.name}]` });
-            }
+        // Collect base64 images for the turn payload
+        const payloadImages: Array<{ data: string; mimeType: string; name?: string }> = [];
+        for (const img of imageAttachments) {
+          if (img.base64) {
+            payloadImages.push({
+              data: img.base64,
+              mimeType: img.file?.type ?? "image/png",
+              name: img.name,
+            });
           }
         }
 
@@ -192,11 +213,12 @@ export function useChatSendUserMessage({
           void generateTitle(sessionId, text, "");
         }
 
+        // Upload non-image files to agent filesystem
         let attachmentsBlock: string | undefined;
         const hasAgentFiles = agentFiles.length > 0 || Object.keys(agentFileVersions).length > 0;
         let agentFilesEnabled = hasAgentFiles;
-        if (attachments && attachments.length > 0) {
-          const { uploaded, failures } = await uploadAttachments(sessionId, attachments);
+        if (fileAttachments.length > 0) {
+          const { uploaded, failures } = await uploadAttachments(sessionId, fileAttachments);
           if (uploaded.length > 0) {
             attachmentsBlock = buildAttachmentsBlock(uploaded);
             agentFilesEnabled = true;
@@ -204,7 +226,7 @@ export function useChatSendUserMessage({
           if (failures.length > 0) {
             const names = failures.map((failure) => failure.name).join(", ");
             setStreamError(`Failed to upload ${failures.length} attachment(s): ${names}`);
-            if (uploaded.length === 0) {
+            if (uploaded.length === 0 && payloadImages.length === 0) {
               removeLocalMessage();
               return;
             }
@@ -226,6 +248,7 @@ export function useChatSendUserMessage({
           agent_mode: agentMode,
           agent_files: agentFilesEnabled,
           deep_research: deepResearchEnabled,
+          ...(payloadImages.length > 0 ? { images: payloadImages } : {}),
         });
       } finally {
         isSendingRef.current = false;

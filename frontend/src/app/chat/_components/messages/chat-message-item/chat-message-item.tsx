@@ -68,6 +68,14 @@ function ChatMessageItemBase({
     parts: message.parts,
   });
 
+  const imageParts = useMemo(() => {
+    if (!isUser) return undefined;
+    const imgs = message.parts
+      .filter((p): p is Extract<typeof p, { type: "image" }> => p.type === "image")
+      .map((p) => ({ url: p.url, name: p.name }));
+    return imgs.length > 0 ? imgs : undefined;
+  }, [isUser, message.parts]);
+
   const { displayModel, totalTokens } = useMemo(() => {
     const usage = messageMetadata?.usage;
     const totalTokens =
@@ -135,8 +143,9 @@ function ChatMessageItemBase({
       <UserMessage
         messageId={messageId}
         textContent={textContent}
+        images={imageParts}
         copied={copied}
-        canActOnContent={canActOnContent}
+        canActOnContent={canActOnContent || !!imageParts}
         onCopy={handleCopy}
         onExport={handleExport}
         actionButtonClassName={actionButtonClassName}

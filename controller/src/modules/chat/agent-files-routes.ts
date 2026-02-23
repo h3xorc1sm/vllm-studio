@@ -1,31 +1,12 @@
 // CRITICAL
 import type { Hono } from "hono";
 import { posix } from "node:path";
-import type { FileSystem } from "agentfs-sdk";
 import type { AppContext } from "../../types/context";
 import { badRequest, notFound } from "../../core/errors";
 import { getAgentFs } from "./agent-fs-store";
 import { Event } from "../monitoring/event-manager";
-
-interface AgentFileEntry {
-  name: string;
-  type: "file" | "dir";
-  size?: number;
-  children?: AgentFileEntry[];
-}
-
-const normalizeAgentPath = (rawPath: string): string => {
-  const cleaned = rawPath.replace(/^\/+/, "").trim();
-  if (!cleaned) return "";
-  const normalized = posix.normalize(cleaned);
-  if (normalized === "." || normalized === "") return "";
-  if (normalized.startsWith("..") || normalized.includes("/..")) {
-    throw badRequest("Invalid path");
-  }
-  return normalized.replace(/^\/+/, "");
-};
-
-const toFsPath = (relativePath: string): string => (relativePath ? `/${relativePath}` : "/");
+import { buildAgentFileTree, mkdirp, normalizeAgentPath, toFsPath } from "./agent/agent-fs-helpers";
+import type { AgentFsApi } from "./agent/agent-fs-interfaces";
 
 /**
  * Extract the wildcard path from the URL.
@@ -48,65 +29,31 @@ const extractFilePath = (urlPath: string, sessionId: string): string => {
   }
 };
 
-type AgentFsApi = Pick<
-  FileSystem,
-  "readdirPlus" | "mkdir" | "rename" | "stat" | "readFile" | "writeFile" | "rm"
->;
-
-const buildTree = async (
-  fs: AgentFsApi,
-  relativePath: string,
-  recursive: boolean
-): Promise<AgentFileEntry[]> => {
-  const fsPath = toFsPath(relativePath);
-  const entries = await fs.readdirPlus(fsPath);
-  const mapped = await Promise.all(
-    entries.map(async (entry) => {
-      const isDirectory = entry.stats.isDirectory();
-      const nextRelative = relativePath ? posix.join(relativePath, entry.name) : entry.name;
-      if (isDirectory) {
-        return {
-          name: entry.name,
-          type: "dir" as const,
-          children: recursive ? await buildTree(fs, nextRelative, recursive) : [],
-        };
-      }
-      return {
-        name: entry.name,
-        type: "file" as const,
-        size: entry.stats.size,
-      };
-    })
-  );
-  return mapped.sort((a, b) => {
-    if (a.type === b.type) return a.name.localeCompare(b.name);
-    return a.type === "dir" ? -1 : 1;
-  });
-};
-
-const mkdirp = async (fs: AgentFsApi, relativePath: string): Promise<void> => {
-  const segments = relativePath.split("/").filter(Boolean);
-  let current = "";
-  for (const segment of segments) {
-    current = current ? `${current}/${segment}` : segment;
-    try {
-      await fs.mkdir(toFsPath(current));
-    } catch (error) {
-      const code = (error as { code?: string } | null)?.code;
-      if (code !== "EEXIST") throw error;
+const normalizeRoutePath = (rawPath: string): string => {
+  try {
+    return normalizeAgentPath(rawPath);
+  } catch (error) {
+    if (error instanceof Error && error.message === "Invalid path") {
+      throw badRequest("Invalid path");
     }
+    throw error;
   }
 };
 
 export const registerAgentFilesRoutes = (app: Hono, context: AppContext): void => {
+  const getSessionFs = async (sessionId: string): Promise<AgentFsApi> => {
+    const agent = await getAgentFs(context, sessionId);
+    return agent.fs as AgentFsApi;
+  };
+
   app.get("/chats/:sessionId/files", async (ctx) => {
     const sessionId = ctx.req.param("sessionId");
-    const agent = await getAgentFs(context, sessionId);
+    const fs = await getSessionFs(sessionId);
     const pathParameter = ctx.req.query("path") ?? "";
     const recursive = ctx.req.query("recursive") !== "false";
-    const normalized = normalizeAgentPath(pathParameter);
+    const normalized = normalizeRoutePath(pathParameter);
     try {
-      const files = await buildTree(agent.fs, normalized, recursive);
+      const files = await buildAgentFileTree(fs, normalized, recursive);
       await context.eventManager.publish(
         new Event("agent_files_listed", {
           session_id: sessionId,
@@ -127,8 +74,8 @@ export const registerAgentFilesRoutes = (app: Hono, context: AppContext): void =
     const sessionId = ctx.req.param("sessionId");
     const rawPath = extractFilePath(ctx.req.path, sessionId) || ctx.req.query("path") || "";
     if (!rawPath) throw badRequest("Path is required");
-    const agent = await getAgentFs(context, sessionId);
-    const normalized = normalizeAgentPath(rawPath);
+    const fs = await getSessionFs(sessionId);
+    const normalized = normalizeRoutePath(rawPath);
     const target = toFsPath(normalized);
     const includeVersions =
       ctx.req.query("versions") === "true" ||
@@ -136,9 +83,9 @@ export const registerAgentFilesRoutes = (app: Hono, context: AppContext): void =
       ctx.req.query("include_versions") === "true" ||
       ctx.req.query("include_versions") === "1";
     try {
-      const stat = await agent.fs.stat(target);
+      const stat = await fs.stat(target);
       if (stat.isDirectory()) throw badRequest("Path is a directory");
-      const content = await agent.fs.readFile(target, "utf8");
+      const content = await fs.readFile(target, "utf8");
       await context.eventManager.publish(
         new Event("agent_file_read", {
           session_id: sessionId,
@@ -180,11 +127,11 @@ export const registerAgentFilesRoutes = (app: Hono, context: AppContext): void =
     if (!rawPath) throw badRequest("Path is required");
     const content = typeof body["content"] === "string" ? body["content"] : "";
     const encoding = body["encoding"] === "base64" ? "base64" : "utf8";
-    const agent = await getAgentFs(context, sessionId);
-    const normalized = normalizeAgentPath(rawPath);
+    const fs = await getSessionFs(sessionId);
+    const normalized = normalizeRoutePath(rawPath);
     const target = toFsPath(normalized);
     const data = encoding === "base64" ? Buffer.from(content, "base64") : content;
-    await agent.fs.writeFile(target, data);
+    await fs.writeFile(target, data);
     const byteLength = typeof data === "string" ? Buffer.byteLength(data, "utf8") : data.length;
     // Persist a snapshot for sidebar versioning (v1/v2/...).
     context.stores.chatStore.addAgentFileVersion(sessionId, normalized, content, byteLength);
@@ -203,10 +150,10 @@ export const registerAgentFilesRoutes = (app: Hono, context: AppContext): void =
     const sessionId = ctx.req.param("sessionId");
     const rawPath = extractFilePath(ctx.req.path, sessionId) || ctx.req.query("path") || "";
     if (!rawPath) throw badRequest("Path is required");
-    const agent = await getAgentFs(context, sessionId);
-    const normalized = normalizeAgentPath(rawPath);
+    const fs = await getSessionFs(sessionId);
+    const normalized = normalizeRoutePath(rawPath);
     const target = toFsPath(normalized);
-    await agent.fs.rm(target, { recursive: true, force: true });
+    await fs.rm(target, { recursive: true, force: true });
     context.stores.chatStore.deleteAgentFileVersionsForPath(sessionId, normalized);
     await context.eventManager.publish(
       new Event("agent_file_deleted", { session_id: sessionId, path: normalized })
@@ -219,9 +166,9 @@ export const registerAgentFilesRoutes = (app: Hono, context: AppContext): void =
     const body = (await ctx.req.json()) as Record<string, unknown>;
     const rawPath = typeof body["path"] === "string" ? body["path"] : "";
     if (!rawPath) throw badRequest("Path is required");
-    const agent = await getAgentFs(context, sessionId);
-    const normalized = normalizeAgentPath(rawPath);
-    await mkdirp(agent.fs, normalized);
+    const fs = await getSessionFs(sessionId);
+    const normalized = normalizeRoutePath(rawPath);
+    await mkdirp(fs, normalized);
     await context.eventManager.publish(
       new Event("agent_directory_created", { session_id: sessionId, path: normalized })
     );
@@ -234,14 +181,14 @@ export const registerAgentFilesRoutes = (app: Hono, context: AppContext): void =
     const from = typeof body["from"] === "string" ? body["from"] : "";
     const to = typeof body["to"] === "string" ? body["to"] : "";
     if (!from || !to) throw badRequest("from and to are required");
-    const agent = await getAgentFs(context, sessionId);
-    const normalizedFrom = normalizeAgentPath(from);
-    const normalizedTo = normalizeAgentPath(to);
+    const fs = await getSessionFs(sessionId);
+    const normalizedFrom = normalizeRoutePath(from);
+    const normalizedTo = normalizeRoutePath(to);
     const targetDirectory = posix.dirname(normalizedTo);
     if (targetDirectory && targetDirectory !== ".") {
-      await mkdirp(agent.fs, targetDirectory);
+      await mkdirp(fs, targetDirectory);
     }
-    await agent.fs.rename(toFsPath(normalizedFrom), toFsPath(normalizedTo));
+    await fs.rename(toFsPath(normalizedFrom), toFsPath(normalizedTo));
     context.stores.chatStore.moveAgentFileVersions(sessionId, normalizedFrom, normalizedTo);
     await context.eventManager.publish(
       new Event("agent_file_moved", {

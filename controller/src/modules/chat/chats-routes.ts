@@ -241,7 +241,7 @@ export const registerChatsRoutes = (app: Hono, context: AppContext): void => {
     }
 
     const content = typeof body["content"] === "string" ? body["content"] : "";
-    if (!content.trim()) {
+    if (!content.trim() && !Array.isArray(body["images"])) {
       throw badRequest("Message content is required");
     }
 
@@ -255,6 +255,19 @@ export const registerChatsRoutes = (app: Hono, context: AppContext): void => {
     const deepResearch = body["deep_research"] === true;
     const thinkingLevel = toThinkingLevel(body["thinking_level"]);
 
+    // Parse images from payload
+    const rawImages = Array.isArray(body["images"]) ? body["images"] : [];
+    const images: Array<{ data: string; mimeType: string; name?: string }> = [];
+    for (const img of rawImages) {
+      if (img && typeof img === "object" && typeof img["data"] === "string" && typeof img["mimeType"] === "string") {
+        images.push({
+          data: img["data"] as string,
+          mimeType: img["mimeType"] as string,
+          ...(typeof img["name"] === "string" ? { name: img["name"] as string } : {}),
+        });
+      }
+    }
+
     const runOptions = {
       sessionId,
       content,
@@ -267,6 +280,7 @@ export const registerChatsRoutes = (app: Hono, context: AppContext): void => {
       ...(provider ? { provider } : {}),
       ...(systemPrompt ? { systemPrompt } : {}),
       ...(thinkingLevel ? { thinkingLevel } : {}),
+      ...(images.length > 0 ? { images } : {}),
     };
 
     const { runId, stream } = await context.runManager.startRun(runOptions);

@@ -81,11 +81,28 @@ export function mapStoredToolCallsImpl(toolCalls?: StoredToolCall[]): ChatMessag
   });
 }
 
+function normalizeStoredParts(rawParts: unknown[]): ChatMessagePart[] {
+  const result: ChatMessagePart[] = [];
+  for (const part of rawParts) {
+    if (!part || typeof part !== "object") continue;
+    const record = part as Record<string, unknown>;
+    // Convert stored image parts (data+mimeType) to frontend format (url)
+    if (record["type"] === "image" && typeof record["data"] === "string") {
+      const mimeType = typeof record["mimeType"] === "string" ? record["mimeType"] : "image/png";
+      const name = typeof record["name"] === "string" ? record["name"] : undefined;
+      result.push({ type: "image", url: `data:${mimeType};base64,${record["data"]}`, name, mimeType });
+      continue;
+    }
+    result.push(record as ChatMessagePart);
+  }
+  return result;
+}
+
 export function mapStoredMessagesImpl(storedMessages: StoredMessage[]): ChatMessage[] {
   return storedMessages.map((message) => {
     const storedParts = message.parts as ChatMessagePart[] | undefined;
     const hasStoredParts = Array.isArray(storedParts) && storedParts.length > 0;
-    const parts: ChatMessagePart[] = hasStoredParts ? [...storedParts] : [];
+    const parts: ChatMessagePart[] = hasStoredParts ? normalizeStoredParts(storedParts as unknown[]) : [];
 
     if (!hasStoredParts && message.content) {
       parts.push({ type: "text", text: message.content });
@@ -227,7 +244,12 @@ function mapUserContentToParts(content: unknown): ChatMessagePart[] {
       const text = typeof record["text"] === "string" ? record["text"] : "";
       if (text) parts.push({ type: "text", text });
     } else if (record["type"] === "image") {
-      parts.push({ type: "text", text: "[Image]" });
+      const data = typeof record["data"] === "string" ? record["data"] : "";
+      const mimeType = typeof record["mimeType"] === "string" ? record["mimeType"] : "image/png";
+      const name = typeof record["name"] === "string" ? record["name"] : undefined;
+      if (data) {
+        parts.push({ type: "image", url: `data:${mimeType};base64,${data}`, name, mimeType });
+      }
     }
   }
   return parts;

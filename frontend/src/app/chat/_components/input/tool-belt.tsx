@@ -96,6 +96,11 @@ export function ToolBelt({
     removeAttachment,
     handleAttachFile,
     handleAttachImage,
+    handlePaste,
+    handleDragOver,
+    handleDragLeave,
+    handleDrop,
+    isDragOver,
   } = useAttachmentInputs({ updateAttachments });
 
   const { startRecording, stopRecording } = useAudioRecording({
@@ -140,14 +145,17 @@ export function ToolBelt({
     setAttachments([]);
   }, [isLoading, onSubmit, setAttachments]);
 
-  const handleKeyDown = useCallback((e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSubmit();
-    }
-  }, [handleSubmit]);
+  const handleKeyDown = useCallback(
+    (e: KeyboardEvent<HTMLTextAreaElement>) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        handleSubmit();
+      }
+    },
+    [handleSubmit],
+  );
 
-  const canSend = value.trim() || attachments.length > 0;
+  const canSend = value.trim().length > 0 || attachments.length > 0;
 
   return (
     <div ref={rootRef} className="px-2 md:px-3 pb-0">
@@ -180,19 +188,28 @@ export function ToolBelt({
         />
 
         <div
-          className={`relative flex flex-col bg-(--surface) rounded-3xl border border-(--border) ${
-            isLoading ? "ring-1 ring-blue-500/30" : ""
-          }`}
+          className={`relative flex flex-col bg-(--surface) rounded-3xl border transition-colors ${
+            isDragOver ? "border-(--accent) ring-2 ring-(--accent)/30" : "border-(--border)"
+          } ${isLoading ? "ring-1 ring-blue-500/30" : ""}`}
           style={{
             boxShadow: "0 0 0 1px rgba(255,255,255,0.03), 0 8px 40px rgba(0,0,0,0.35)",
           }}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
         >
+          {isDragOver && (
+            <div className="absolute inset-0 z-10 flex items-center justify-center rounded-3xl bg-(--accent)/10 pointer-events-none">
+              <span className="text-sm font-medium text-(--accent)">Drop files here</span>
+            </div>
+          )}
           <div className="hidden md:block">{planDrawer}</div>
           <textarea
             ref={textareaRef}
             value={isLoading ? queuedContext : value}
             onChange={(e) => handleTextChange(e.target.value)}
             onKeyDown={handleKeyDown}
+            onPaste={handlePaste}
             placeholder={
               isDisabled
                 ? "No model running"
@@ -223,25 +240,25 @@ export function ToolBelt({
             accept="image/*"
           />
 
-        <ToolBeltToolbarContainer
-          isLoading={isLoading}
-          thinkingSnippet={thinkingSnippet}
-          isRecording={isRecording}
-          isTranscribing={isTranscribing}
-          attachmentsCount={attachments.length}
-          disabled={isDisabled}
-          canSend={canSend as boolean}
-          hasSystemPrompt={hasSystemPrompt}
-          mcpEnabled={mcpEnabled}
-          artifactsEnabled={artifactsEnabled}
-          deepResearchEnabled={deepResearchEnabled}
-          isTTSEnabled={isTTSEnabled}
-          onOpenResults={onOpenResults}
-          availableModels={availableModels}
-          selectedModel={selectedModel}
-          onModelChange={onModelChange}
-          onOpenChatSettings={onOpenChatSettings}
-          onOpenMcpSettings={onOpenMcpSettings}
+          <ToolBeltToolbarContainer
+            isLoading={isLoading}
+            thinkingSnippet={thinkingSnippet}
+            isRecording={isRecording}
+            isTranscribing={isTranscribing}
+            attachmentsCount={attachments.length}
+            disabled={isDisabled}
+            canSend={canSend}
+            hasSystemPrompt={hasSystemPrompt}
+            mcpEnabled={mcpEnabled}
+            artifactsEnabled={artifactsEnabled}
+            deepResearchEnabled={deepResearchEnabled}
+            isTTSEnabled={isTTSEnabled}
+            onOpenResults={onOpenResults}
+            availableModels={availableModels}
+            selectedModel={selectedModel}
+            onModelChange={onModelChange}
+            onOpenChatSettings={onOpenChatSettings}
+            onOpenMcpSettings={onOpenMcpSettings}
             onMcpToggle={onMcpToggle}
             onArtifactsToggle={onArtifactsToggle}
             onDeepResearchToggle={onDeepResearchToggle}

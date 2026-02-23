@@ -1,3 +1,4 @@
+<!-- CRITICAL -->
 # swift-client/agents.md
 
 ## Daily workflow

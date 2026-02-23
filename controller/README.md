@@ -1,3 +1,4 @@
+<!-- CRITICAL -->
 # vLLM Studio Controller
 
 TypeScript backend for vLLM Studio, built on **Bun** + **Hono** + **SQLite**. Manages model lifecycle (launch/evict/preempt) across vLLM, SGLang, llama.cpp, and TabbyAPI backends, with real-time monitoring, agent runtime, and OpenAI-compatible API proxying.

@@ -1,3 +1,4 @@
+// CRITICAL
 import { describe, expect, it, mock } from "bun:test";
 import { Hono } from "hono";
 import type { Context } from "hono";

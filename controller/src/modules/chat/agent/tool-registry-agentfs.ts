@@ -7,83 +7,13 @@ import { getAgentFs } from "../agent-fs-store";
 import { Event } from "../../monitoring/event-manager";
 import { createTextResult } from "./tool-registry-common";
 import type { AgentToolRegistryOptions } from "./tool-registry";
-
-interface AgentFileEntry {
-  name: string;
-  type: "file" | "dir";
-  size?: number;
-  children?: AgentFileEntry[];
-}
-
-type AgentFsApi = {
-  readdirPlus: (
-    path: string
-  ) => Promise<Array<{ name: string; stats: { isDirectory: () => boolean; size: number } }>>;
-  mkdir: (path: string) => Promise<void>;
-  rename: (from: string, to: string) => Promise<void>;
-  stat: (path: string) => Promise<{ isDirectory: () => boolean }>;
-  readFile: (path: string, encoding: string) => Promise<string>;
-  writeFile: (path: string, data: string | Buffer) => Promise<void>;
-  rm: (path: string, options: { recursive: boolean; force: boolean }) => Promise<void>;
-};
-
-const normalizeAgentPath = (rawPath: string): string => {
-  const cleaned = rawPath.replace(/^\/+/, "").trim();
-  if (!cleaned) return "";
-  const normalized = posix.normalize(cleaned);
-  if (normalized === "." || normalized === "") return "";
-  if (normalized.startsWith("..") || normalized.includes("/..")) {
-    throw new Error("Invalid path");
-  }
-  return normalized.replace(/^\/+/, "");
-};
-
-const toFsPath = (relativePath: string): string => (relativePath ? `/${relativePath}` : "/");
-
-const buildTree = async (
-  fs: AgentFsApi,
-  relativePath: string,
-  recursive: boolean
-): Promise<AgentFileEntry[]> => {
-  const fsPath = toFsPath(relativePath);
-  const entries = await fs.readdirPlus(fsPath);
-  const mapped = await Promise.all(
-    entries.map(async (entry) => {
-      const isDirectory = entry.stats.isDirectory();
-      const nextRelative = relativePath ? posix.join(relativePath, entry.name) : entry.name;
-      if (isDirectory) {
-        return {
-          name: entry.name,
-          type: "dir" as const,
-          children: recursive ? await buildTree(fs, nextRelative, recursive) : [],
-        };
-      }
-      return {
-        name: entry.name,
-        type: "file" as const,
-        size: entry.stats.size,
-      };
-    })
-  );
-  return mapped.sort((a, b) => {
-    if (a.type === b.type) return a.name.localeCompare(b.name);
-    return a.type === "dir" ? -1 : 1;
-  });
-};
-
-const mkdirp = async (fs: AgentFsApi, relativePath: string): Promise<void> => {
-  const segments = relativePath.split("/").filter(Boolean);
-  let current = "";
-  for (const segment of segments) {
-    current = current ? `${current}/${segment}` : segment;
-    try {
-      await fs.mkdir(toFsPath(current));
-    } catch (error) {
-      const code = (error as { code?: string } | null)?.code;
-      if (code !== "EEXIST") throw error;
-    }
-  }
-};
+import {
+  buildAgentFileTree,
+  mkdirp,
+  normalizeAgentPath,
+  toFsPath,
+} from "./agent-fs-helpers";
+import type { AgentFsApi } from "./agent-fs-interfaces";
 
 /**
  * Build agent filesystem tools.
@@ -102,6 +32,13 @@ export const buildAgentFsTools = (
     const agent = await getAgentFs(context, sessionId);
     return operation(agent.fs as AgentFsApi);
   };
+  const publishAgentFsEvent = async (
+    eventName: string,
+    payload: Record<string, unknown>
+  ): Promise<void> => {
+    emit?.(eventName, payload);
+    await context.eventManager.publish(new Event(eventName, payload));
+  };
 
   const listFiles: AgentTool = {
     name: "list_files",
@@ -118,21 +55,13 @@ export const buildAgentFsTools = (
       const raw = params as Record<string, unknown>;
       const normalized = normalizeAgentPath(typeof raw["path"] === "string" ? raw["path"] : "");
       const recursive = raw["recursive"] !== false;
-      const files = await withAgentFs((fs) => buildTree(fs, normalized, recursive));
-      emit?.("agent_files_listed", {
+      const files = await withAgentFs((fs) => buildAgentFileTree(fs, normalized, recursive));
+      await publishAgentFsEvent("agent_files_listed", {
         session_id: sessionId,
         path: normalized || null,
         recursive,
         files,
       });
-      await context.eventManager.publish(
-        new Event("agent_files_listed", {
-          session_id: sessionId,
-          path: normalized || null,
-          recursive,
-          files,
-        })
-      );
       return createTextResult(JSON.stringify(files, null, 2), {
         files,
         path: normalized,
@@ -155,18 +84,12 @@ export const buildAgentFsTools = (
       const path = normalizeAgentPath(typeof raw["path"] === "string" ? raw["path"] : "");
       if (!path) throw new Error("Path is required.");
       const content = await withAgentFs((fs) => fs.readFile(toFsPath(path), "utf8"));
-      emit?.("agent_file_read", {
+      const bytes = Buffer.byteLength(content, "utf8");
+      await publishAgentFsEvent("agent_file_read", {
         session_id: sessionId,
         path,
-        bytes: Buffer.byteLength(content, "utf8"),
+        bytes,
       });
-      await context.eventManager.publish(
-        new Event("agent_file_read", {
-          session_id: sessionId,
-          path,
-          bytes: Buffer.byteLength(content, "utf8"),
-        })
-      );
       return createTextResult(content, { path });
     },
   };
@@ -197,19 +120,13 @@ export const buildAgentFsTools = (
         content,
         Buffer.byteLength(content, "utf8")
       );
-      emit?.("agent_file_written", {
+      const bytes = Buffer.byteLength(content, "utf8");
+      await publishAgentFsEvent("agent_file_written", {
         session_id: sessionId,
         path,
-        bytes: Buffer.byteLength(content, "utf8"),
+        bytes,
+        encoding: "utf8",
       });
-      await context.eventManager.publish(
-        new Event("agent_file_written", {
-          session_id: sessionId,
-          path,
-          bytes: Buffer.byteLength(content, "utf8"),
-          encoding: "utf8",
-        })
-      );
       return createTextResult(`Wrote ${path}`, { path });
     },
   };
@@ -229,10 +146,7 @@ export const buildAgentFsTools = (
       if (!path) throw new Error("Path is required.");
       await withAgentFs((fs) => fs.rm(toFsPath(path), { recursive: true, force: true }));
       context.stores.chatStore.deleteAgentFileVersionsForPath(sessionId, path);
-      emit?.("agent_file_deleted", { session_id: sessionId, path });
-      await context.eventManager.publish(
-        new Event("agent_file_deleted", { session_id: sessionId, path })
-      );
+      await publishAgentFsEvent("agent_file_deleted", { session_id: sessionId, path });
       return createTextResult(`Deleted ${path}`, { path });
     },
   };
@@ -251,10 +165,7 @@ export const buildAgentFsTools = (
       const path = normalizeAgentPath(typeof raw["path"] === "string" ? raw["path"] : "");
       if (!path) throw new Error("Path is required.");
       await withAgentFs((fs) => mkdirp(fs, path));
-      emit?.("agent_directory_created", { session_id: sessionId, path });
-      await context.eventManager.publish(
-        new Event("agent_directory_created", { session_id: sessionId, path })
-      );
+      await publishAgentFsEvent("agent_directory_created", { session_id: sessionId, path });
       return createTextResult(`Created directory ${path}`, { path });
     },
   };
@@ -273,12 +184,13 @@ export const buildAgentFsTools = (
       const from = normalizeAgentPath(typeof raw["from"] === "string" ? raw["from"] : "");
       const to = normalizeAgentPath(typeof raw["to"] === "string" ? raw["to"] : "");
       if (!from || !to) throw new Error("from and to are required.");
+      const targetDirectory = posix.dirname(to);
+      if (targetDirectory && targetDirectory !== ".") {
+        await withAgentFs((fs) => mkdirp(fs, targetDirectory));
+      }
       await withAgentFs((fs) => fs.rename(toFsPath(from), toFsPath(to)));
       context.stores.chatStore.moveAgentFileVersions(sessionId, from, to);
-      emit?.("agent_file_moved", { session_id: sessionId, from, to });
-      await context.eventManager.publish(
-        new Event("agent_file_moved", { session_id: sessionId, from, to })
-      );
+      await publishAgentFsEvent("agent_file_moved", { session_id: sessionId, from, to });
       return createTextResult(`Moved ${from} to ${to}`, { from, to });
     },
   };

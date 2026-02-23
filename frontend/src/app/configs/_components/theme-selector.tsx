@@ -1,5 +1,5 @@
-"use client";
 // CRITICAL
+"use client";
 
 import { Check, ChevronDown, Search, Palette } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
