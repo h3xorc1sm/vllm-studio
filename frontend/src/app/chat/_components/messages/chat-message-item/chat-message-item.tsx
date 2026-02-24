@@ -24,6 +24,9 @@ interface ChatMessageItemProps {
   onOpenContext?: () => void;
   onFork?: (messageId: string) => void;
   onReprompt?: (messageId: string) => void;
+  onListen?: (messageId: string) => void;
+  isListening?: boolean;
+  isListenPending?: boolean;
   onExport: (payload: {
     messageId: string;
     role: "user" | "assistant";
@@ -44,6 +47,9 @@ function ChatMessageItemBase({
   contextUsageLabel,
   onFork,
   onReprompt,
+  onListen,
+  isListening = false,
+  isListenPending = false,
   onExport,
   onOpenContext,
 }: ChatMessageItemProps) {
@@ -61,6 +67,14 @@ function ChatMessageItemBase({
     role: messageRole,
     parts: message.parts,
   });
+
+  const imageParts = useMemo(() => {
+    if (!isUser) return undefined;
+    const imgs = message.parts
+      .filter((p): p is Extract<typeof p, { type: "image" }> => p.type === "image")
+      .map((p) => ({ url: p.url, name: p.name }));
+    return imgs.length > 0 ? imgs : undefined;
+  }, [isUser, message.parts]);
 
   const { displayModel, totalTokens } = useMemo(() => {
     const usage = messageMetadata?.usage;
@@ -129,8 +143,9 @@ function ChatMessageItemBase({
       <UserMessage
         messageId={messageId}
         textContent={textContent}
+        images={imageParts}
         copied={copied}
-        canActOnContent={canActOnContent}
+        canActOnContent={canActOnContent || !!imageParts}
         onCopy={handleCopy}
         onExport={handleExport}
         actionButtonClassName={actionButtonClassName}
@@ -142,32 +157,32 @@ function ChatMessageItemBase({
     <div id={`message-${message.id}`} className="flex flex-col group">
       <div className="max-w-full">
         <div className="flex items-center gap-2 mb-1">
-          <span className="md:hidden text-[10px] font-mono text-[#8a93a5] truncate max-w-[70vw]" title={fullModelId}>
+          <span className="md:hidden text-[10px] font-mono text-(--dim) truncate max-w-[70vw]" title={fullModelId}>
             {fullModelId}
           </span>
-          <span className="hidden md:inline text-[10px] uppercase tracking-wider text-[#6a6560] md:tracking-[0.2em] md:text-[#9a9590] truncate max-w-[180px]">
+          <span className="hidden md:inline text-[10px] uppercase tracking-wider text-(--dim) md:tracking-[0.2em] md:text-(--dim) truncate max-w-[180px]">
             {displayModel || "Assistant"}
           </span>
           {durationLabel && (
-            <span className="text-[10px] text-[#6a6560] font-mono" title="Turn runtime">
+            <span className="text-[10px] text-(--dim) font-mono" title="Turn runtime">
               {durationLabel}
             </span>
           )}
           {activeToolCount > 0 && (
-            <span className="inline-flex items-center gap-1 text-[10px] text-[#6a6560]">
+            <span className="inline-flex items-center gap-1 text-[10px] text-(--dim)">
               <Icons.Loader2 className="h-3 w-3 text-amber-400 animate-spin" />
               <span className="hidden md:inline">tools</span>
             </span>
           )}
           {totalTokens != null && totalTokens > 0 && (
-            <span className="hidden md:inline text-[10px] text-[#6a6560] font-mono">
+            <span className="hidden md:inline text-[10px] text-(--dim) font-mono">
               {totalTokens.toLocaleString()} tok
             </span>
           )}
           {contextUsageLabel && (
             <button
               onClick={onOpenContext}
-              className="hidden md:inline text-[10px] text-[#6a6560] font-mono hover:text-[#9a9590] transition-colors cursor-pointer"
+              className="hidden md:inline text-[10px] text-(--dim) font-mono hover:text-(--dim) transition-colors cursor-pointer"
             >
               ctx {contextUsageLabel}
             </button>
@@ -180,12 +195,28 @@ function ChatMessageItemBase({
                 className={actionButtonClassName}
                 title="Reprompt"
               >
-                <Icons.RotateCcw className="h-3.5 w-3.5 text-[#9a9590]" />
+                <Icons.RotateCcw className="h-3.5 w-3.5 text-(--dim)" />
               </button>
             )}
             {onFork && (
               <button onClick={() => onFork(messageId)} className={actionButtonClassName} title="Fork">
-                <Icons.GitBranch className="h-3.5 w-3.5 text-[#9a9590]" />
+                <Icons.GitBranch className="h-3.5 w-3.5 text-(--dim)" />
+              </button>
+            )}
+            {onListen && (
+              <button
+                onClick={() => onListen(messageId)}
+                disabled={!canActOnContent && !isListening}
+                className={actionButtonClassName}
+                title={isListening ? "Stop" : "Listen"}
+              >
+                {isListenPending ? (
+                  <Icons.Loader2 className="h-3.5 w-3.5 text-(--hl1) animate-spin" />
+                ) : isListening ? (
+                  <Icons.StopCircle className="h-3.5 w-3.5 text-(--hl1)" />
+                ) : (
+                  <Icons.Volume2 className="h-3.5 w-3.5 text-(--dim)" />
+                )}
               </button>
             )}
             <button
@@ -195,9 +226,9 @@ function ChatMessageItemBase({
               title="Copy"
             >
               {copied ? (
-                <Icons.Check className="h-3.5 w-3.5 text-(--success)" />
+                <Icons.Check className="h-3.5 w-3.5 text-(--hl2)" />
               ) : (
-                <Icons.Copy className="h-3.5 w-3.5 text-[#9a9590]" />
+                <Icons.Copy className="h-3.5 w-3.5 text-(--dim)" />
               )}
             </button>
             <button
@@ -206,7 +237,7 @@ function ChatMessageItemBase({
               className={actionButtonClassName}
               title="Export"
             >
-              <Icons.Download className="h-3.5 w-3.5 text-[#9a9590]" />
+              <Icons.Download className="h-3.5 w-3.5 text-(--dim)" />
             </button>
           </div>
         </div>
@@ -219,7 +250,7 @@ function ChatMessageItemBase({
             <MessageRenderer content={textContent} isStreaming={isStreaming} />
           </PerfProfiler>
         ) : isStreaming && !thinkingContent ? (
-          <div className="flex items-center gap-2 text-[#6a6560]">
+          <div className="flex items-center gap-2 text-(--dim)">
             <Icons.Loader2 className="h-4 w-4 animate-spin" />
             <span className="text-sm">Thinking...</span>
           </div>

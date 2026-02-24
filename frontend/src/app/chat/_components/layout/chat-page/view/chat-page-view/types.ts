@@ -32,8 +32,6 @@ export interface ChatPageViewProps {
   isLoading: boolean;
   streamError: string | null;
   streamStalled: boolean;
-  thinkingSnippet: string;
-
   contextStats?: Omit<
     ContextStats,
     "compactionHistory" | "lastCompaction" | "totalCompactions" | "totalTokensCompacted"
@@ -78,6 +76,9 @@ export interface ChatPageViewProps {
   showEmptyState: boolean;
   onForkMessage: (messageId: string) => void;
   onReprompt: (messageId: string) => void;
+  onListenMessage: (messageId: string) => void;
+  listeningMessageId: string | null;
+  listeningPending: boolean;
   openActivityPanel: () => void;
   openContextPanel: () => void;
   handleScroll: () => void;
@@ -99,6 +100,9 @@ export interface ChatPageViewProps {
   setSystemPrompt: (value: string) => void;
   setSelectedModel: (modelId: string) => void;
   availableModels: ModelOption[];
+  customChatModels: string[];
+  onAddCustomChatModel: (modelId: string) => void;
+  onRemoveCustomChatModel: (modelId: string) => void;
   deepResearch: DeepResearchConfig;
   setDeepResearch: (next: DeepResearchConfig) => void;
   mcpServers: MCPServer[];

@@ -5,13 +5,16 @@ import { ConfigRow } from "@/components/shared";
 
 export function ConfigCards({ data }: { data: ConfigData }) {
   const formatRuntime = (
-    info: ConfigData["runtime"]["backends"][keyof ConfigData["runtime"]["backends"]],
+    info?: ConfigData["runtime"]["backends"][keyof ConfigData["runtime"]["backends"]],
   ) => {
-    if (!info.installed) {
+    if (!info?.installed) {
       return "Not installed";
     }
     return info.version ? info.version : "Installed";
   };
+
+  const runtime = data.runtime;
+  const platform = runtime?.platform;
 
   return (
     <div className="space-y-6 sm:space-y-8">
@@ -80,41 +83,71 @@ export function ConfigCards({ data }: { data: ConfigData }) {
       <ConfigSection title="Runtime Versions">
         <ConfigRow
           label="vLLM"
-          value={formatRuntime(data.runtime.backends.vllm)}
+          value={formatRuntime(runtime?.backends?.vllm)}
           icon={<Server className="h-3 w-3" />}
         />
         <ConfigRow
           label="SGLang"
-          value={formatRuntime(data.runtime.backends.sglang)}
+          value={formatRuntime(runtime?.backends?.sglang)}
           icon={<Server className="h-3 w-3" />}
         />
         <ConfigRow
           label="llama.cpp"
-          value={formatRuntime(data.runtime.backends.llamacpp)}
+          value={formatRuntime(runtime?.backends?.llamacpp)}
           icon={<Server className="h-3 w-3" />}
         />
       </ConfigSection>
 
       <ConfigSection title="Hardware">
         <ConfigRow
+          label="Platform"
+          value={platform?.kind || "Unknown"}
+          icon={<Cpu className="h-3 w-3" />}
+        />
+        <ConfigRow
+          label="GPU Monitoring"
+          value={
+            runtime?.gpu_monitoring?.available
+              ? runtime.gpu_monitoring.tool || "available"
+              : `unavailable (${runtime?.gpu_monitoring?.tool || "none"})`
+          }
+          icon={<Cpu className="h-3 w-3" />}
+        />
+        <ConfigRow
           label="GPU Count"
-          value={data.runtime.gpus.count ? data.runtime.gpus.count.toString() : "None detected"}
+          value={runtime?.gpus?.count ? runtime.gpus.count.toString() : "None detected"}
           icon={<Cpu className="h-3 w-3" />}
         />
         <ConfigRow
           label="GPU Types"
-          value={data.runtime.gpus.types.length ? data.runtime.gpus.types.join(", ") : "Unknown"}
+          value={runtime?.gpus?.types?.length ? runtime.gpus.types.join(", ") : "Unknown"}
+          icon={<Cpu className="h-3 w-3" />}
+          truncate
+        />
+        <ConfigRow
+          label="ROCm Version"
+          value={platform?.rocm?.rocm_version || "Unknown"}
+          icon={<Cpu className="h-3 w-3" />}
+        />
+        <ConfigRow
+          label="HIP Version"
+          value={platform?.rocm?.hip_version || "Unknown"}
+          icon={<Cpu className="h-3 w-3" />}
+        />
+        <ConfigRow
+          label="ROCm Arch"
+          value={platform?.rocm?.gpu_arch?.join(", ") || "Unknown"}
           icon={<Cpu className="h-3 w-3" />}
           truncate
         />
         <ConfigRow
           label="CUDA Driver"
-          value={data.runtime.cuda.driver_version || "Unknown"}
+          value={runtime?.cuda?.driver_version || "Unknown"}
           icon={<Cpu className="h-3 w-3" />}
         />
         <ConfigRow
           label="CUDA Runtime"
-          value={data.runtime.cuda.cuda_version || "Unknown"}
+          value={runtime?.cuda?.cuda_version || "Unknown"}
           icon={<Cpu className="h-3 w-3" />}
         />
       </ConfigSection>
@@ -152,9 +185,8 @@ export function ConfigCards({ data }: { data: ConfigData }) {
 function ConfigSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div>
-      <div className="text-xs text-[#9a9088] uppercase tracking-wider mb-3">{title}</div>
-      <div className="bg-[#1e1e1e] rounded-lg p-3 sm:p-4 space-y-3">{children}</div>
+      <div className="text-xs text-(--dim) uppercase tracking-wider mb-3">{title}</div>
+      <div className="bg-(--surface) rounded-lg p-3 sm:p-4 space-y-3">{children}</div>
     </div>
   );
 }
-

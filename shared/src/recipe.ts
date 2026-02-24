@@ -1,4 +1,10 @@
-export type Backend = "vllm" | "sglang" | "llamacpp" | "transformers" | "tabbyapi";
+export type Backend =
+  | "vllm"
+  | "sglang"
+  | "llamacpp"
+  | "transformers"
+  | "tabbyapi"
+  | "exllamav3";
 
 /**
  * Canonical recipe shape as sent over the wire (JSON).

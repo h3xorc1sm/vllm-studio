@@ -30,6 +30,7 @@ export interface ChatState {
 
   selectedModel: string;
   availableModels: ModelOption[];
+  customChatModels: string[];
 
   isMobile: boolean;
   userScrolledUp: boolean;
@@ -56,6 +57,9 @@ export interface ChatState {
   transcriptionError: string | null;
   recordingDuration: number;
   isTTSEnabled: boolean;
+
+  callModeEnabled: boolean;
+  callModeSpeakingMessageId: string | null;
 
   mcpPendingServer: string | null;
   mcpActionError: string | null;
@@ -128,6 +132,9 @@ export interface ChatActions {
 
   setSelectedModel: (selectedModel: string) => void;
   setAvailableModels: (availableModels: ModelOption[]) => void;
+  setCustomChatModels: (customChatModels: ChatSlice["customChatModels"]) => void;
+  addCustomChatModel: (modelId: string) => void;
+  removeCustomChatModel: (modelId: string) => void;
 
   setIsMobile: (isMobile: boolean) => void;
   setUserScrolledUp: (userScrolledUp: boolean) => void;
@@ -160,6 +167,9 @@ export interface ChatActions {
   setTranscriptionError: (transcriptionError: string | null) => void;
   setRecordingDuration: (recordingDuration: number) => void;
   setIsTTSEnabled: (isTTSEnabled: boolean) => void;
+
+  setCallModeEnabled: (callModeEnabled: boolean) => void;
+  setCallModeSpeakingMessageId: (id: string | null) => void;
 
   setMcpPendingServer: (mcpPendingServer: string | null) => void;
   setMcpActionError: (mcpActionError: string | null) => void;

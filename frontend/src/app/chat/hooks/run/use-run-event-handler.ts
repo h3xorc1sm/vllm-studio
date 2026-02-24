@@ -40,7 +40,24 @@ export function useRunEventHandler(args: UseRunEventHandlerArgs) {
       const { event: eventType, data } = event;
       const runId = typeof data["run_id"] === "string" ? data["run_id"] : undefined;
       const turnIndex = typeof data["turn_index"] === "number" ? data["turn_index"] : undefined;
-      const runMeta = runId || typeof turnIndex === "number" ? { runId, turnIndex } : undefined;
+      const eventSessionId =
+        typeof data["session_id"] === "string" ? data["session_id"] : undefined;
+      const runMeta =
+        typeof runId === "string" || typeof turnIndex === "number"
+          ? { runId, turnIndex }
+          : undefined;
+
+      if (eventSessionId && currentSessionId && eventSessionId !== currentSessionId) return;
+
+      if (!activeRunIdRef.current) {
+        if (eventType === "run_start" && runId) {
+          activeRunIdRef.current = runId;
+        } else if (!currentSessionId) {
+          return;
+        }
+      } else if (runId && runId !== activeRunIdRef.current) {
+        return;
+      }
 
       switch (eventType) {
         case "run_start": {
@@ -139,44 +156,48 @@ export function useRunEventHandler(args: UseRunEventHandlerArgs) {
           return;
         }
         case "agent_files_listed": {
-          if (typeof data["session_id"] === "string" && data["session_id"] === currentSessionId) {
-            void loadAgentFiles({ sessionId: currentSessionId });
-          }
+          if (!eventSessionId) return;
+          if (currentSessionId && eventSessionId !== currentSessionId) return;
+          void loadAgentFiles({ sessionId: eventSessionId });
           return;
         }
         case "agent_file_written": {
-          if (typeof data["session_id"] === "string" && data["session_id"] === currentSessionId) {
-            void loadAgentFiles({ sessionId: currentSessionId });
-            const path = typeof data["path"] === "string" ? data["path"] : "";
-            if (path) {
-              void readAgentFile(path, currentSessionId).catch(() => {});
-            }
+          if (!eventSessionId) return;
+          if (currentSessionId && eventSessionId !== currentSessionId) return;
+          void loadAgentFiles({ sessionId: eventSessionId });
+          const path = typeof data["path"] === "string" ? data["path"] : "";
+          if (path) {
+            void readAgentFile(path, eventSessionId).catch(() => {});
           }
           return;
         }
         case "agent_file_deleted":
         case "agent_directory_created": {
-          if (typeof data["session_id"] === "string" && data["session_id"] === currentSessionId) {
-            void loadAgentFiles({ sessionId: currentSessionId });
-          }
+          if (!eventSessionId) return;
+          if (currentSessionId && eventSessionId !== currentSessionId) return;
+          void loadAgentFiles({ sessionId: eventSessionId });
           return;
         }
         case "agent_file_moved": {
-          if (typeof data["session_id"] === "string" && data["session_id"] === currentSessionId) {
-            void loadAgentFiles({ sessionId: currentSessionId });
-            const from = typeof data["from"] === "string" ? data["from"] : "";
-            const to = typeof data["to"] === "string" ? data["to"] : "";
-            if (from && to) {
-              moveAgentFileVersions(from, to);
-            }
+          if (!eventSessionId) return;
+          if (currentSessionId && eventSessionId !== currentSessionId) return;
+          void loadAgentFiles({ sessionId: eventSessionId });
+          const from = typeof data["from"] === "string" ? data["from"] : "";
+          const to = typeof data["to"] === "string" ? data["to"] : "";
+          if (from && to) {
+            moveAgentFileVersions(from, to);
           }
           return;
         }
         case "run_end": {
-          const runId = typeof data["run_id"] === "string" ? data["run_id"] : activeRunIdRef.current;
+          const runId =
+            typeof data["run_id"] === "string" ? data["run_id"] : activeRunIdRef.current;
           activeRunIdRef.current = null;
           runCompletedRef.current = true;
           setIsLoading(false);
+
+          // Always clear executing tools on run end — prevents stuck amber spinners.
+          updateExecutingTools(() => new Set());
 
           // Persist the last run duration for UI (mobile wants "how long the agent loop took").
           const start = useAppStore.getState().streamingStartTime;
@@ -191,13 +212,14 @@ export function useRunEventHandler(args: UseRunEventHandlerArgs) {
           if (data["status"] && data["status"] !== "completed") {
             setStreamError(typeof data["error"] === "string" ? data["error"] : "Run failed");
           }
+          const titleSessionId = currentSessionId || eventSessionId;
           if (
-            currentSessionId &&
+            titleSessionId &&
             (currentSessionTitle === "New Chat" || currentSessionTitle === "Chat") &&
             lastUserInputRef.current
           ) {
             void generateTitle(
-              currentSessionId,
+              titleSessionId,
               lastUserInputRef.current,
               lastAssistantContentRef.current || "",
             );

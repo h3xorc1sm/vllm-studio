@@ -3,19 +3,24 @@ import { mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 import type { AppContext } from "./types/context";
 import { createConfig } from "./config/env";
-import { createEventManager } from "./services/event-manager";
-import { createLaunchState } from "./services/launch-state";
-import { createMetrics } from "./services/metrics";
-import { createProcessManager } from "./services/process-manager";
-import { DownloadManager } from "./services/download-manager";
+import { createEventManager } from "./modules/monitoring/event-manager";
+import { createLaunchState } from "./modules/lifecycle/state/launch-state";
+import { createMetrics } from "./modules/monitoring/metrics";
+import { createProcessManager } from "./modules/lifecycle/process/process-manager";
+import { createLifecycleCoordinator } from "./modules/lifecycle/state/lifecycle-coordinator";
+import { DownloadManager } from "./modules/downloads/manager";
 import { createLogger, resolveLogLevel } from "./core/logger";
 import { primaryLogPathFor } from "./core/log-files";
-import { ChatStore } from "./stores/chat-store";
-import { DownloadStore } from "./stores/download-store";
-import { PeakMetricsStore, LifetimeMetricsStore } from "./stores/metrics-store";
-import { McpStore } from "./stores/mcp-store";
-import { RecipeStore } from "./stores/recipe-store";
-import { ChatRunManager } from "./services/agent-runtime/run-manager";
+import { ChatStore } from "./modules/chat/store";
+import { DownloadStore } from "./modules/downloads/store";
+import { PeakMetricsStore, LifetimeMetricsStore } from "./modules/monitoring/metrics-store";
+import { McpStore } from "./modules/mcp/store";
+import { RecipeStore } from "./modules/lifecycle/recipes/recipe-store";
+import { ChatRunManager } from "./modules/chat/agent/run-manager";
+import { JobStore } from "./stores/job-store";
+import { JobManager } from "./modules/jobs/job-manager";
+import { DistributedStore } from "./stores/distributed-store";
+import { DistributedClusterManager } from "./modules/distributed/cluster-manager";
 
 /**
  * Create the application dependency container.
@@ -33,6 +38,8 @@ export const createAppContext = (): AppContext => {
   const peakMetricsStore = new PeakMetricsStore(dbPath);
   const lifetimeMetricsStore = new LifetimeMetricsStore(dbPath);
   const mcpStore = new McpStore(dbPath);
+  const jobStore = new JobStore(dbPath);
+  const distributedStore = new DistributedStore(dbPath);
   const eventManager = createEventManager();
   const logger = createLogger(resolveLogLevel("info"), {
     filePath: primaryLogPathFor(config.data_dir, "controller"),
@@ -41,6 +48,15 @@ export const createAppContext = (): AppContext => {
   const launchState = createLaunchState();
   const { registry: metricsRegistry, metrics } = createMetrics();
   const processManager = createProcessManager(config, logger, eventManager);
+  const lifecycleCoordinator = createLifecycleCoordinator({
+    config,
+    logger,
+    eventManager,
+    launchState,
+    metrics,
+    processManager,
+    recipeStore,
+  });
   const downloadManager = new DownloadManager(config, downloadStore, eventManager, logger);
 
   lifetimeMetricsStore.ensureFirstStarted();
@@ -53,6 +69,7 @@ export const createAppContext = (): AppContext => {
     metrics,
     metricsRegistry,
     processManager,
+    lifecycleCoordinator,
     downloadManager,
     stores: {
       recipeStore,
@@ -61,13 +78,19 @@ export const createAppContext = (): AppContext => {
       peakMetricsStore,
       lifetimeMetricsStore,
       mcpStore,
+      jobStore,
+      distributedStore,
     },
-  } as Omit<AppContext, "runManager">;
+  } as Omit<AppContext, "runManager" | "jobManager" | "distributedManager">;
 
   const runManager = new ChatRunManager(baseContext as AppContext);
+  const jobManager = new JobManager(baseContext as AppContext, jobStore);
+  const distributedManager = new DistributedClusterManager(baseContext as AppContext, distributedStore);
 
   return {
     ...baseContext,
     runManager,
+    jobManager,
+    distributedManager,
   };
 };

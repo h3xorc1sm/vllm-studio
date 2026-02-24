@@ -7,6 +7,11 @@ import type {
   StudioDiagnostics,
   StudioModelsRoot,
   StudioSettings,
+  RuntimeBackendInfo,
+  RuntimeCommandPayload,
+  RuntimeCudaInfo,
+  RuntimeRocmInfo,
+  RuntimeUpgradeResult,
   VllmRuntimeConfig,
   VllmRuntimeInfo,
   VllmUpgradeResult,
@@ -79,13 +84,57 @@ export function createStudioApi(core: ApiCore) {
 
     getVllmRuntimeConfig: (): Promise<VllmRuntimeConfig> => core.request("/runtime/vllm/config"),
 
+    getSglangRuntime: (): Promise<RuntimeBackendInfo> => core.request("/runtime/sglang"),
+
+    getLlamacppRuntime: (): Promise<RuntimeBackendInfo> => core.request("/runtime/llamacpp"),
+
     getLlamacppRuntimeConfig: (): Promise<{ config: string | null; error?: string | null }> =>
       core.request("/runtime/llamacpp/config"),
 
-    upgradeVllmRuntime: (preferBundled = true): Promise<VllmUpgradeResult> =>
+    getCudaRuntime: (): Promise<RuntimeCudaInfo> => core.request("/runtime/cuda"),
+
+    getRocmRuntime: (): Promise<RuntimeRocmInfo> => core.request("/runtime/rocm"),
+
+    upgradeVllmRuntime: (
+      payload: {
+        preferBundled?: boolean;
+        command?: string;
+        args?: string[];
+        version?: string;
+      } = {},
+    ): Promise<VllmUpgradeResult> =>
       core.request("/runtime/vllm/upgrade", {
         method: "POST",
-        body: JSON.stringify({ prefer_bundled: preferBundled }),
+        body: JSON.stringify({
+          prefer_bundled: payload.preferBundled ?? true,
+          command: payload.command,
+          args: payload.args,
+          version: payload.version,
+        }),
+      }),
+
+    upgradeSglangRuntime: (payload: RuntimeCommandPayload = {}): Promise<RuntimeUpgradeResult> =>
+      core.request("/runtime/sglang/upgrade", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }),
+
+    upgradeLlamacppRuntime: (payload: RuntimeCommandPayload = {}): Promise<RuntimeUpgradeResult> =>
+      core.request("/runtime/llamacpp/upgrade", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }),
+
+    upgradeCudaRuntime: (payload: RuntimeCommandPayload = {}): Promise<RuntimeUpgradeResult> =>
+      core.request("/runtime/cuda/upgrade", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }),
+
+    upgradeRocmRuntime: (payload: RuntimeCommandPayload = {}): Promise<RuntimeUpgradeResult> =>
+      core.request("/runtime/rocm/upgrade", {
+        method: "POST",
+        body: JSON.stringify(payload),
       }),
   };
 }

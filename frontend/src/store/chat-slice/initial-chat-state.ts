@@ -23,6 +23,7 @@ export const initialChatState: ChatState = {
   // Model
   selectedModel: "",
   availableModels: [],
+  customChatModels: [],
 
   // Layout
   isMobile: false,
@@ -54,6 +55,9 @@ export const initialChatState: ChatState = {
   transcriptionError: null,
   recordingDuration: 0,
   isTTSEnabled: false,
+
+  callModeEnabled: false,
+  callModeSpeakingMessageId: null,
 
   // MCP action state
   mcpPendingServer: null,
@@ -92,4 +96,3 @@ export const initialChatState: ChatState = {
   // Toasts (ephemeral UI; not persisted)
   toasts: [],
 };
-

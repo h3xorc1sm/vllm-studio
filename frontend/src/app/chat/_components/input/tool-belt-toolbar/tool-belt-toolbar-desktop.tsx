@@ -18,9 +18,11 @@ import {
   ArrowUp,
   Volume2,
   VolumeX,
+  Phone,
+  PhoneOff,
 } from "lucide-react";
 import { ToolDropdown, DropdownItem } from "../tool-dropdown";
-import type { ModelOption } from "../../../types";
+import { buildDisplayModelLabel, type ModelOption } from "../../../types";
 
 type Props = {
   isLoading?: boolean;
@@ -51,6 +53,8 @@ type Props = {
   onStopRecording?: () => void;
   onStop?: () => void;
   onSubmit?: () => void;
+  callModeEnabled?: boolean;
+  onCallModeToggle?: () => void;
 };
 
 export function ToolBeltToolbarDesktop({
@@ -82,8 +86,12 @@ export function ToolBeltToolbarDesktop({
   onStopRecording,
   onStop,
   onSubmit,
+  callModeEnabled,
+  onCallModeToggle,
 }: Props) {
   const hasActiveTools = Boolean(mcpEnabled || artifactsEnabled || deepResearchEnabled);
+  const activeSendButtonClass =
+    "bg-white text-black border border-white hover:bg-white/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--accent) focus-visible:ring-offset-2 focus-visible:ring-offset-(--bg)";
 
   return (
     <div className="hidden md:flex items-center justify-between">
@@ -94,7 +102,7 @@ export function ToolBeltToolbarDesktop({
             <span className="text-xs font-mono font-medium text-blue-400 shrink-0">
               {Math.floor(elapsedSeconds / 60)}:{(elapsedSeconds % 60).toString().padStart(2, "0")}
             </span>
-            <span className="text-[#3a3735]">·</span>
+            <span className="text-(--border)">·</span>
             <div className="flex items-center gap-1.5 min-w-0">
               <Wrench className="h-3 w-3 text-blue-400/70 shrink-0" />
               <span className="text-xs text-blue-200/80 truncate">
@@ -110,8 +118,18 @@ export function ToolBeltToolbarDesktop({
           isActive={attachmentsCount > 0}
           disabled={disabled}
         >
-          <DropdownItem icon={Paperclip} label="Attach file" onClick={onAttachFile} disabled={disabled} />
-          <DropdownItem icon={ImageIcon} label="Attach image" onClick={onAttachImage} disabled={disabled} />
+          <DropdownItem
+            icon={Paperclip}
+            label="Attach file"
+            onClick={onAttachFile}
+            disabled={disabled}
+          />
+          <DropdownItem
+            icon={ImageIcon}
+            label="Attach image"
+            onClick={onAttachImage}
+            disabled={disabled}
+          />
         </ToolDropdown>
 
         <button
@@ -119,12 +137,14 @@ export function ToolBeltToolbarDesktop({
           disabled={disabled || isTranscribing}
           className={`flex items-center justify-center p-2 rounded-lg transition-all:ease-in:200ms disabled:opacity-50 ${
             isRecording
-              ? "bg-(--error) text-(--error)"
+              ? "bg-(--err) text-(--err)"
               : isTranscribing
-                ? "bg-(--link) text-(--link)"
-                : "hover:bg-(--accent) text-[#9a9590]"
+                ? "bg-(--hl1) text-(--hl1)"
+                : "hover:bg-(--accent) text-(--dim)"
           }`}
-          title={isTranscribing ? "Transcribing..." : isRecording ? "Stop recording" : "Voice input"}
+          title={
+            isTranscribing ? "Transcribing..." : isRecording ? "Stop recording" : "Voice input"
+          }
         >
           {isTranscribing ? (
             <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -140,7 +160,7 @@ export function ToolBeltToolbarDesktop({
             onClick={onTTSToggle}
             disabled={disabled}
             className={`flex items-center justify-center p-2 rounded-lg transition-all:ease-in:200ms disabled:opacity-50 ${
-              isTTSEnabled ? "bg-(--success) text-(--success)" : "hover:bg-(--accent) text-[#9a9590]"
+              isTTSEnabled ? "bg-(--hl2) text-(--hl2)" : "hover:bg-(--accent) text-(--dim)"
             }`}
             title={isTTSEnabled ? "Disable TTS" : "Enable TTS"}
           >
@@ -152,18 +172,60 @@ export function ToolBeltToolbarDesktop({
           </button>
         )}
 
+        {onCallModeToggle && (
+          <button
+            onClick={onCallModeToggle}
+            disabled={disabled || isTranscribing}
+            className={`flex items-center justify-center p-2 rounded-lg transition-all:ease-in:200ms disabled:opacity-50 ${
+              callModeEnabled
+                ? "bg-green-500/20 text-green-400 ring-1 ring-green-500/40"
+                : "hover:bg-(--accent) text-(--dim)"
+            }`}
+            title={callModeEnabled ? "End call mode" : "Start call mode (hands-free)"}
+          >
+            {callModeEnabled ? (
+              <PhoneOff className="h-3.5 w-3.5" />
+            ) : (
+              <Phone className="h-3.5 w-3.5" />
+            )}
+          </button>
+        )}
+
         <ToolDropdown icon={Wrench} label="Tools" isActive={hasActiveTools} disabled={disabled}>
-          <DropdownItem icon={Globe} label="Web search & tools" isActive={mcpEnabled} onClick={onMcpToggle} disabled={disabled} />
+          <DropdownItem
+            icon={Globe}
+            label="Web search & tools"
+            isActive={mcpEnabled}
+            onClick={onMcpToggle}
+            disabled={disabled}
+          />
           {onArtifactsToggle && (
-            <DropdownItem icon={Code} label="Code preview" isActive={artifactsEnabled} onClick={onArtifactsToggle} disabled={disabled} />
+            <DropdownItem
+              icon={Code}
+              label="Code preview"
+              isActive={artifactsEnabled}
+              onClick={onArtifactsToggle}
+              disabled={disabled}
+            />
           )}
           {onDeepResearchToggle && (
-            <DropdownItem icon={Brain} label="Deep Research" isActive={deepResearchEnabled} onClick={onDeepResearchToggle} disabled={disabled} />
+            <DropdownItem
+              icon={Brain}
+              label="Deep Research"
+              isActive={deepResearchEnabled}
+              onClick={onDeepResearchToggle}
+              disabled={disabled}
+            />
           )}
           {onOpenMcpSettings && (
             <>
               <div className="h-px bg-(--border) my-1" />
-              <DropdownItem icon={Settings} label="MCP servers" onClick={onOpenMcpSettings} disabled={disabled} />
+              <DropdownItem
+                icon={Settings}
+                label="MCP servers"
+                onClick={onOpenMcpSettings}
+                disabled={disabled}
+              />
             </>
           )}
         </ToolDropdown>
@@ -174,8 +236,8 @@ export function ToolBeltToolbarDesktop({
             disabled={disabled}
             className={`flex items-center gap-1 px-2 py-1.5 rounded-lg transition-all:ease-in:200ms disabled:opacity-50 ${
               hasSystemPrompt
-                ? "bg-(--card-hover) text-[#e8e4dd] border border-(--border)"
-                : "hover:bg-(--accent) text-[#9a9590]"
+                ? "bg-(--surface) text-(--fg) border border-(--border)"
+                : "hover:bg-(--accent) text-(--dim)"
             }`}
             title={hasSystemPrompt ? "System prompt (active)" : "System prompt"}
           >
@@ -190,12 +252,12 @@ export function ToolBeltToolbarDesktop({
             value={selectedModel || ""}
             onChange={(e) => onModelChange(e.target.value)}
             disabled={disabled || isLoading}
-            className="max-w-[180px] px-2 py-1 font-sans font-medium text-xs bg-transparent border border-(--border) rounded-lg text-[#9a9590] focus:outline-none disabled:opacity-50 truncate appearance-none cursor-pointer hover:border-[#4a4745] transition-colors:ease-in:200ms"
+            className="max-w-[180px] px-2 py-1 font-sans font-medium text-xs bg-transparent border border-(--border) rounded-lg text-(--dim) focus:outline-none disabled:opacity-50 truncate appearance-none cursor-pointer hover:border-(--border) transition-colors:ease-in:200ms"
             title={selectedModel || "Select model"}
           >
             {availableModels.map((model, idx) => (
               <option key={`${model.id}-${idx}`} value={model.id}>
-                {model.id}
+                {buildDisplayModelLabel(model.id, model.provider)}
               </option>
             ))}
           </select>
@@ -204,7 +266,7 @@ export function ToolBeltToolbarDesktop({
         {isLoading ? (
           <button
             onClick={onStop}
-            className="h-8 w-8 flex items-center justify-center rounded-full bg-(--error) text-white transition-colors:ease-in:200ms shrink-0"
+            className="h-8 w-8 flex items-center justify-center rounded-full bg-(--err) text-white transition-colors:ease-in:200ms shrink-0"
             title="Stop"
           >
             <Square className="h-3 w-3 fill-current" />
@@ -214,7 +276,9 @@ export function ToolBeltToolbarDesktop({
             onClick={onSubmit}
             disabled={!canSend}
             className={`h-8 w-8 flex items-center justify-center rounded-full transition-colors:ease-in:200ms shrink-0 ${
-              canSend ? "bg-[#e8e4dd] text-[#1a1918]" : "bg-(--accent) text-[#9a9590]/50 cursor-not-allowed"
+              canSend
+                ? activeSendButtonClass
+                : "bg-(--border) border border-(--border) text-(--dim)/40 cursor-not-allowed"
             }`}
             title="Send"
           >
@@ -225,4 +289,3 @@ export function ToolBeltToolbarDesktop({
     </div>
   );
 }
-

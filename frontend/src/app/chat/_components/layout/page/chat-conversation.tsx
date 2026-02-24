@@ -4,12 +4,10 @@
 import { memo, useCallback, useState, type ReactNode, type RefObject } from "react";
 import type { AgentFileEntry, Artifact, ChatMessage } from "@/lib/types";
 import { ChatMessageList } from "../../messages/chat-message-list";
-import { ChatSplashCanvas } from "./chat-splash-canvas";
 
 interface ChatConversationProps {
   messages: ChatMessage[];
   isLoading: boolean;
-  thinkingSnippet?: string;
   artifactsEnabled?: boolean;
   artifactsByMessage?: Map<string, Artifact[]>;
   selectedModel?: string;
@@ -19,6 +17,9 @@ interface ChatConversationProps {
   onOpenAgentFile?: (path: string) => void;
   onFork?: (messageId: string) => void;
   onReprompt?: (messageId: string) => void;
+  onListen?: (messageId: string) => void;
+  listeningMessageId?: string | null;
+  listeningPending?: boolean;
   onOpenContext?: () => void;
   showEmptyState: boolean;
   toolBelt: ReactNode;
@@ -30,7 +31,6 @@ interface ChatConversationProps {
 function ChatConversationBase({
   messages,
   isLoading,
-  thinkingSnippet,
   artifactsEnabled,
   artifactsByMessage,
   selectedModel,
@@ -40,6 +40,9 @@ function ChatConversationBase({
   onOpenAgentFile,
   onFork,
   onReprompt,
+  onListen,
+  listeningMessageId,
+  listeningPending,
   onOpenContext,
   showEmptyState,
   toolBelt,
@@ -65,8 +68,7 @@ function ChatConversationBase({
         className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden flex flex-col chat-scroll-pad"
       >
         <div className="md:pb-4 flex-1 flex flex-col">
-          <div className="flex-1 relative overflow-hidden flex items-center justify-center px-4 md:px-6 py-10 transition-opacity duration-500 ease-out bg-[hsl(30,5%,10.5%)]">
-            <ChatSplashCanvas active={showEmptyState} />
+          <div className="flex-1 relative overflow-hidden flex items-center justify-center px-4 md:px-6 py-10 transition-opacity duration-500 ease-out bg-background">
             {showEmptyState ? (
               <div className="relative z-10 w-full max-w-2xl">
                 <div className="hidden md:block">{toolBelt}</div>
@@ -87,6 +89,9 @@ function ChatConversationBase({
                   messagesEndRef={messagesEndRef}
                   onFork={onFork}
                   onReprompt={onReprompt}
+                  onListen={onListen}
+                  listeningMessageId={listeningMessageId}
+                  listeningPending={listeningPending}
                   onOpenContext={onOpenContext}
                 />
               </div>
@@ -106,7 +111,6 @@ function areChatConversationPropsEqual(
     return (
       prev.messages === next.messages &&
       prev.isLoading === next.isLoading &&
-      prev.thinkingSnippet === next.thinkingSnippet &&
       prev.artifactsEnabled === next.artifactsEnabled &&
       prev.artifactsByMessage === next.artifactsByMessage &&
       prev.selectedModel === next.selectedModel &&
@@ -116,6 +120,9 @@ function areChatConversationPropsEqual(
       prev.onOpenAgentFile === next.onOpenAgentFile &&
       prev.onFork === next.onFork &&
       prev.onReprompt === next.onReprompt &&
+      prev.onListen === next.onListen &&
+      prev.listeningMessageId === next.listeningMessageId &&
+      prev.listeningPending === next.listeningPending &&
       prev.onOpenContext === next.onOpenContext &&
       prev.showEmptyState === next.showEmptyState &&
       prev.toolBelt === next.toolBelt &&
@@ -128,7 +135,6 @@ function areChatConversationPropsEqual(
   return (
     prev.messages === next.messages &&
     prev.isLoading === next.isLoading &&
-    prev.thinkingSnippet === next.thinkingSnippet &&
     prev.artifactsEnabled === next.artifactsEnabled &&
     prev.artifactsByMessage === next.artifactsByMessage &&
     prev.selectedModel === next.selectedModel &&
@@ -138,6 +144,9 @@ function areChatConversationPropsEqual(
     prev.onOpenAgentFile === next.onOpenAgentFile &&
     prev.onFork === next.onFork &&
     prev.onReprompt === next.onReprompt &&
+    prev.onListen === next.onListen &&
+    prev.listeningMessageId === next.listeningMessageId &&
+    prev.listeningPending === next.listeningPending &&
     prev.onOpenContext === next.onOpenContext &&
     prev.showEmptyState === next.showEmptyState &&
     prev.onScroll === next.onScroll &&

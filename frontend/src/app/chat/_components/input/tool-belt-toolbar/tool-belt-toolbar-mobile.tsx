@@ -2,7 +2,7 @@
 "use client";
 
 import { ArrowUp, PanelRightOpen, Square } from "lucide-react";
-import type { ModelOption } from "../../../types";
+import { buildDisplayModelLabel, type ModelOption } from "../../../types";
 import { ToolBeltToolbarMobileMenu } from "./tool-belt-toolbar-mobile-menu";
 
 type Props = {
@@ -35,6 +35,8 @@ type Props = {
   onStopRecording?: () => void;
   onStop?: () => void;
   onSubmit?: () => void;
+  callModeEnabled?: boolean;
+  onCallModeToggle?: () => void;
 };
 
 export function ToolBeltToolbarMobile({
@@ -67,7 +69,12 @@ export function ToolBeltToolbarMobile({
   onStopRecording,
   onStop,
   onSubmit,
+  callModeEnabled,
+  onCallModeToggle,
 }: Props) {
+  const activeSendButtonClass =
+    "bg-white text-black border border-white hover:bg-white/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--accent) focus-visible:ring-offset-2 focus-visible:ring-offset-(--bg)";
+
   return (
     <div className="md:hidden flex items-center gap-2">
       <ToolBeltToolbarMobileMenu
@@ -94,13 +101,15 @@ export function ToolBeltToolbarMobile({
         onAttachImage={onAttachImage}
         onStartRecording={onStartRecording}
         onStopRecording={onStopRecording}
+        callModeEnabled={callModeEnabled}
+        onCallModeToggle={onCallModeToggle}
       />
 
       {onOpenResults && (
         <button
           onClick={onOpenResults}
           disabled={disabled}
-          className="h-10 w-10 flex items-center justify-center rounded-full border border-white/10 bg-white/5 text-[#cfcac2] hover:bg-white/8 transition-colors disabled:opacity-50"
+          className="h-10 w-10 flex items-center justify-center rounded-full border border-(--border) bg-(--border) text-(--dim) hover:bg-(--border) transition-colors disabled:opacity-50"
           title="Open results"
         >
           <PanelRightOpen className="h-4 w-4" />
@@ -113,12 +122,12 @@ export function ToolBeltToolbarMobile({
             value={selectedModel || ""}
             onChange={(e) => onModelChange(e.target.value)}
             disabled={disabled || isLoading}
-            className="h-10 w-full px-3 font-mono text-[12px] bg-white/5 border border-white/10 rounded-full text-[#d9d4cb] focus:outline-none disabled:opacity-50 truncate appearance-none cursor-pointer hover:bg-white/7 transition-colors"
+            className="h-10 w-full px-3 font-mono text-[12px] bg-(--border) border border-(--border) rounded-full text-(--dim) focus:outline-none disabled:opacity-50 truncate appearance-none cursor-pointer hover:bg-(--border) transition-colors"
             title={selectedModel || "Select model"}
           >
             {availableModels.map((model, idx) => (
               <option key={`${model.id}-${idx}`} value={model.id}>
-                {model.id}
+                {buildDisplayModelLabel(model.id, model.provider)}
               </option>
             ))}
           </select>
@@ -128,7 +137,7 @@ export function ToolBeltToolbarMobile({
       {isLoading ? (
         <button
           onClick={onStop}
-          className="h-10 w-10 flex items-center justify-center rounded-full bg-(--error) text-white transition-colors:ease-in:200ms shrink-0"
+          className="h-10 w-10 flex items-center justify-center rounded-full bg-(--err) text-white transition-colors:ease-in:200ms shrink-0"
           title="Stop"
         >
           <Square className="h-4 w-4 fill-current" />
@@ -139,8 +148,8 @@ export function ToolBeltToolbarMobile({
           disabled={!canSend}
           className={`h-10 w-10 flex items-center justify-center rounded-full transition-colors:ease-in:200ms shrink-0 ${
             canSend
-              ? "bg-[#e8e4dd] text-[#1a1918]"
-              : "bg-white/5 border border-white/10 text-[#cfcac2]/40 cursor-not-allowed"
+              ? activeSendButtonClass
+              : "bg-(--border) border border-(--border) text-(--dim)/40 cursor-not-allowed"
           }`}
           title="Send"
         >

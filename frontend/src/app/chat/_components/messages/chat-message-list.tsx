@@ -32,6 +32,9 @@ interface ChatMessageListProps {
   messagesEndRef?: RefObject<HTMLDivElement | null>;
   onFork?: (messageId: string) => void;
   onReprompt?: (messageId: string) => void;
+  onListen?: (messageId: string) => void;
+  listeningMessageId?: string | null;
+  listeningPending?: boolean;
   onOpenContext?: () => void;
 }
 
@@ -57,6 +60,9 @@ export function ChatMessageList({
   messagesEndRef,
   onFork,
   onReprompt,
+  onListen,
+  listeningMessageId,
+  listeningPending,
   onOpenContext,
 }: ChatMessageListProps) {
   const lastRawMessageId = messages[messages.length - 1]?.id;
@@ -147,6 +153,9 @@ export function ChatMessageList({
           onOpenContext={onOpenContext}
           onFork={message.role === "assistant" ? onFork : undefined}
           onReprompt={message.role === "assistant" ? onReprompt : undefined}
+          onListen={message.role === "assistant" ? onListen : undefined}
+          isListening={message.id === listeningMessageId}
+          isListenPending={message.id === listeningMessageId && Boolean(listeningPending)}
           onExport={handleExport}
         />
       );
@@ -158,9 +167,12 @@ export function ChatMessageList({
       handleExport,
       isLoading,
       onFork,
+      onListen,
       onOpenContext,
       onReprompt,
       selectedModel,
+      listeningMessageId,
+      listeningPending,
       visibleMessages.length,
     ],
   );
@@ -170,7 +182,7 @@ export function ChatMessageList({
       <div className="pt-4">
         {hasAgentFiles && onOpenAgentFile && (
           <div className="mb-4">
-            <div className="text-[10px] uppercase tracking-[0.24em] text-[#6a6560] mb-2">
+            <div className="text-[10px] uppercase tracking-[0.24em] text-(--dim) mb-2">
               Agent Files
             </div>
             <div className="flex items-center gap-2 overflow-x-auto pb-1">
@@ -184,7 +196,7 @@ export function ChatMessageList({
                     className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-mono border transition-colors whitespace-nowrap ${
                       isSelected
                         ? "bg-violet-500/20 text-violet-200 border-violet-500/40"
-                        : "bg-white/4 text-[#b6b1aa] border-white/10 hover:text-[#e8e4dd] hover:bg-white/8"
+                        : "bg-white/4 text-(--dim) border-white/10 hover:text-(--fg) hover:bg-white/8"
                     }`}
                     title={file.path}
                   >

@@ -84,7 +84,7 @@ export function useSetup() {
     setUpgrading(true);
     setUpgradeResult(null);
     try {
-      const result = await api.upgradeVllmRuntime(true);
+      const result = await api.upgradeVllmRuntime({ preferBundled: true });
       setUpgradeResult(result);
       const refreshed = await api.getStudioDiagnostics();
       setDiagnostics(refreshed);
@@ -95,6 +95,7 @@ export function useSetup() {
         output: null,
         error: err instanceof Error ? err.message : "Upgrade failed",
         used_wheel: null,
+        used_command: null,
       });
     } finally {
       setUpgrading(false);

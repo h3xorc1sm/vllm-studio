@@ -66,7 +66,10 @@ export class AsyncLock {
 export class AsyncQueue<TValue> {
   private readonly capacity: number;
   private readonly items: TValue[] = [];
-  private readonly resolvers: Array<{ resolve: (value: TValue) => void; reject: (error: Error) => void }> = [];
+  private readonly resolvers: Array<{
+    resolve: (value: TValue) => void;
+    reject: (error: Error) => void;
+  }> = [];
   private closed = false;
 
   /**
@@ -91,8 +94,11 @@ export class AsyncQueue<TValue> {
       resolver.resolve(item);
       return true;
     }
-    if (this.items.length >= this.capacity) {
+    if (this.capacity <= 0) {
       return false;
+    }
+    if (this.items.length >= this.capacity) {
+      this.items.shift();
     }
     this.items.push(item);
     return true;

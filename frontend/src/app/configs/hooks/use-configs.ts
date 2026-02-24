@@ -4,8 +4,9 @@
 import { useEffect, useState } from "react";
 import api from "@/lib/api";
 import { getApiKey, setApiKey, clearApiKey } from "@/lib/api-key";
+import { resolveSettingsDefaultBackendUrl } from "@/lib/backend-config";
 import { getStoredBackendUrl, setStoredBackendUrl, clearStoredBackendUrl } from "@/lib/backend-url";
-import type { ConfigData } from "@/lib/types";
+import type { CompatibilityReport, ConfigData } from "@/lib/types";
 
 export interface ApiConnectionSettings {
   backendUrl: string;
@@ -17,10 +18,7 @@ export interface ApiConnectionSettings {
 
 export type ConnectionStatus = "unknown" | "connected" | "error";
 
-const DEFAULT_BACKEND_URL =
-  process.env.NEXT_PUBLIC_API_URL ||
-  process.env.NEXT_PUBLIC_BACKEND_URL ||
-  "http://localhost:8080";
+const DEFAULT_BACKEND_URL = resolveSettingsDefaultBackendUrl();
 
 const DEFAULT_API_SETTINGS: ApiConnectionSettings = {
   backendUrl: DEFAULT_BACKEND_URL,
@@ -45,6 +43,7 @@ const mergeApiSettings = (server?: Partial<ApiConnectionSettings>): ApiConnectio
 
 export function useConfigs() {
   const [data, setData] = useState<ConfigData | null>(null);
+  const [compatibilityReport, setCompatibilityReport] = useState<CompatibilityReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [backendOnline, setBackendOnline] = useState<boolean | null>(null);
@@ -132,12 +131,15 @@ export function useConfigs() {
     try {
       setLoading(true);
       setError(null);
-      const configData = await api.getSystemConfig();
+      const [configData, compatibility] = await Promise.all([
+        api.getSystemConfig(),
+        api.getCompatibility().catch(() => null),
+      ]);
       setData(configData);
+      setCompatibilityReport(compatibility);
       setBackendOnline(true);
     } catch (e) {
       setError((e as Error).message);
-      // Config failed, but check if backend is actually online
       await checkBackendHealth();
     } finally {
       setLoading(false);
@@ -195,6 +197,7 @@ export function useConfigs() {
 
   return {
     data,
+    compatibilityReport,
     loading,
     error,
     apiSettings,

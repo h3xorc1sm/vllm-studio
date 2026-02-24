@@ -5,6 +5,7 @@ import { useCallback, useRef, type KeyboardEvent } from "react";
 import { AttachmentsPreview } from "./attachments-preview";
 import { RecordingIndicator } from "./recording-indicator";
 import { TranscriptionStatus } from "./transcription-status";
+import { CallModeIndicator } from "./call-mode-indicator";
 import { useAppStore } from "@/store";
 import { useShallow } from "zustand/react/shallow";
 import { ToolBeltToolbarContainer } from "./tool-belt/tool-belt-toolbar-container";
@@ -35,6 +36,8 @@ export function ToolBelt({
   deepResearchEnabled = false,
   onDeepResearchToggle,
   planDrawer,
+  callModeEnabled = false,
+  onCallModeToggle,
 }: ToolBeltProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const isDisabled = false;
@@ -56,6 +59,7 @@ export function ToolBelt({
     setRecordingDuration,
     isTTSEnabled,
     setIsTTSEnabled,
+    callModeSpeakingMessageId,
   } = useAppStore(
     useShallow((state) => ({
       value: state.input,
@@ -75,6 +79,7 @@ export function ToolBelt({
       setRecordingDuration: state.setRecordingDuration,
       isTTSEnabled: state.isTTSEnabled,
       setIsTTSEnabled: state.setIsTTSEnabled,
+      callModeSpeakingMessageId: state.callModeSpeakingMessageId,
     })),
   );
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -91,6 +96,11 @@ export function ToolBelt({
     removeAttachment,
     handleAttachFile,
     handleAttachImage,
+    handlePaste,
+    handleDragOver,
+    handleDragLeave,
+    handleDrop,
+    isDragOver,
   } = useAttachmentInputs({ updateAttachments });
 
   const { startRecording, stopRecording } = useAudioRecording({
@@ -122,27 +132,37 @@ export function ToolBelt({
     [isLoading, setInput, setQueuedContext],
   );
 
-  const handleSubmit = useCallback(() => {
+  const handleSubmit = useCallback(async () => {
     if (isLoading) return;
     const state = useAppStore.getState();
     const inputValue = state.input;
     const currentAttachments = state.attachments;
     if (!inputValue.trim() && currentAttachments.length === 0) return;
 
-    onSubmit(inputValue, currentAttachments.length > 0 ? [...currentAttachments] : undefined);
+    try {
+      await Promise.resolve(
+        onSubmit(inputValue, currentAttachments.length > 0 ? [...currentAttachments] : undefined),
+      );
+    } catch (err) {
+      console.error("Failed to send message:", err);
+      return;
+    }
 
     clearAttachmentUrls(currentAttachments);
     setAttachments([]);
   }, [isLoading, onSubmit, setAttachments]);
 
-  const handleKeyDown = useCallback((e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSubmit();
-    }
-  }, [handleSubmit]);
+  const handleKeyDown = useCallback(
+    (e: KeyboardEvent<HTMLTextAreaElement>) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        handleSubmit();
+      }
+    },
+    [handleSubmit],
+  );
 
-  const canSend = value.trim() || attachments.length > 0;
+  const canSend = value.trim().length > 0 || attachments.length > 0;
 
   return (
     <div ref={rootRef} className="px-2 md:px-3 pb-0">
@@ -156,8 +176,15 @@ export function ToolBelt({
         {isRecording && (
           <RecordingIndicator
             duration={recordingDuration}
-            onStop={stopRecording}
+            onStop={callModeEnabled ? (onCallModeToggle ?? stopRecording) : stopRecording}
             formatDuration={formatDuration}
+          />
+        )}
+
+        {callModeEnabled && !isRecording && !isTranscribing && (
+          <CallModeIndicator
+            isSpeaking={callModeSpeakingMessageId !== null}
+            onDisable={onCallModeToggle ?? (() => {})}
           />
         )}
 
@@ -168,19 +195,28 @@ export function ToolBelt({
         />
 
         <div
-          className={`relative flex flex-col bg-[#1a1a1a] rounded-3xl border border-white/[0.08] ${
-            isLoading ? "ring-1 ring-blue-500/30" : ""
-          }`}
+          className={`relative flex flex-col bg-(--surface) rounded-3xl border transition-colors ${
+            isDragOver ? "border-(--accent) ring-2 ring-(--accent)/30" : "border-(--border)"
+          } ${isLoading ? "ring-1 ring-blue-500/30" : ""}`}
           style={{
             boxShadow: "0 0 0 1px rgba(255,255,255,0.03), 0 8px 40px rgba(0,0,0,0.35)",
           }}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
         >
+          {isDragOver && (
+            <div className="absolute inset-0 z-10 flex items-center justify-center rounded-3xl bg-(--accent)/10 pointer-events-none">
+              <span className="text-sm font-medium text-(--accent)">Drop files here</span>
+            </div>
+          )}
           <div className="hidden md:block">{planDrawer}</div>
           <textarea
             ref={textareaRef}
             value={isLoading ? queuedContext : value}
             onChange={(e) => handleTextChange(e.target.value)}
             onKeyDown={handleKeyDown}
+            onPaste={handlePaste}
             placeholder={
               isDisabled
                 ? "No model running"
@@ -190,7 +226,7 @@ export function ToolBelt({
             }
             disabled={isDisabled}
             rows={1}
-            className="w-full px-3 py-2.5 md:px-4 md:py-3 bg-transparent text-[15px] md:text-sm resize-none focus:outline-none disabled:opacity-50 placeholder:text-[#9a9590] overflow-y-hidden min-h-[44px] md:min-h-[44px]"
+            className="w-full px-3 py-2.5 md:px-4 md:py-3 bg-transparent text-[15px] md:text-sm resize-none focus:outline-none disabled:opacity-50 placeholder:text-(--dim) overflow-y-hidden min-h-[44px] md:min-h-[44px]"
             style={{ fontSize: "16px", lineHeight: "1.5" }}
           />
 
@@ -200,7 +236,7 @@ export function ToolBelt({
             onChange={handleFileInputChange}
             className="hidden"
             multiple
-            accept=".txt,.pdf,.doc,.docx,.md,.json,.csv"
+            accept="*/*"
           />
           <input
             ref={imageInputRef}
@@ -211,25 +247,25 @@ export function ToolBelt({
             accept="image/*"
           />
 
-        <ToolBeltToolbarContainer
-          isLoading={isLoading}
-          thinkingSnippet={thinkingSnippet}
-          isRecording={isRecording}
-          isTranscribing={isTranscribing}
-          attachmentsCount={attachments.length}
-          disabled={isDisabled}
-          canSend={canSend as boolean}
-          hasSystemPrompt={hasSystemPrompt}
-          mcpEnabled={mcpEnabled}
-          artifactsEnabled={artifactsEnabled}
-          deepResearchEnabled={deepResearchEnabled}
-          isTTSEnabled={isTTSEnabled}
-          onOpenResults={onOpenResults}
-          availableModels={availableModels}
-          selectedModel={selectedModel}
-          onModelChange={onModelChange}
-          onOpenChatSettings={onOpenChatSettings}
-          onOpenMcpSettings={onOpenMcpSettings}
+          <ToolBeltToolbarContainer
+            isLoading={isLoading}
+            thinkingSnippet={thinkingSnippet}
+            isRecording={isRecording}
+            isTranscribing={isTranscribing}
+            attachmentsCount={attachments.length}
+            disabled={isDisabled}
+            canSend={canSend}
+            hasSystemPrompt={hasSystemPrompt}
+            mcpEnabled={mcpEnabled}
+            artifactsEnabled={artifactsEnabled}
+            deepResearchEnabled={deepResearchEnabled}
+            isTTSEnabled={isTTSEnabled}
+            onOpenResults={onOpenResults}
+            availableModels={availableModels}
+            selectedModel={selectedModel}
+            onModelChange={onModelChange}
+            onOpenChatSettings={onOpenChatSettings}
+            onOpenMcpSettings={onOpenMcpSettings}
             onMcpToggle={onMcpToggle}
             onArtifactsToggle={onArtifactsToggle}
             onDeepResearchToggle={onDeepResearchToggle}
@@ -240,6 +276,8 @@ export function ToolBelt({
             onStopRecording={stopRecording}
             onStop={onStop}
             onSubmit={handleSubmit}
+            callModeEnabled={callModeEnabled}
+            onCallModeToggle={onCallModeToggle}
           />
         </div>
       </div>

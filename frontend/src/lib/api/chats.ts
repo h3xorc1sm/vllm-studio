@@ -19,12 +19,14 @@ export function createChatsApi(core: ApiCore) {
         content: string;
         message_id?: string;
         model?: string;
+        provider?: string;
         system?: string;
         mcp_enabled?: boolean;
         agent_mode?: boolean;
         agent_files?: boolean;
         deep_research?: boolean;
         thinking_level?: string;
+        images?: Array<{ data: string; mimeType: string; name?: string }>;
       },
       options: { signal?: AbortSignal } = {},
     ) => core.postSseJson(`/chats/${encodeURIComponent(sessionId)}/turn`, payload, options),

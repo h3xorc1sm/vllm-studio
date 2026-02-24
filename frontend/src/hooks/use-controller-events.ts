@@ -4,6 +4,7 @@
 import { useCallback, useEffect, useRef } from "react";
 import { getApiKey } from "@/lib/api-key";
 import api from "@/lib/api";
+import { resolveControllerEventsBaseUrl } from "@/lib/backend-config";
 import type { AgentState, ChatSession, StoredMessage } from "@/lib/types";
 import { useAppStore } from "@/store";
 import { CONTROLLER_EVENT_TYPES } from "./use-controller-events/event-types";
@@ -15,11 +16,7 @@ interface SSEPayload<T = unknown> {
 }
 
 export function useControllerEvents(
-  apiBaseUrl: string =
-    process.env.NEXT_PUBLIC_BACKEND_URL ||
-    process.env.VLLM_STUDIO_BACKEND_URL ||
-    process.env.BACKEND_URL ||
-    "/api/proxy",
+  apiBaseUrl: string = resolveControllerEventsBaseUrl(),
 ) {
   const updateSessions = useAppStore((state) => state.updateSessions);
   const setCurrentSessionId = useAppStore((state) => state.setCurrentSessionId);
@@ -183,17 +180,32 @@ export function useControllerEvents(
             dispatchCustomEvent("vllm:mcp-event", { type: eventType, data });
             break;
           }
-          case "runtime_vllm_upgraded": {
+          case "runtime_vllm_upgraded":
+          case "runtime_sglang_upgraded":
+          case "runtime_llamacpp_upgraded":
+          case "runtime_cuda_upgraded":
+          case "runtime_rocm_upgraded": {
             dispatchCustomEvent("vllm:runtime-event", { type: eventType, data });
+            break;
+          }
+          case "model_switch": {
+            dispatchCustomEvent("vllm:controller-event", { type: eventType, data });
+            break;
+          }
+          case "distributed_node_updated":
+          case "distributed_topology_updated": {
+            dispatchCustomEvent("vllm:distributed-event", { type: eventType, data });
             break;
           }
           case "status":
           case "gpu":
           case "metrics":
+          case "runtime_summary":
           case "launch_progress":
           case "download_progress":
           case "download_state":
-          case "temporal_status": {
+          case "temporal_status":
+          case "job_updated": {
             dispatchCustomEvent("vllm:controller-event", { type: eventType, data });
             break;
           }

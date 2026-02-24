@@ -44,6 +44,7 @@ export interface UseChatPageLifecycleArgs {
   clearPlan: () => void;
   executingToolsSize: number;
   activeRunIdRef: MutableRefObject<string | null>;
+  runAbortControllerRef: MutableRefObject<AbortController | null>;
   lastEventTimeRef: MutableRefObject<number>;
   setStreamStalled: (next: boolean) => void;
 
@@ -71,11 +72,14 @@ export function useChatPageLifecycle({
   clearPlan,
   executingToolsSize,
   activeRunIdRef,
+  runAbortControllerRef,
   lastEventTimeRef,
   setStreamStalled,
   getLastSessionId,
   setLastSessionId,
 }: UseChatPageLifecycleArgs) {
+  const { clearAgentFiles, loadAgentFiles } = agentFiles;
+
   useEffect(() => {
     messagesRef.current = messages;
   }, [messages, messagesRef]);
@@ -92,9 +96,9 @@ export function useChatPageLifecycle({
   useEffect(() => {
     if (!sessions.currentSessionId) {
       clearPlan();
-      agentFiles.clearAgentFiles();
+      clearAgentFiles();
     }
-  }, [agentFiles, clearPlan, sessions.currentSessionId]);
+  }, [clearPlan, clearAgentFiles, sessions.currentSessionId]);
 
   useChatPageTimers({
     isLoading,
@@ -120,35 +124,38 @@ export function useChatPageLifecycle({
     setMessages,
     mapStoredMessages: messageMapping.mapStoredMessages,
     hydrateAgentState: agentState.hydrateAgentState,
-    loadAgentFiles: agentFiles.loadAgentFiles,
+    loadAgentFiles,
     clearPlan,
-    clearAgentFiles: agentFiles.clearAgentFiles,
+    clearAgentFiles,
     messagesLengthRef,
     sessionIdRef,
+    activeRunIdRef,
+    runAbortControllerRef,
     getLastSessionId,
     setLastSessionId,
   });
 
   // Load MCP servers/tools when enabled
+  const { loadMCPServers, loadMCPTools } = tools;
   useEffect(() => {
     if (!store.mcpEnabled) return;
-    void tools.loadMCPServers().then(() => {
-      void tools.loadMCPTools();
+    void loadMCPServers().then(() => {
+      void loadMCPTools();
     });
-  }, [store.mcpEnabled, tools]);
+  }, [store.mcpEnabled, loadMCPServers, loadMCPTools]);
 
   // Load agent files when agent mode is enabled
   useEffect(() => {
     if (!store.agentMode || !sessions.currentSessionId) return;
-    void agentFiles.loadAgentFiles({ sessionId: sessions.currentSessionId });
-  }, [agentFiles, sessions.currentSessionId, store.agentMode]);
+    void loadAgentFiles({ sessionId: sessions.currentSessionId });
+  }, [loadAgentFiles, sessions.currentSessionId, store.agentMode]);
 
   // Load MCP servers when settings modal opens
   useEffect(() => {
     if (store.mcpSettingsOpen) {
-      tools.loadMCPServers();
+      loadMCPServers();
     }
-  }, [store.mcpSettingsOpen, tools]);
+  }, [store.mcpSettingsOpen, loadMCPServers]);
 
   // Refresh usage when modal opens
   useEffect(() => {

@@ -21,7 +21,6 @@ export function useChatPageStore() {
       setActiveArtifactId: state.setActiveArtifactId,
       deepResearch: state.deepResearch,
       setDeepResearch: state.setDeepResearch,
-      elapsedSeconds: state.elapsedSeconds,
       setElapsedSeconds: state.setElapsedSeconds,
       streamingStartTime: state.streamingStartTime,
       setStreamingStartTime: state.setStreamingStartTime,
@@ -36,6 +35,10 @@ export function useChatPageStore() {
       setExportOpen: state.setExportOpen,
       availableModels: state.availableModels,
       setAvailableModels: state.setAvailableModels,
+      customChatModels: state.customChatModels,
+      setCustomChatModels: state.setCustomChatModels,
+      addCustomChatModel: state.addCustomChatModel,
+      removeCustomChatModel: state.removeCustomChatModel,
       sessionUsage: state.sessionUsage,
       setExecutingTools: state.setExecutingTools,
       updateExecutingTools: state.updateExecutingTools,
@@ -66,4 +69,3 @@ export function useChatPageStore() {
 
   return store;
 }
-

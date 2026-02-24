@@ -1,5 +1,7 @@
 import { createChatsApi } from "./chats";
 import { createApiCore } from "./core";
+import { createDistributedApi } from "./distributed";
+import { createJobsApi } from "./jobs";
 import { createLogsApi } from "./logs";
 import { createMcpApi } from "./mcp";
 import { createRecipesApi } from "./recipes";
@@ -15,5 +17,7 @@ export function createApiClient(params: { baseUrl: string; useProxy: boolean }) 
     ...createMcpApi(core),
     ...createLogsApi(core),
     ...createStudioApi(core),
+    ...createJobsApi(core),
+    ...createDistributedApi(core),
   };
 }

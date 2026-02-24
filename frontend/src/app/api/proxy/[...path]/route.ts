@@ -114,11 +114,13 @@ async function handleRequest(request: NextRequest, method: string, path: string[
     const contentType = response.headers.get("content-type") || "application/json";
 
     if (contentType.includes("text/event-stream") && response.body) {
+      const runId = response.headers.get("x-run-id");
       return new NextResponse(response.body, {
         status: response.status,
         headers: {
           "Content-Type": contentType,
           "Cache-Control": response.headers.get("cache-control") || "no-cache",
+          ...(runId ? { "X-Run-Id": runId } : {}),
         },
       });
     }

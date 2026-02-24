@@ -1,20 +1,28 @@
+// CRITICAL
 import SwiftUI
 
 struct RootView: View {
   @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+  @EnvironmentObject private var themeManager: ThemeManager
 
   var body: some View {
     Group {
-      if horizontalSizeClass == .regular {
+      if shouldUseDesktopShell {
         DesktopShell()
       } else {
         DrawerShell()
       }
     }
-      .tint(AppTheme.accentStrong)
-      .foregroundColor(AppTheme.foreground)
-      .font(AppTheme.bodyFont)
-      .background(AppTheme.background.ignoresSafeArea())
-      .preferredColorScheme(ColorScheme.dark)
+    .theme(themeManager.currentTheme)
+    .accentTint(themeManager.currentTheme)
+    .preferredColorScheme(.dark)
+  }
+
+  private var shouldUseDesktopShell: Bool {
+    #if os(macOS)
+    true
+    #else
+    horizontalSizeClass == .regular
+    #endif
   }
 }
