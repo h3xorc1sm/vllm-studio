@@ -21,6 +21,7 @@ interface ChatConversationProps {
   listeningMessageId?: string | null;
   listeningPending?: boolean;
   onOpenContext?: () => void;
+  runStatusLine?: string;
   showEmptyState: boolean;
   toolBelt: ReactNode;
   onScroll: () => void;
@@ -44,6 +45,7 @@ function ChatConversationBase({
   listeningMessageId,
   listeningPending,
   onOpenContext,
+  runStatusLine,
   showEmptyState,
   toolBelt,
   onScroll,
@@ -93,6 +95,7 @@ function ChatConversationBase({
                   listeningMessageId={listeningMessageId}
                   listeningPending={listeningPending}
                   onOpenContext={onOpenContext}
+                  runStatusLine={runStatusLine}
                 />
               </div>
             )}
@@ -124,6 +127,7 @@ function areChatConversationPropsEqual(
       prev.listeningMessageId === next.listeningMessageId &&
       prev.listeningPending === next.listeningPending &&
       prev.onOpenContext === next.onOpenContext &&
+      prev.runStatusLine === next.runStatusLine &&
       prev.showEmptyState === next.showEmptyState &&
       prev.toolBelt === next.toolBelt &&
       prev.onScroll === next.onScroll &&
@@ -148,6 +152,7 @@ function areChatConversationPropsEqual(
     prev.listeningMessageId === next.listeningMessageId &&
     prev.listeningPending === next.listeningPending &&
     prev.onOpenContext === next.onOpenContext &&
+    prev.runStatusLine === next.runStatusLine &&
     prev.showEmptyState === next.showEmptyState &&
     prev.onScroll === next.onScroll &&
     prev.messagesContainerRef === next.messagesContainerRef &&

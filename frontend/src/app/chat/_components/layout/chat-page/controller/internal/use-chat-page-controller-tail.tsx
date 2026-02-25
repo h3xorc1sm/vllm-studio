@@ -193,7 +193,9 @@ export function useChatPageControllerTail({
         return;
       }
 
-      const message = messages.find((entry) => entry.id === messageId && entry.role === "assistant");
+      const message = messages.find(
+        (entry) => entry.id === messageId && entry.role === "assistant",
+      );
       if (!message) {
         return;
       }
@@ -417,6 +419,7 @@ export function useChatPageControllerTail({
       isLoading,
       streamError,
       streamStalled,
+      runStatusLine: thinkingSnippet,
       showEmptyState,
     },
     context: {

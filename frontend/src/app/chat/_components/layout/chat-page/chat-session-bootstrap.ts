@@ -1,7 +1,7 @@
 // CRITICAL
 "use client";
 
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import type { MutableRefObject } from "react";
 import type { ChatMessage, ChatSessionDetail, StoredMessage } from "@/lib/types";
 
@@ -27,6 +27,22 @@ export interface UseChatSessionBootstrapArgs {
   runAbortControllerRef: MutableRefObject<AbortController | null>;
   getLastSessionId: () => string | null;
   setLastSessionId: (sessionId: string) => void;
+}
+
+export function resolveNewChatResetGate({
+  newChatFromUrl,
+  hasHandledNewChatReset,
+}: {
+  newChatFromUrl: boolean;
+  hasHandledNewChatReset: boolean;
+}) {
+  if (!newChatFromUrl) {
+    return { shouldReset: false, hasHandledNewChatReset: false };
+  }
+  if (hasHandledNewChatReset) {
+    return { shouldReset: false, hasHandledNewChatReset: true };
+  }
+  return { shouldReset: true, hasHandledNewChatReset: true };
 }
 
 export function useChatSessionBootstrap({
@@ -64,6 +80,7 @@ export function useChatSessionBootstrap({
     startNewSession();
     clearActiveRun();
   }, [startNewSession, clearActiveRun]);
+  const handledNewChatResetRef = useRef(false);
 
   // Load sessions on mount
   useEffect(() => {
@@ -116,13 +133,20 @@ export function useChatSessionBootstrap({
 
   // Handle URL session/new params and restore last session if needed
   useEffect(() => {
-    if (newChatFromUrl) {
+    const gate = resolveNewChatResetGate({
+      newChatFromUrl,
+      hasHandledNewChatReset: handledNewChatResetRef.current,
+    });
+    handledNewChatResetRef.current = gate.hasHandledNewChatReset;
+
+    if (gate.shouldReset) {
       resetActiveSession();
       setMessages([]);
       clearPlan();
       clearAgentFiles();
       return;
     }
+    if (newChatFromUrl) return;
 
     const targetSessionId = sessionFromUrl || getLastSessionId();
     if (!targetSessionId) return;

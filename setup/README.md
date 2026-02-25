@@ -7,6 +7,19 @@
 - Docker + Docker Compose
 - `git`
 
+## Quick start (recommended)
+
+1. Start controller with infra services:
+```bash
+./start.sh --dev
+```
+
+2. Run the frontend in another terminal:
+```bash
+cd frontend
+npm run dev
+```
+
 ## Local setup
 
 1. Install dependencies:
@@ -30,6 +43,10 @@ bun src/main.ts
 cd frontend
 npm run dev
 ```
+
+## Environment and configuration
+
+See `docs/environment.md` for the environment variable reference.
 
 ## Validation checklist
 
@@ -55,18 +72,21 @@ docker compose up -d --build controller frontend
 docker compose ps controller frontend
 ```
 
+This brings up postgres, redis, litellm, temporal, prometheus, grafana, controller, and frontend as defined in `docker-compose.yml`.
+
 ### Verify services
 
 ```bash
 curl -sS http://localhost:8080/health
 curl -I http://localhost:3000
+curl -I http://localhost:8080/api/docs
 ```
 
 ## Remote host example (SSH + deploy)
 
 ```bash
 ssh -i ~/.ssh/linux-ai ser@192.168.1.70
-cd /home/ser/workspace/projects/lmvllm
+cd /home/ser/workspace/projects/vllm-studio
 docker compose up -d --build controller frontend
 docker compose ps controller frontend
 ```

@@ -18,6 +18,32 @@ export interface UseChatSidebarControllerArgs {
   selectAgentFile: (path: string | null, sessionId: string | null) => void;
 }
 
+export function shouldAutoOpenActivityPanel({
+  hasActivity,
+  hadActivity,
+  autoOpenedActivity,
+  sidebarOpen,
+  currentSessionId,
+  sessionFromUrl,
+  isMobile,
+}: {
+  hasActivity: boolean;
+  hadActivity: boolean;
+  autoOpenedActivity: boolean;
+  sidebarOpen: boolean;
+  currentSessionId: string | null;
+  sessionFromUrl: string | null;
+  isMobile: boolean;
+}) {
+  if (!hasActivity) return false;
+  if (hadActivity) return false;
+  if (autoOpenedActivity) return false;
+  if (sidebarOpen) return false;
+  if (!currentSessionId && !sessionFromUrl) return false;
+  if (isMobile) return false;
+  return true;
+}
+
 export function useChatSidebarController({
   currentSessionId,
   sessionFromUrl,
@@ -45,16 +71,29 @@ export function useChatSidebarController({
     activityGroupsLength > 0;
 
   useEffect(() => {
-    // Only trigger on transition from no-activity to has-activity
+    const mobileViewport = typeof window !== "undefined" && window.innerWidth < 768;
+    const shouldAutoOpen = shouldAutoOpenActivityPanel({
+      hasActivity,
+      hadActivity: hadActivityRef.current,
+      autoOpenedActivity: autoOpenedActivityRef.current,
+      sidebarOpen,
+      currentSessionId,
+      sessionFromUrl,
+      isMobile: mobileViewport,
+    });
+
     if (!hasActivity) {
       hadActivityRef.current = false;
       return;
     }
-    if (hadActivityRef.current) return;
-    if (autoOpenedActivityRef.current) return;
-    if (sidebarOpen) return;
-    // Mobile: never auto-open (it becomes a bottom drawer and would cover the composer).
-    if (typeof window !== "undefined" && window.innerWidth < 768) {
+    if (!shouldAutoOpen) {
+      if (mobileViewport) {
+        hadActivityRef.current = true;
+      }
+      return;
+    }
+
+    if (mobileViewport) {
       hadActivityRef.current = true;
       return;
     }
@@ -63,7 +102,7 @@ export function useChatSidebarController({
     setSidebarOpen(true);
     setSidebarTab("activity");
     autoOpenedActivityRef.current = true;
-  }, [hasActivity, sidebarOpen, setSidebarOpen, setSidebarTab]);
+  }, [currentSessionId, hasActivity, sessionFromUrl, sidebarOpen, setSidebarOpen, setSidebarTab]);
 
   const openActivityPanel = useCallback(() => {
     setSidebarOpen(true);

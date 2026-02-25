@@ -35,10 +35,7 @@ export const ChatPageView = memo(function ChatPageView(props: ChatPageViewProps)
   const closeSettings = useCallback(() => setSettingsOpen(false), [setSettingsOpen]);
 
   const openMcpSettings = useCallback(() => setMcpSettingsOpen(true), [setMcpSettingsOpen]);
-  const closeMcpSettings = useCallback(
-    () => setMcpSettingsOpen(false),
-    [setMcpSettingsOpen],
-  );
+  const closeMcpSettings = useCallback(() => setMcpSettingsOpen(false), [setMcpSettingsOpen]);
 
   const openUsage = useCallback(() => setUsageOpen(true), [setUsageOpen]);
   const closeUsage = useCallback(() => setUsageOpen(false), [setUsageOpen]);
@@ -94,6 +91,7 @@ export const ChatPageView = memo(function ChatPageView(props: ChatPageViewProps)
               listeningMessageId={props.listeningMessageId}
               listeningPending={props.listeningPending}
               onOpenContext={props.openContextPanel}
+              runStatusLine={props.runStatusLine}
               showEmptyState={props.showEmptyState}
               toolBelt={props.toolBelt}
               onScroll={props.handleScroll}

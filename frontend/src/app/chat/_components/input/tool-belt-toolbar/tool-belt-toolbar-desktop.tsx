@@ -60,7 +60,6 @@ type Props = {
 export function ToolBeltToolbarDesktop({
   isLoading,
   elapsedSeconds,
-  thinkingSnippet,
   isRecording,
   isTranscribing,
   attachmentsCount,
@@ -102,13 +101,6 @@ export function ToolBeltToolbarDesktop({
             <span className="text-xs font-mono font-medium text-blue-400 shrink-0">
               {Math.floor(elapsedSeconds / 60)}:{(elapsedSeconds % 60).toString().padStart(2, "0")}
             </span>
-            <span className="text-(--border)">·</span>
-            <div className="flex items-center gap-1.5 min-w-0">
-              <Wrench className="h-3 w-3 text-blue-400/70 shrink-0" />
-              <span className="text-xs text-blue-200/80 truncate">
-                {thinkingSnippet?.trim() ? thinkingSnippet.trim() : "Working..."}
-              </span>
-            </div>
           </div>
         )}
 

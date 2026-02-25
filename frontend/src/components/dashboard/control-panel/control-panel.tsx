@@ -32,7 +32,7 @@ export function ControlPanel(props: DashboardLayoutProps) {
 
       {/* Metric Bar - Horizontal strip */}
       {currentProcess && (
-        <MetricBar metrics={metrics} gpus={gpus} />
+        <MetricBar metrics={metrics} gpus={gpus} currentProcess={currentProcess} logs={logs} />
       )}
 
       {/* Two Column Layout */}

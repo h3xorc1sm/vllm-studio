@@ -3,11 +3,18 @@
 
 import { useCallback, useMemo, useState } from "react";
 import type { ActivityGroup } from "@/app/chat/types";
+import { UiStatusBadge, UiTimelineMarker } from "@/components/ui-kit";
 import { getTurnSummary } from "./tool-categorization";
 import { ThinkingItem } from "./thinking-item";
 import { ToolItem } from "./tool-item";
 
-export function TurnGroup({ group, hasActiveThinking }: { group: ActivityGroup; hasActiveThinking: boolean }) {
+export function TurnGroup({
+  group,
+  hasActiveThinking,
+}: {
+  group: ActivityGroup;
+  hasActiveThinking: boolean;
+}) {
   const [collapsed, setCollapsed] = useState(!group.isLatest);
 
   const summary = useMemo(() => getTurnSummary(group.items), [group.items]);
@@ -19,20 +26,24 @@ export function TurnGroup({ group, hasActiveThinking }: { group: ActivityGroup; 
 
   return (
     <div>
-      <button onClick={toggleCollapsed} className="flex items-center gap-2 py-2 pl-1 pr-2 w-full text-left group">
-        <div className="w-5 h-5 rounded-full bg-(--bg) border border-(--border) flex items-center justify-center z-10">
+      <button
+        onClick={toggleCollapsed}
+        className="flex items-center gap-2 py-2 pl-1 pr-2 w-full text-left group"
+      >
+        <UiTimelineMarker tone="neutral" className="w-5 h-5 z-10">
           <span className="text-[9px] text-(--fg) font-medium">{group.turnNumber || 1}</span>
-        </div>
+        </UiTimelineMarker>
         <span className="text-[10px] text-(--fg) uppercase tracking-wider">
           {group.isLatest ? "Current" : "Turn"}
         </span>
         {!group.isLatest && summary.count > 0 && (
-          <span
-            className="text-[9px] px-1.5 py-0.5 rounded-full"
+          <UiStatusBadge
+            className="text-[9px]"
+            tone="neutral"
             style={{ color: summary.color, backgroundColor: `${summary.color}15` }}
           >
             {summary.label}
-          </span>
+          </UiStatusBadge>
         )}
         {group.isLatest && hasActiveThinking && (
           <span className="relative flex h-1.5 w-1.5 ml-auto mr-2">

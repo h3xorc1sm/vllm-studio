@@ -32,6 +32,7 @@ export interface ChatPageViewProps {
   isLoading: boolean;
   streamError: string | null;
   streamStalled: boolean;
+  runStatusLine: string;
   contextStats?: Omit<
     ContextStats,
     "compactionHistory" | "lastCompaction" | "totalCompactions" | "totalTokensCompacted"

@@ -3,6 +3,7 @@
 
 import { Loader2 } from "lucide-react";
 import type { ActivityGroup } from "@/app/chat/types";
+import { UiPanelSurface, UiPulseLabel } from "@/components/ui-kit";
 import { TurnGroup } from "./turn-group";
 
 export interface ActivityPanelProps {
@@ -27,7 +28,7 @@ export function ActivityPanel({ activityGroups, agentPlan, isLoading }: Activity
   return (
     <div className="h-full flex flex-col bg-(--bg)">
       {totalSteps > 0 && (
-        <div className="px-3 py-3 border-b border-(--border) mb-2 bg-(--bg)/90">
+        <UiPanelSurface className="px-3 py-3 mb-2 bg-(--bg)/90 border-none border-b rounded-none">
           <div className="flex items-center justify-between mb-2">
             <span className="text-[11px] text-(--fg)">Plan Progress</span>
             <span className="text-[10px] text-(--fg) font-mono">
@@ -43,16 +44,20 @@ export function ActivityPanel({ activityGroups, agentPlan, isLoading }: Activity
           {currentStep && isLoading && (
             <div className="flex items-center gap-2 mt-2">
               <Loader2 className="h-3 w-3 text-(--hl1) animate-spin" />
-              <span className="text-[11px] text-(--fg) truncate">{currentStep.title}</span>
+              <UiPulseLabel className="text-[11px] truncate" tone="active">
+                {currentStep.title}
+              </UiPulseLabel>
             </div>
           )}
           {!currentStep && hasIncomplete && isLoading && (
             <div className="flex items-center gap-2 mt-2">
               <Loader2 className="h-3 w-3 text-(--hl1) animate-spin" />
-              <span className="text-[11px] text-(--fg)">Working...</span>
+              <UiPulseLabel className="text-[11px]" tone="active">
+                Working...
+              </UiPulseLabel>
             </div>
           )}
-        </div>
+        </UiPanelSurface>
       )}
 
       <div className="relative flex-1 overflow-y-auto px-2">

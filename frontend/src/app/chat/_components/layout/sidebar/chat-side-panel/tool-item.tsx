@@ -6,6 +6,7 @@ import { Loader2 } from "lucide-react";
 import { safeJsonStringify } from "@/lib/safe-json";
 import type { ActivityItem } from "@/app/chat/types";
 import { CATEGORY_META, categorize, type ToolCategory } from "./tool-categorization";
+import { UiPanelSurface, UiTimelineMarker, type UiTone } from "@/components/ui-kit";
 
 interface ToolItemProps {
   item: ActivityItem;
@@ -49,6 +50,13 @@ export const ToolItem = memo(
     const isError = item.state === "error";
     const category = useMemo(() => categorize(item.toolName), [item.toolName]);
     const meta = CATEGORY_META[category];
+    const markerTone: UiTone = isExecuting
+      ? "active"
+      : isError
+        ? "error"
+        : hasResult
+          ? "success"
+          : "neutral";
 
     const toggleExpanded = useCallback(() => setExpanded((prev) => !prev), []);
 
@@ -60,18 +68,13 @@ export const ToolItem = memo(
     }, [expanded, item.output]);
 
     return (
-      <div className="relative pl-7 pr-2 py-2 bg-(--surface) rounded border-b border-(--border) hover:bg-(--surface) transition-colors">
-        <div
-          className="absolute left-1.75 top-3 w-2.25 h-2.25 rounded-full border flex items-center justify-center"
-          style={{
-            borderColor: isExecuting ? "var(--hl2)" : isError ? "var(--err)" : hasResult ? "var(--hl1)" : "var(--border)",
-            backgroundColor: "var(--surface)",
-          }}
-        >
-          {isExecuting && <div className="w-1 h-1 rounded-full bg-(--dim) animate-pulse" />}
-          {isError && <div className="w-1 h-1 rounded-full bg-(--err)" />}
-          {hasResult && !isError && <div className="w-1 h-1 rounded-full bg-(--hl2)" />}
-        </div>
+      <UiPanelSurface className="relative pl-7 pr-2 py-2 border-b hover:bg-(--surface) transition-colors">
+        <UiTimelineMarker
+          tone={markerTone}
+          className="absolute left-1.75 top-3 w-2.25 h-2.25"
+          showDot={isExecuting || isError || hasResult}
+          pulsing={isExecuting}
+        />
 
         <button onClick={toggleExpanded} className="flex items-center gap-2 w-full text-left group">
           {isExecuting ? (
@@ -81,7 +84,13 @@ export const ToolItem = memo(
           )}
           <span
             className={`text-[11px] truncate ${
-              isExecuting ? "text-(--hl1)" : isError ? "text-(--err)" : hasResult ? "text-(--hl2)" : "text-(--fg)"
+              isExecuting
+                ? "text-(--hl1)"
+                : isError
+                  ? "text-(--err)"
+                  : hasResult
+                    ? "text-(--hl2)"
+                    : "text-(--fg)"
             }`}
           >
             {toolName}
@@ -91,7 +100,9 @@ export const ToolItem = memo(
           <span className="ml-auto text-[9px] text-(--dim)">{expanded ? "−" : "+"}</span>
         </button>
 
-        {mainArg && <p className="mt-1 text-[10px] text-(--fg) line-clamp-1 pl-5">{mainArg.slice(0, 100)}</p>}
+        {mainArg && (
+          <p className="mt-1 text-[10px] text-(--fg) line-clamp-1 pl-5">{mainArg.slice(0, 100)}</p>
+        )}
 
         {expanded && (
           <div className="mt-2 space-y-2 pl-5">
@@ -118,7 +129,7 @@ export const ToolItem = memo(
             )}
           </div>
         )}
-      </div>
+      </UiPanelSurface>
     );
   },
   function areToolItemPropsEqual(prev, next) {

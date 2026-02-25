@@ -24,6 +24,7 @@ type DerivedSlice = Pick<
   | "isLoading"
   | "streamError"
   | "streamStalled"
+  | "runStatusLine"
   | "showEmptyState"
 >;
 
@@ -104,6 +105,7 @@ export function buildChatPageViewProps(args: {
     isLoading: derived.isLoading,
     streamError: derived.streamError,
     streamStalled: derived.streamStalled,
+    runStatusLine: derived.runStatusLine,
     contextStats: context.contextStats,
     contextBreakdown: context.contextBreakdown,
     contextUsageLabel: context.contextUsageLabel,

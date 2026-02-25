@@ -12,17 +12,29 @@ This release consolidates major repo changes currently in the tree, including:
 - Dockerized controller runtime and compose wiring for persistent frontend+backend services
 - repository cleanup and docs reset
 
+## Docs
+
+- Overview: docs/README.md
+- Setup and deployment: setup/README.md
+- Environment variables: docs/environment.md
+
 ## Repository layout
 
 - `controller/`: Bun/Hono backend, orchestration, chat runtime, lifecycle, metrics
 - `frontend/`: Next.js app, chat UI, proxy endpoints, client state
+- `cli/`: Bun CLI for controller access
+- `desktop/`: daemon scripts for running the controller in the background
+- `swift-client/`: iOS/macOS client (XcodeGen)
 - `shared/`: shared types/contracts
 - `config/`: runtime and integration configs
+- `docs/`: documentation index and environment notes
 - `scripts/`: operational scripts
+- `docker-compose.yml`: full stack service definitions
+- `start.sh`: controller + infra launcher
 
 ## Quick start
 
-1. Controller:
+1. Controller (local):
 ```bash
 cd controller
 npx tsc --noEmit
@@ -39,9 +51,14 @@ npm run build
 npm run dev
 ```
 
-3. Full stack with Docker:
+3. Full stack with Docker (controller + frontend + infra):
 ```bash
 docker compose up -d --build controller frontend
+```
+
+4. Convenience entrypoint (controller + infra only):
+```bash
+./start.sh --dev
 ```
 
 ## Health checks
@@ -50,6 +67,11 @@ docker compose up -d --build controller frontend
 curl -sS http://localhost:8080/health
 curl -I http://localhost:3000
 ```
+
+## API docs
+
+- http://localhost:8080/api/docs
+- http://localhost:8080/api/spec
 
 ## Setup guide
 

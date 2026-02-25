@@ -12,6 +12,7 @@ import {
 import { Virtuoso } from "react-virtuoso";
 import { ChatMessageItem } from "./chat-message-item";
 import { PerfProfiler } from "../perf/perf-profiler";
+import { ChatRunStatusLine } from "./chat-run-status-line";
 import type { AgentFileEntry, Artifact, ChatMessage } from "@/lib/types";
 import { fileIcon, flattenAgentFiles } from "./chat-message-list/agent-file-chips";
 import { filterVisibleMessages } from "./chat-message-list/visible-messages";
@@ -36,6 +37,7 @@ interface ChatMessageListProps {
   listeningMessageId?: string | null;
   listeningPending?: boolean;
   onOpenContext?: () => void;
+  runStatusLine?: string;
 }
 
 const VirtuosoList = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(
@@ -64,6 +66,7 @@ export function ChatMessageList({
   listeningMessageId,
   listeningPending,
   onOpenContext,
+  runStatusLine,
 }: ChatMessageListProps) {
   const lastRawMessageId = messages[messages.length - 1]?.id;
 
@@ -180,6 +183,8 @@ export function ChatMessageList({
   const Footer = useCallback(() => {
     return (
       <div className="pt-4">
+        {isLoading && runStatusLine?.trim() && <ChatRunStatusLine line={runStatusLine} />}
+
         {hasAgentFiles && onOpenAgentFile && (
           <div className="mb-4">
             <div className="text-[10px] uppercase tracking-[0.24em] text-(--dim) mb-2">
@@ -217,6 +222,7 @@ export function ChatMessageList({
     isLoading,
     messagesEndRef,
     onOpenAgentFile,
+    runStatusLine,
     selectedAgentFilePath,
   ]);
 

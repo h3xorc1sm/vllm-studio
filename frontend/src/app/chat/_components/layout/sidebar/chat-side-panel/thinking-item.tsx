@@ -3,6 +3,7 @@
 
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
+import { UiPulseLabel, UiTimelineMarker } from "@/components/ui-kit";
 
 export const ThinkingItem = memo(
   function ThinkingItem({ content, isActive }: { content?: string; isActive?: boolean }) {
@@ -18,9 +19,12 @@ export const ThinkingItem = memo(
 
     return (
       <div className="relative pl-7 pr-2 py-2">
-        <div className="absolute left-1.75 top-2.5 w-2.25 h-2.25 rounded-full border border-(--border) bg-(--bg) flex items-center justify-center">
-          {isActive && <div className="w-1.5 h-1.5 rounded-full bg-(--hl2) animate-pulse" />}
-        </div>
+        <UiTimelineMarker
+          tone={isActive ? "active" : "neutral"}
+          pulsing={Boolean(isActive)}
+          className="absolute left-1.75 top-2.5 w-2.25 h-2.25"
+          innerClassName="w-1.5 h-1.5"
+        />
 
         <button onClick={toggleExpanded} className="flex items-center gap-2 w-full text-left group">
           {isActive ? (
@@ -28,12 +32,21 @@ export const ThinkingItem = memo(
           ) : (
             <BrainIcon className="h-3 w-3 text-(--fg) shrink-0" />
           )}
-          <span
-            className={`text-[11px] ${isActive ? "text-(--fg)" : "text-(--fg)"} group-hover:text-(--fg) transition-colors`}
-          >
-            {isActive ? "Thinking..." : "Thought"}
-          </span>
-          {content && <span className="ml-auto text-[9px] text-(--dim)">{expanded ? "−" : "+"}</span>}
+          {isActive ? (
+            <UiPulseLabel
+              className="text-[11px] group-hover:text-(--fg) transition-colors"
+              tone="active"
+            >
+              Thinking...
+            </UiPulseLabel>
+          ) : (
+            <span className="text-[11px] text-(--fg) group-hover:text-(--fg) transition-colors">
+              Thought
+            </span>
+          )}
+          {content && (
+            <span className="ml-auto text-[9px] text-(--dim)">{expanded ? "−" : "+"}</span>
+          )}
         </button>
 
         {expanded && content && (
