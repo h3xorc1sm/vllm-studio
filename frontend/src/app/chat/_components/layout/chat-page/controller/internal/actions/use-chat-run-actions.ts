@@ -84,7 +84,6 @@ export function useChatRunActions({
   const { sendUserMessage } = useChatSendUserMessage({
     selectedModel: store.selectedModel,
     systemPrompt: store.systemPrompt,
-    mcpEnabled: store.mcpEnabled,
     deepResearchEnabled: store.deepResearch.enabled,
     agentMode: store.agentMode,
     currentSessionId: sessions.currentSessionId,
@@ -176,7 +175,14 @@ export function useChatRunActions({
     setIsLoading(false);
     // Clear tool execution state so amber spinners don't get stuck
     setExecutingTools(new Set());
-  }, [activeRunIdRef, runAbortControllerRef, sessions.currentSessionId, setIsLoading, setExecutingTools, store]);
+  }, [
+    activeRunIdRef,
+    runAbortControllerRef,
+    sessions.currentSessionId,
+    setIsLoading,
+    setExecutingTools,
+    store,
+  ]);
 
   return { handleSend, handleReprompt, handleForkMessage, handleStop };
 }

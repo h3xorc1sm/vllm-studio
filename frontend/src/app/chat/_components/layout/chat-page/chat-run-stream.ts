@@ -12,7 +12,6 @@ export interface ChatRunStreamPayload {
   model?: string;
   provider?: string;
   system?: string;
-  mcp_enabled?: boolean;
   agent_mode?: boolean;
   agent_files?: boolean;
   deep_research?: boolean;

@@ -42,11 +42,16 @@ const parseParameterBlocks = (block: string): Record<string, unknown> | null => 
   const parameterPattern = /<parameter(?:\s+name=|=)([^>\s]+)>([\s\S]*?)<\/parameter>/gi;
   let found = false;
   for (const match of block.matchAll(parameterPattern)) {
-    const name = String(match[1] ?? "").replace(/["']/g, "").trim();
+    const name = String(match[1] ?? "")
+      .replace(/["']/g, "")
+      .trim();
     if (!name) continue;
     found = true;
     const rawValue = String(match[2] ?? "").trim();
-    const parsed = rawValue && (rawValue.startsWith("{") || rawValue.startsWith("[")) ? safeJsonParse(rawValue) : null;
+    const parsed =
+      rawValue && (rawValue.startsWith("{") || rawValue.startsWith("["))
+        ? safeJsonParse(rawValue)
+        : null;
     args[name] = parsed ?? rawValue;
   }
   return found ? args : null;
@@ -60,7 +65,7 @@ const extractBalancedValue = (input: string, start: number): string | null => {
   if (index >= input.length) return null;
 
   const open = input[index];
-  if (open !== "{" && open !== "[" && open !== "\"") return null;
+  if (open !== "{" && open !== "[" && open !== '"') return null;
 
   const close = open === "{" ? "}" : open === "[" ? "]" : null;
   if (!close) {
@@ -76,7 +81,7 @@ const extractBalancedValue = (input: string, start: number): string | null => {
         escaping = true;
         continue;
       }
-      if (char === "\"") {
+      if (char === '"') {
         return input.slice(index, cursor + 1);
       }
     }
@@ -98,13 +103,13 @@ const extractBalancedValue = (input: string, start: number): string | null => {
         escaping = true;
         continue;
       }
-      if (char === "\"") {
+      if (char === '"') {
         inString = false;
       }
       continue;
     }
 
-    if (char === "\"") {
+    if (char === '"') {
       inString = true;
       continue;
     }
@@ -131,10 +136,12 @@ const buildToolCall = (name: string, args: unknown, index: number): ToolCall => 
 
 export const normalizeToolRequest = (payload: Record<string, unknown>): Record<string, unknown> => {
   if (payload["functions"] && !payload["tools"] && Array.isArray(payload["functions"])) {
-    payload["tools"] = (payload["functions"] as Array<Record<string, unknown>>).map((functionDefinition) => ({
-      type: "function",
-      function: functionDefinition,
-    }));
+    payload["tools"] = (payload["functions"] as Array<Record<string, unknown>>).map(
+      (functionDefinition) => ({
+        type: "function",
+        function: functionDefinition,
+      })
+    );
     delete payload["functions"];
   }
   // Strip tool_choice: "auto" to avoid 400 errors from backends that don't have
@@ -148,17 +155,6 @@ export const normalizeToolRequest = (payload: Record<string, unknown>): Record<s
 export const parseToolCallsFromContent = (content: string): ToolCall[] => {
   if (!content) return [];
   const toolCalls: ToolCall[] = [];
-
-  const mcpPattern = /<?use_mcp_tool>\s*<?server_name>([^<]*)<\/server_name>\s*<?tool_name>([^<]*)<\/tool_name>\s*<?arguments>\s*([\s\S]*?)\s*<\/arguments>\s*<\/use_mcp[\s_]*tool>/gi;
-  for (const match of content.matchAll(mcpPattern)) {
-    const server = String(match[1] ?? "").trim();
-    const tool = String(match[2] ?? "").trim();
-    const argsRaw = String(match[3] ?? "").trim();
-    if (!tool) continue;
-    const argsParsed = argsRaw ? safeJsonParse(argsRaw) ?? argsRaw : {};
-    const name = server ? `${server}__${tool}` : tool;
-    toolCalls.push(buildToolCall(name, argsParsed, toolCalls.length));
-  }
 
   const toolCallPattern = /<tool_call>([\s\S]*?)<\/tool_call>/gi;
   for (const match of content.matchAll(toolCallPattern)) {
@@ -197,7 +193,7 @@ export const parseToolCallsFromContent = (content: string): ToolCall[] => {
       const name = String(match[1] ?? "").trim();
       const argsStart = (match.index ?? 0) + match[0].length;
       const argsRaw = extractBalancedValue(content.slice(argsStart), 0) ?? "";
-      const parsedArguments = argsRaw ? safeJsonParse(argsRaw) ?? argsRaw : {};
+      const parsedArguments = argsRaw ? (safeJsonParse(argsRaw) ?? argsRaw) : {};
       if (name) {
         toolCalls.push(buildToolCall(name, parsedArguments, toolCalls.length));
       }
@@ -244,18 +240,30 @@ const extractThinkBlocks = (text: string): { cleaned: string; extracted: string[
       if (index >= 0) closeIndex = closeIndex === -1 ? index : Math.min(closeIndex, index);
     }
     if (openIndex === -1 && closeIndex === -1) return null;
-    if (openIndex !== -1 && (closeIndex === -1 || openIndex < closeIndex)) return { kind: "open", index: openIndex };
+    if (openIndex !== -1 && (closeIndex === -1 || openIndex < closeIndex))
+      return { kind: "open", index: openIndex };
     return { kind: "close", index: closeIndex };
   };
 
-  const parseTag = (input: string, start: number): { name: "think" | "thinking" | "analysis"; end: number } | null => {
+  const parseTag = (
+    input: string,
+    start: number
+  ): { name: "think" | "thinking" | "analysis"; end: number } | null => {
     const closeIndex = input.indexOf(">", start);
     if (closeIndex < 0) return null;
     const tag = input.slice(start, closeIndex + 1);
     const open = tag.match(/^<(think|thinking|analysis)(?:\s+[^>]*)?>$/i);
-    if (open) return { name: open[1]!.toLowerCase() as "think" | "thinking" | "analysis", end: closeIndex + 1 };
+    if (open)
+      return {
+        name: open[1]!.toLowerCase() as "think" | "thinking" | "analysis",
+        end: closeIndex + 1,
+      };
     const close = tag.match(/^<\/(think|thinking|analysis)(?:\s+[^>]*)?>$/i);
-    if (close) return { name: close[1]!.toLowerCase() as "think" | "thinking" | "analysis", end: closeIndex + 1 };
+    if (close)
+      return {
+        name: close[1]!.toLowerCase() as "think" | "thinking" | "analysis",
+        end: closeIndex + 1,
+      };
     return null;
   };
 
@@ -315,22 +323,27 @@ const extractThinkBlocks = (text: string): { cleaned: string; extracted: string[
 
 export const normalizeReasoningAndContentInMessage = (message: Record<string, unknown>): void => {
   const contentRaw = typeof message["content"] === "string" ? String(message["content"]) : "";
-  const reasoningRaw = typeof message["reasoning_content"] === "string" ? String(message["reasoning_content"]) : "";
+  const reasoningRaw =
+    typeof message["reasoning_content"] === "string" ? String(message["reasoning_content"]) : "";
 
   const contentThink = extractThinkBlocks(contentRaw);
   const reasoningThink = extractThinkBlocks(reasoningRaw);
   const extracted = [...contentThink.extracted, ...reasoningThink.extracted].filter(Boolean);
 
-  const nextReasoning = [reasoningThink.cleaned, extracted.join("\n")].filter((v) => v.trim().length > 0).join("\n");
+  const nextReasoning = [reasoningThink.cleaned, extracted.join("\n")]
+    .filter((v) => v.trim().length > 0)
+    .join("\n");
   const nextContent = contentThink.cleaned;
 
   if (nextContent !== contentRaw) message["content"] = nextContent;
   if (nextReasoning !== reasoningRaw) message["reasoning_content"] = nextReasoning;
 
   // Strip tool-call XML blocks after we have a canonical tool_calls field.
-  const strippedContent = stripToolCallXmlBlocks(typeof message["content"] === "string" ? String(message["content"]) : "");
+  const strippedContent = stripToolCallXmlBlocks(
+    typeof message["content"] === "string" ? String(message["content"]) : ""
+  );
   const strippedReasoning = stripToolCallXmlBlocks(
-    typeof message["reasoning_content"] === "string" ? String(message["reasoning_content"]) : "",
+    typeof message["reasoning_content"] === "string" ? String(message["reasoning_content"]) : ""
   );
   message["content"] = strippedContent;
   if (strippedReasoning) {
@@ -347,7 +360,8 @@ export const normalizeToolCallsInMessage = (message: Record<string, unknown>): b
     return false;
   }
   const content = typeof message["content"] === "string" ? String(message["content"]) : "";
-  const reasoning = typeof message["reasoning_content"] === "string" ? String(message["reasoning_content"]) : "";
+  const reasoning =
+    typeof message["reasoning_content"] === "string" ? String(message["reasoning_content"]) : "";
   const parsed = parseToolCallsFromContent(`${content}${reasoning}`);
   if (parsed.length > 0) {
     message["tool_calls"] = parsed;
@@ -358,7 +372,7 @@ export const normalizeToolCallsInMessage = (message: Record<string, unknown>): b
 
 export const createToolCallStream = (
   reader: ReadableStreamDefaultReader<Uint8Array>,
-  onUsage?: (usage: StreamUsage) => void,
+  onUsage?: (usage: StreamUsage) => void
 ): ReadableStream<Uint8Array> => {
   const decoder = new TextDecoder();
   const encoder = new TextEncoder();
@@ -374,13 +388,17 @@ export const createToolCallStream = (
   const thinkingClosePrefixes = ["</thinking", "</analysis", "</think"];
   const thinkingAllPrefixes = [...thinkingOpenPrefixes, ...thinkingClosePrefixes];
 
-  const getThinkingTagLength = (suffix: string): { kind: "open" | "close"; length: number } | null => {
+  const getThinkingTagLength = (
+    suffix: string
+  ): { kind: "open" | "close"; length: number } | null => {
     if (!suffix.startsWith("<")) return null;
     const closeIndex = suffix.indexOf(">");
     if (closeIndex < 0) return null;
     const tag = suffix.slice(0, closeIndex + 1);
-    if (/^<(think|thinking|analysis)(?:\s+[^>]*)?>$/i.test(tag)) return { kind: "open", length: closeIndex + 1 };
-    if (/^<\/(think|thinking|analysis)(?:\s+[^>]*)?>$/i.test(tag)) return { kind: "close", length: closeIndex + 1 };
+    if (/^<(think|thinking|analysis)(?:\s+[^>]*)?>$/i.test(tag))
+      return { kind: "open", length: closeIndex + 1 };
+    if (/^<\/(think|thinking|analysis)(?:\s+[^>]*)?>$/i.test(tag))
+      return { kind: "close", length: closeIndex + 1 };
     return null;
   };
 
@@ -397,7 +415,15 @@ export const createToolCallStream = (
         // Full prefix exists; ensure the next char could still produce a valid tag (<think>, <think ...>, <think/>).
         const next = lower[prefix.length];
         if (!next) return true;
-        if (next === ">" || next === " " || next === "/" || next === "\t" || next === "\n" || next === "\r") return true;
+        if (
+          next === ">" ||
+          next === " " ||
+          next === "/" ||
+          next === "\t" ||
+          next === "\n" ||
+          next === "\r"
+        )
+          return true;
       }
     }
 
@@ -420,7 +446,7 @@ export const createToolCallStream = (
 
   const rewriteThinkDelta = (
     deltaText: string,
-    defaultToReasoning = false,
+    defaultToReasoning = false
   ): { content: string; reasoningAppend: string } => {
     const combined = thinkCarry + (deltaText ?? "");
     const combinedLower = combined.toLowerCase();
@@ -467,7 +493,10 @@ export const createToolCallStream = (
     };
   };
 
-  const enqueueLine = (controller: ReadableStreamDefaultController<Uint8Array>, line: string): void => {
+  const enqueueLine = (
+    controller: ReadableStreamDefaultController<Uint8Array>,
+    line: string
+  ): void => {
     controller.enqueue(encoder.encode(`${line}\n`));
     emittedLines += 1;
   };
@@ -475,16 +504,21 @@ export const createToolCallStream = (
   const buildToolCallChunk = (toolCalls: ToolCall[]): string => {
     const payload = {
       id: `chatcmpl-${randomUUID().slice(0, 8)}`,
-      choices: [{
-        index: 0,
-        delta: { tool_calls: toolCalls },
-        finish_reason: "tool_calls",
-      }],
+      choices: [
+        {
+          index: 0,
+          delta: { tool_calls: toolCalls },
+          finish_reason: "tool_calls",
+        },
+      ],
     };
     return `data: ${JSON.stringify(payload)}`;
   };
 
-  const buildFlushChunk = (payload: { content?: string; reasoning_content?: string }): string | null => {
+  const buildFlushChunk = (payload: {
+    content?: string;
+    reasoning_content?: string;
+  }): string | null => {
     const content = payload.content ?? "";
     const reasoning = payload.reasoning_content ?? "";
     if (!content && !reasoning) return null;
@@ -499,9 +533,10 @@ export const createToolCallStream = (
     const tail = thinkCarry;
     thinkCarry = "";
     const carryLooksLikeThink = thinkingTagPrefixIsPartial(tail.trim());
-    const chunk = inThink || carryLooksLikeThink
-      ? buildFlushChunk({ reasoning_content: stripToolXmlDelta(tail) })
-      : buildFlushChunk({ content: stripToolXmlDelta(tail) });
+    const chunk =
+      inThink || carryLooksLikeThink
+        ? buildFlushChunk({ reasoning_content: stripToolXmlDelta(tail) })
+        : buildFlushChunk({ content: stripToolXmlDelta(tail) });
     if (chunk) enqueueLine(controller, chunk);
   };
 
@@ -522,14 +557,17 @@ export const createToolCallStream = (
     if (!Array.isArray(choices)) return;
     for (const choice of choices) {
       const choiceRecord = choice as Record<string, unknown>;
-      const delta = (choiceRecord["delta"] ?? choiceRecord["message"]) as Record<string, unknown> | undefined;
+      const delta = (choiceRecord["delta"] ?? choiceRecord["message"]) as
+        | Record<string, unknown>
+        | undefined;
       if (!delta) continue;
       const toolCalls = delta["tool_calls"];
       if (Array.isArray(toolCalls) && toolCalls.length > 0) {
         toolCallsFound = true;
       }
       const content = typeof delta["content"] === "string" ? String(delta["content"]) : "";
-      const reasoning = typeof delta["reasoning_content"] === "string" ? String(delta["reasoning_content"]) : "";
+      const reasoning =
+        typeof delta["reasoning_content"] === "string" ? String(delta["reasoning_content"]) : "";
       if (content) contentBuffer += content;
       if (reasoning) contentBuffer += reasoning;
     }
@@ -606,11 +644,15 @@ export const createToolCallStream = (
         if (Array.isArray(choices)) {
           for (const choice of choices) {
             const choiceRecord = choice as Record<string, unknown>;
-            const delta = (choiceRecord["delta"] ?? choiceRecord["message"]) as Record<string, unknown> | undefined;
+            const delta = (choiceRecord["delta"] ?? choiceRecord["message"]) as
+              | Record<string, unknown>
+              | undefined;
             if (!delta) continue;
             const content = typeof delta["content"] === "string" ? String(delta["content"]) : "";
             const reasoningRaw =
-              typeof delta["reasoning_content"] === "string" ? String(delta["reasoning_content"]) : "";
+              typeof delta["reasoning_content"] === "string"
+                ? String(delta["reasoning_content"])
+                : "";
             let reasoning = "";
             let reasoningFromContent = "";
             if (content) {

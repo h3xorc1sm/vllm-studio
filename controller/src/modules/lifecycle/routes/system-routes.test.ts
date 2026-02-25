@@ -83,12 +83,6 @@ describe("System Routes", () => {
           addCompletionTokens: mock(() => undefined),
           addRequests: mock(() => undefined),
         },
-        mcpStore: {
-          list: mock(() => []),
-          get: mock(() => undefined),
-          save: mock(() => undefined),
-          delete: mock(() => undefined),
-        },
       },
     } as unknown as AppContext;
 

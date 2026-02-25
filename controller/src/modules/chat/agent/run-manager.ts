@@ -39,7 +39,6 @@ export interface ChatRunOptions {
   model?: string;
   provider?: string;
   systemPrompt?: string;
-  mcpEnabled?: boolean;
   agentMode?: boolean;
   agentFiles?: boolean;
   deepResearch?: boolean;
@@ -162,9 +161,7 @@ export class ChatRunManager {
       model: storedModel,
       status: "running",
       ...(systemPrompt ? { system: systemPrompt } : {}),
-      ...(options.mcpEnabled || options.agentMode || options.agentFiles
-        ? { toolsetId: "agent" }
-        : {}),
+      ...(options.agentMode || options.agentFiles ? { toolsetId: "agent" } : {}),
     };
 
     this.context.stores.chatStore.createRun(runId, sessionId, runOptions);
@@ -235,7 +232,6 @@ export class ChatRunManager {
 
     const tools = await buildAgentTools(this.context, {
       sessionId,
-      mcpEnabled: Boolean(options.mcpEnabled),
       agentMode: Boolean(options.agentMode),
       agentFiles: Boolean(options.agentFiles),
       emitEvent: publishPlanEvent,
@@ -377,9 +373,7 @@ export class ChatRunManager {
       model: storedModel,
       status: "running",
       ...(systemPrompt ? { system: systemPrompt } : {}),
-      ...(options.mcpEnabled || options.agentMode || options.agentFiles
-        ? { toolsetId: "agent" }
-        : {}),
+      ...(options.agentMode || options.agentFiles ? { toolsetId: "agent" } : {}),
     };
 
     this.context.stores.chatStore.createRun(runId, sessionId, runOptions);

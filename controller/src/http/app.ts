@@ -7,7 +7,6 @@ import { isHttpStatus } from "../core/errors";
 import { registerAllChatRoutes } from "../modules/chat/routes";
 import { registerDownloadsRoutes } from "../modules/downloads/routes";
 import { registerAllLifecycleRoutes } from "../modules/lifecycle/routes";
-import { registerMcpRoutes } from "../modules/mcp/routes";
 import { registerModelsRoutes } from "../modules/models/routes";
 import { registerAllMonitoringRoutes } from "../modules/monitoring/routes";
 import { registerAllProxyRoutes } from "../modules/proxy/routes";
@@ -49,7 +48,6 @@ export const createApp = (context: AppContext): Hono => {
   registerDownloadsRoutes(app, context);
   registerAllChatRoutes(app, context);
   registerAllMonitoringRoutes(app, context);
-  registerMcpRoutes(app, context);
   registerAudioRoutes(app, context);
   registerJobsRoutes(app, context, context.jobManager);
   registerDistributedRoutes(app, context.distributedManager);

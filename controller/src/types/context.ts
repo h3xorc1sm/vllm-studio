@@ -10,7 +10,6 @@ import type { ChatRunManager } from "../modules/chat/agent/run-manager";
 import type { ChatStore } from "../modules/chat/store";
 import type { DownloadStore } from "../modules/downloads/store";
 import type { LifetimeMetricsStore, PeakMetricsStore } from "../modules/monitoring/metrics-store";
-import type { McpStore } from "../modules/mcp/store";
 import type { RecipeStore } from "../modules/lifecycle/recipes/recipe-store";
 import type { JobStore } from "../stores/job-store";
 import type { JobManager } from "../modules/jobs/job-manager";
@@ -39,7 +38,6 @@ export interface AppContext {
     downloadStore: DownloadStore;
     peakMetricsStore: PeakMetricsStore;
     lifetimeMetricsStore: LifetimeMetricsStore;
-    mcpStore: McpStore;
     jobStore: JobStore;
     distributedStore: DistributedStore;
   };

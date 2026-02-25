@@ -21,7 +21,6 @@ export function createChatsApi(core: ApiCore) {
         model?: string;
         provider?: string;
         system?: string;
-        mcp_enabled?: boolean;
         agent_mode?: boolean;
         agent_files?: boolean;
         deep_research?: boolean;
@@ -78,10 +77,7 @@ export function createChatsApi(core: ApiCore) {
         body: JSON.stringify(message),
       }),
 
-    abortChatRun: async (
-      sessionId: string,
-      runId: string,
-    ): Promise<{ success: boolean }> => {
+    abortChatRun: async (sessionId: string, runId: string): Promise<{ success: boolean }> => {
       try {
         return await core.request(`/chats/${sessionId}/runs/${runId}/abort`, { method: "POST" });
       } catch (error) {
@@ -93,7 +89,9 @@ export function createChatsApi(core: ApiCore) {
       }
     },
 
-    getChatUsage: (sessionId: string): Promise<{
+    getChatUsage: (
+      sessionId: string,
+    ): Promise<{
       prompt_tokens: number;
       completion_tokens: number;
       total_tokens: number;

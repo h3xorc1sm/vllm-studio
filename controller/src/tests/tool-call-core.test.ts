@@ -68,15 +68,14 @@ describe("tool-call-core", () => {
     expect(calls[0]?.function.arguments).toContain('"content":"const x = {a: {b: 1}}"');
   });
 
-  it("parses MCP tool calls into server__tool", () => {
+  it("ignores legacy MCP XML blocks", () => {
     const content = `<use_mcp_tool>
 <server_name>exa</server_name>
 <tool_name>search</tool_name>
 <arguments>{"q":"vllm"}</arguments>
 </use_mcp_tool>`;
     const calls = parseToolCallsFromContent(content);
-    expect(calls.length).toBe(1);
-    expect(calls[0]?.function.name).toBe("exa__search");
+    expect(calls.length).toBe(0);
   });
 
   it("injects tool_calls before [DONE] for streaming XML", async () => {

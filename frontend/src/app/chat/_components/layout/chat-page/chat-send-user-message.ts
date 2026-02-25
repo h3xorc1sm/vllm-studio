@@ -19,7 +19,6 @@ import { buildRunSystemPrompt } from "./run-system-prompt";
 export interface UseChatSendUserMessageArgs {
   selectedModel: string;
   systemPrompt: string;
-  mcpEnabled: boolean;
   deepResearchEnabled: boolean;
   agentMode: boolean;
   currentSessionId: string | null;
@@ -48,7 +47,6 @@ export interface UseChatSendUserMessageArgs {
       model?: string;
       provider?: string;
       system?: string;
-      mcp_enabled?: boolean;
       agent_mode?: boolean;
       agent_files?: boolean;
       deep_research?: boolean;
@@ -61,7 +59,6 @@ export interface UseChatSendUserMessageArgs {
 export function useChatSendUserMessage({
   selectedModel,
   systemPrompt,
-  mcpEnabled,
   deepResearchEnabled,
   agentMode,
   currentSessionId,
@@ -264,7 +261,6 @@ export function useChatSendUserMessage({
             ...(runModel ? { model: runModel } : {}),
             ...(runProvider ? { provider: runProvider } : {}),
             system: runSystemPrompt,
-            mcp_enabled: mcpEnabled,
             agent_mode: agentMode,
             agent_files: agentFilesEnabled,
             deep_research: deepResearchEnabled,
@@ -297,7 +293,6 @@ export function useChatSendUserMessage({
       generateTitle,
       isLoading,
       lastUserInputRef,
-      mcpEnabled,
       replaceUrlToSession,
       selectedModel,
       setInput,

@@ -14,7 +14,6 @@ import { primaryLogPathFor } from "./core/log-files";
 import { ChatStore } from "./modules/chat/store";
 import { DownloadStore } from "./modules/downloads/store";
 import { PeakMetricsStore, LifetimeMetricsStore } from "./modules/monitoring/metrics-store";
-import { McpStore } from "./modules/mcp/store";
 import { RecipeStore } from "./modules/lifecycle/recipes/recipe-store";
 import { ChatRunManager } from "./modules/chat/agent/run-manager";
 import { JobStore } from "./stores/job-store";
@@ -37,7 +36,6 @@ export const createAppContext = (): AppContext => {
   const downloadStore = new DownloadStore(dbPath);
   const peakMetricsStore = new PeakMetricsStore(dbPath);
   const lifetimeMetricsStore = new LifetimeMetricsStore(dbPath);
-  const mcpStore = new McpStore(dbPath);
   const jobStore = new JobStore(dbPath);
   const distributedStore = new DistributedStore(dbPath);
   const eventManager = createEventManager();
@@ -77,7 +75,6 @@ export const createAppContext = (): AppContext => {
       downloadStore,
       peakMetricsStore,
       lifetimeMetricsStore,
-      mcpStore,
       jobStore,
       distributedStore,
     },
@@ -85,7 +82,10 @@ export const createAppContext = (): AppContext => {
 
   const runManager = new ChatRunManager(baseContext as AppContext);
   const jobManager = new JobManager(baseContext as AppContext, jobStore);
-  const distributedManager = new DistributedClusterManager(baseContext as AppContext, distributedStore);
+  const distributedManager = new DistributedClusterManager(
+    baseContext as AppContext,
+    distributedStore
+  );
 
   return {
     ...baseContext,

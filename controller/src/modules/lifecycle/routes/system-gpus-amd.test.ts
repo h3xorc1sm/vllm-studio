@@ -111,12 +111,6 @@ exit 2
           addRequests: mock(() => undefined),
           increment: mock(() => undefined),
         },
-        mcpStore: {
-          list: mock(() => []),
-          get: mock(() => undefined),
-          save: mock(() => undefined),
-          delete: mock(() => undefined),
-        },
       },
     } as unknown as AppContext;
 

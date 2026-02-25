@@ -15,9 +15,7 @@ interface SSEPayload<T = unknown> {
   timestamp: string;
 }
 
-export function useControllerEvents(
-  apiBaseUrl: string = resolveControllerEventsBaseUrl(),
-) {
+export function useControllerEvents(apiBaseUrl: string = resolveControllerEventsBaseUrl()) {
   const updateSessions = useAppStore((state) => state.updateSessions);
   const setCurrentSessionId = useAppStore((state) => state.setCurrentSessionId);
   const setCurrentSessionTitle = useAppStore((state) => state.setCurrentSessionTitle);
@@ -45,9 +43,10 @@ export function useControllerEvents(
       if (currentSessionIdRef.current === session.id) {
         setCurrentSessionTitle(session.title || "Chat");
         const agentState = session.agent_state as AgentState | null | undefined;
-        const plan = normalizePlan(agentState?.plan)
-          ?? (agentState?.tasks ? normalizePlan({ steps: agentState.tasks }) : null)
-          ?? normalizePlan(agentState);
+        const plan =
+          normalizePlan(agentState?.plan) ??
+          (agentState?.tasks ? normalizePlan({ steps: agentState.tasks }) : null) ??
+          normalizePlan(agentState);
         setAgentPlan(plan);
       }
     },
@@ -126,7 +125,10 @@ export function useControllerEvents(
                 prompt_tokens: Number(usage["prompt_tokens"] ?? 0),
                 completion_tokens: Number(usage["completion_tokens"] ?? 0),
                 total_tokens: Number(usage["total_tokens"] ?? 0),
-                estimated_cost: typeof usage["estimated_cost_usd"] === "number" ? usage["estimated_cost_usd"] : null,
+                estimated_cost:
+                  typeof usage["estimated_cost_usd"] === "number"
+                    ? usage["estimated_cost_usd"]
+                    : null,
               });
             }
             dispatchCustomEvent("vllm:chat-event", { type: eventType, data });
@@ -169,15 +171,6 @@ export function useControllerEvents(
           case "recipe_updated":
           case "recipe_deleted": {
             dispatchCustomEvent("vllm:recipe-event", { type: eventType, data });
-            break;
-          }
-          case "mcp_server_created":
-          case "mcp_server_updated":
-          case "mcp_server_deleted":
-          case "mcp_server_enabled":
-          case "mcp_server_disabled":
-          case "mcp_tool_called": {
-            dispatchCustomEvent("vllm:mcp-event", { type: eventType, data });
             break;
           }
           case "runtime_vllm_upgraded":
@@ -229,7 +222,9 @@ export function useControllerEvents(
   );
 
   const apiKey = getApiKey();
-  const sseUrl = apiKey ? `${apiBaseUrl}/events?api_key=${encodeURIComponent(apiKey)}` : `${apiBaseUrl}/events`;
+  const sseUrl = apiKey
+    ? `${apiBaseUrl}/events?api_key=${encodeURIComponent(apiKey)}`
+    : `${apiBaseUrl}/events`;
 
   useEffect(() => {
     if (eventSourceRef.current) {

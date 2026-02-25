@@ -5,14 +5,12 @@ import type { AppContext } from "../../../types/context";
 import { buildAgentFsTools } from "./tool-registry-agentfs";
 import { createTextResult } from "./tool-registry-common";
 import { buildDaytonaTools } from "./tool-registry-daytona";
-import { buildMcpTools } from "./tool-registry-mcp";
 import { buildPlanTools } from "./tool-registry-plan";
 import type { AgentEventType } from "./contracts";
 import { isDaytonaAgentModeEnabled } from "../../../services/daytona/toolbox-client";
 
 export interface AgentToolRegistryOptions {
   sessionId: string;
-  mcpEnabled: boolean;
   agentMode: boolean;
   agentFiles?: boolean;
   emitEvent?: (type: AgentEventType, data: Record<string, unknown>) => void;
@@ -31,10 +29,6 @@ export const buildAgentTools = async (
   const tools: AgentTool[] = [];
   const daytonaAgentMode = isDaytonaAgentModeEnabled(context.config);
 
-  if (options.mcpEnabled && !daytonaAgentMode) {
-    tools.push(...(await buildMcpTools(context)));
-  }
-
   if (options.agentMode) {
     tools.push(...buildPlanTools(context, options));
   }
@@ -43,7 +37,7 @@ export const buildAgentTools = async (
     tools.push(...buildDaytonaTools(context, options));
   }
 
-  if (options.agentMode || options.agentFiles) {
+  if ((options.agentMode || options.agentFiles) && daytonaAgentMode) {
     tools.push(...buildAgentFsTools(context, options));
   }
 
