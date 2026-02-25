@@ -11,5 +11,6 @@ export * from "./system-prompt-builder";
 export * from "./tool-registry";
 export * from "./tool-registry-agentfs";
 export * from "./tool-registry-common";
+export * from "./tool-registry-daytona";
 export * from "./tool-registry-mcp";
 export * from "./tool-registry-plan";

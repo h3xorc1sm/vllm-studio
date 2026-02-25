@@ -16,7 +16,8 @@ import { AGENT_TOOL_NAMES, type AgentToolName } from "./contracts";
 
 type StoredMessageRecord = Record<string, unknown>;
 
-const getString = (value: unknown): string | undefined => (typeof value === "string" ? value : undefined);
+const getString = (value: unknown): string | undefined =>
+  typeof value === "string" ? value : undefined;
 const getNumber = (value: unknown): number | undefined =>
   typeof value === "number" && !Number.isNaN(value) ? value : undefined;
 
@@ -57,7 +58,7 @@ const normalizeToolArguments = (value: unknown): Record<string, unknown> => {
 };
 
 const extractToolResult = (
-  raw: unknown,
+  raw: unknown
 ): { text: string; isError: boolean; details: Record<string, unknown> } | null => {
   if (raw === undefined || raw === null) return null;
   if (typeof raw === "string") {
@@ -80,8 +81,10 @@ const extractToolResult = (
 };
 
 const buildUsage = (message: StoredMessageRecord): Usage => {
-  const promptTokens = getNumber(message["prompt_tokens"]) ?? getNumber(message["request_prompt_tokens"]) ?? 0;
-  const completionTokens = getNumber(message["completion_tokens"]) ?? getNumber(message["request_completion_tokens"]) ?? 0;
+  const promptTokens =
+    getNumber(message["prompt_tokens"]) ?? getNumber(message["request_prompt_tokens"]) ?? 0;
+  const completionTokens =
+    getNumber(message["completion_tokens"]) ?? getNumber(message["request_completion_tokens"]) ?? 0;
   const totalTokens =
     getNumber(message["total_tokens"]) ??
     getNumber(message["request_total_input_tokens"]) ??
@@ -98,10 +101,12 @@ const buildUsage = (message: StoredMessageRecord): Usage => {
 
 const buildAssistantContent = (
   message: StoredMessageRecord,
-  toolCallsById: Map<string, ToolCall>,
+  toolCallsById: Map<string, ToolCall>
 ): Array<TextContent | ThinkingContent | ToolCall> => {
   const contentBlocks: Array<TextContent | ThinkingContent | ToolCall> = [];
-  const rawParts = Array.isArray(message["parts"]) ? (message["parts"] as Array<Record<string, unknown>>) : [];
+  const rawParts = Array.isArray(message["parts"])
+    ? (message["parts"] as Array<Record<string, unknown>>)
+    : [];
   const addedToolCalls = new Set<string>();
 
   for (const part of rawParts) {
@@ -123,14 +128,21 @@ const buildAssistantContent = (
     const isToolPart = type === "dynamic-tool" || type.startsWith("tool-");
     if (isToolPart) {
       const toolCallId = getString(part["toolCallId"]) ?? "";
-      const toolName = getString(part["toolName"]) ?? (type.startsWith("tool-") ? type.replace(/^tool-/, "") : "tool");
+      const toolName =
+        getString(part["toolName"]) ??
+        (type.startsWith("tool-") ? type.replace(/^tool-/, "") : "tool");
       const input = normalizeToolArguments(part["input"]);
       if (toolCallId) {
         const existing = toolCallsById.get(toolCallId);
         if (existing) {
           contentBlocks.push(existing);
         } else {
-          contentBlocks.push({ type: "toolCall", id: toolCallId, name: toolName, arguments: input });
+          contentBlocks.push({
+            type: "toolCall",
+            id: toolCallId,
+            name: toolName,
+            arguments: input,
+          });
         }
         addedToolCalls.add(toolCallId);
       }
@@ -155,7 +167,9 @@ const buildAssistantContent = (
 };
 
 const buildToolCalls = (message: StoredMessageRecord): Map<string, ToolCall> => {
-  const calls = Array.isArray(message["tool_calls"]) ? message["tool_calls"] : parseJson(message["tool_calls"]);
+  const calls = Array.isArray(message["tool_calls"])
+    ? message["tool_calls"]
+    : parseJson(message["tool_calls"]);
   const toolCalls: unknown[] = Array.isArray(calls) ? calls : [];
   const map = new Map<string, ToolCall>();
 
@@ -175,10 +189,12 @@ const buildToolCalls = (message: StoredMessageRecord): Map<string, ToolCall> => 
 };
 
 const buildToolResults = (message: StoredMessageRecord): ToolResultMessage[] => {
-  const calls = Array.isArray(message["tool_calls"]) ? message["tool_calls"] : parseJson(message["tool_calls"]);
+  const calls = Array.isArray(message["tool_calls"])
+    ? message["tool_calls"]
+    : parseJson(message["tool_calls"]);
   const toolCallsArray: unknown[] = Array.isArray(calls) ? calls : [];
   const results: ToolResultMessage[] = [];
-  const agentFsTools = new Set([
+  const agentFsTools = new Set<string>([
     AGENT_TOOL_NAMES.LIST_FILES,
     AGENT_TOOL_NAMES.READ_FILE,
     AGENT_TOOL_NAMES.WRITE_FILE,
@@ -223,7 +239,7 @@ const buildToolResults = (message: StoredMessageRecord): ToolResultMessage[] => 
 
 export const mapStoredMessagesToAgentMessages = (
   storedMessages: StoredMessageRecord[],
-  fallbackModel: Model<"openai-completions">,
+  fallbackModel: Model<"openai-completions">
 ): AgentMessage[] => {
   const mapped: AgentMessage[] = [];
 
@@ -233,11 +249,21 @@ export const mapStoredMessagesToAgentMessages = (
 
     if (role === "user") {
       const textContent = getString(message["content"]) ?? "";
-      const rawParts = Array.isArray(message["parts"]) ? (message["parts"] as Array<Record<string, unknown>>) : [];
+      const rawParts = Array.isArray(message["parts"])
+        ? (message["parts"] as Array<Record<string, unknown>>)
+        : [];
       const imageParts: ImageContent[] = [];
       for (const part of rawParts) {
-        if (getString(part["type"]) === "image" && typeof part["data"] === "string" && typeof part["mimeType"] === "string") {
-          imageParts.push({ type: "image", data: part["data"] as string, mimeType: part["mimeType"] as string });
+        if (
+          getString(part["type"]) === "image" &&
+          typeof part["data"] === "string" &&
+          typeof part["mimeType"] === "string"
+        ) {
+          imageParts.push({
+            type: "image",
+            data: part["data"] as string,
+            mimeType: part["mimeType"] as string,
+          });
         }
       }
       if (imageParts.length > 0) {
@@ -281,4 +307,6 @@ export const mapStoredMessagesToAgentMessages = (
 };
 
 export const mapAgentMessagesToLlm = (messages: AgentMessage[]): Message[] =>
-  messages.filter((m) => m.role === "user" || m.role === "assistant" || m.role === "toolResult") as Message[];
+  messages.filter(
+    (m) => m.role === "user" || m.role === "assistant" || m.role === "toolResult"
+  ) as Message[];

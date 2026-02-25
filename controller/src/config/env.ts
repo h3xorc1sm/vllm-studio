@@ -14,6 +14,9 @@ export interface Config {
   api_key?: string;
   daytona_api_url?: string;
   daytona_api_key?: string;
+  daytona_proxy_url?: string;
+  daytona_sandbox_id?: string;
+  daytona_agent_mode: boolean;
   inference_port: number;
 
   data_dir: string;
@@ -67,6 +70,9 @@ export const createConfig = (): Config => {
     VLLM_STUDIO_API_KEY: z.string().optional(),
     VLLM_STUDIO_DAYTONA_API_KEY: z.string().optional(),
     VLLM_STUDIO_DAYTONA_API_URL: z.string().optional(),
+    VLLM_STUDIO_DAYTONA_PROXY_URL: z.string().optional(),
+    VLLM_STUDIO_DAYTONA_SANDBOX_ID: z.string().optional(),
+    VLLM_STUDIO_DAYTONA_AGENT_MODE: z.string().optional(),
     VLLM_STUDIO_INFERENCE_PORT: z.coerce.number().int().positive().default(8000),
 
     VLLM_STUDIO_DATA_DIR: z.string().default(defaultDataDirectory),
@@ -88,6 +94,10 @@ export const createConfig = (): Config => {
   const strictOpenAIModelsEnabled = strictOpenAIModels
     ? ["1", "true", "yes", "on"].includes(strictOpenAIModels.trim().toLowerCase())
     : false;
+  const daytonaAgentModeRaw = parsed.VLLM_STUDIO_DAYTONA_AGENT_MODE;
+  const daytonaAgentMode = daytonaAgentModeRaw
+    ? ["1", "true", "yes", "on"].includes(daytonaAgentModeRaw.trim().toLowerCase())
+    : true;
 
   const config: Config = {
     host: parsed.VLLM_STUDIO_HOST,
@@ -98,6 +108,7 @@ export const createConfig = (): Config => {
     db_path: resolve(parsed.VLLM_STUDIO_DB_PATH),
     models_dir: resolve(parsed.VLLM_STUDIO_MODELS_DIR),
     strict_openai_models: strictOpenAIModelsEnabled,
+    daytona_agent_mode: daytonaAgentMode,
   };
 
   const litellmDatabaseUrl =
@@ -116,6 +127,18 @@ export const createConfig = (): Config => {
     const raw = parsed.VLLM_STUDIO_DAYTONA_API_URL.trim();
     if (raw) {
       config.daytona_api_url = raw;
+    }
+  }
+  if (parsed.VLLM_STUDIO_DAYTONA_PROXY_URL) {
+    const raw = parsed.VLLM_STUDIO_DAYTONA_PROXY_URL.trim();
+    if (raw) {
+      config.daytona_proxy_url = raw;
+    }
+  }
+  if (parsed.VLLM_STUDIO_DAYTONA_SANDBOX_ID) {
+    const raw = parsed.VLLM_STUDIO_DAYTONA_SANDBOX_ID.trim();
+    if (raw) {
+      config.daytona_sandbox_id = raw;
     }
   }
   if (parsed.VLLM_STUDIO_SGLANG_PYTHON) {

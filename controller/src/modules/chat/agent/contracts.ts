@@ -23,8 +23,7 @@ export const AGENT_RUN_EVENT_TYPES = {
   AGENT_PLAN_UPDATED: "agent_plan_updated",
 } as const;
 
-export type AgentRunEventType =
-  (typeof AGENT_RUN_EVENT_TYPES)[keyof typeof AGENT_RUN_EVENT_TYPES];
+export type AgentRunEventType = (typeof AGENT_RUN_EVENT_TYPES)[keyof typeof AGENT_RUN_EVENT_TYPES];
 
 export const AGENT_FILE_EVENT_TYPES = {
   AGENT_FILES_LISTED: "agent_files_listed",
@@ -47,6 +46,7 @@ export const AGENT_TOOL_NAMES = {
   DELETE_FILE: "delete_file",
   MAKE_DIRECTORY: "make_directory",
   MOVE_FILE: "move_file",
+  EXECUTE_COMMAND: "execute_command",
 } as const;
 
 export type AgentToolName = (typeof AGENT_TOOL_NAMES)[keyof typeof AGENT_TOOL_NAMES];

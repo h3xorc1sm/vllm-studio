@@ -54,6 +54,7 @@ exit 2
       db_path: ":memory:",
       models_dir: "/models",
       strict_openai_models: false,
+      daytona_agent_mode: false,
     };
 
     const mockContext = {

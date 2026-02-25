@@ -1,20 +1,15 @@
 // CRITICAL
 import type { AppContext } from "../../../types/context";
-import { getAgentFs } from "./store";
-import {
-  buildAgentFileTree,
-  mkdirp,
-  normalizeAgentPath,
-  toFsPath,
-} from "./helpers";
+import { getSessionFsApi } from "./store";
+import { buildAgentFileTree, mkdirp, normalizeAgentPath, toFsPath } from "./helpers";
 import type { AgentFsApi, AgentFileEntry } from "./types";
 
 export const getSessionAgentFs = async (
   context: AppContext,
   sessionId: string
 ): Promise<AgentFsApi> => {
-  const agent = await getAgentFs(context, sessionId);
-  return agent.fs as AgentFsApi;
+  const agent = await getSessionFsApi(context, sessionId);
+  return agent.fs;
 };
 
 export const listAgentFiles = async (

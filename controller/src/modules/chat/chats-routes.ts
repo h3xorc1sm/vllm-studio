@@ -9,6 +9,7 @@ import { Event } from "../monitoring/event-manager";
 import { buildSseHeaders, streamAsyncStrings } from "../../http/sse";
 import { CHAT_THINKING_LEVELS } from "./configs";
 import { AGENT_RUN_EVENT_TYPES } from "./agent/contracts";
+import { isDaytonaAgentModeEnabled } from "../../services/daytona/toolbox-client";
 
 const THINKING_LEVELS = new Set<ThinkingLevel>(CHAT_THINKING_LEVELS);
 
@@ -256,7 +257,8 @@ export const registerChatsRoutes = (app: Hono, context: AppContext): void => {
     const model = typeof body["model"] === "string" ? body["model"] : undefined;
     const provider = typeof body["provider"] === "string" ? body["provider"] : undefined;
     const systemPrompt = typeof body["system"] === "string" ? body["system"] : undefined;
-    const mcpEnabled = body["mcp_enabled"] === true;
+    const daytonaAgentMode = isDaytonaAgentModeEnabled(context.config);
+    const mcpEnabled = daytonaAgentMode ? false : body["mcp_enabled"] === true;
     const agentMode = body["agent_mode"] === true;
     const agentFiles = body["agent_files"] === true;
     const deepResearch = body["deep_research"] === true;

@@ -4,9 +4,11 @@ import type { TSchema } from "@sinclair/typebox";
 import type { AppContext } from "../../../types/context";
 import { buildAgentFsTools } from "./tool-registry-agentfs";
 import { createTextResult } from "./tool-registry-common";
+import { buildDaytonaTools } from "./tool-registry-daytona";
 import { buildMcpTools } from "./tool-registry-mcp";
 import { buildPlanTools } from "./tool-registry-plan";
 import type { AgentEventType } from "./contracts";
+import { isDaytonaAgentModeEnabled } from "../../../services/daytona/toolbox-client";
 
 export interface AgentToolRegistryOptions {
   sessionId: string;
@@ -24,16 +26,21 @@ export interface AgentToolRegistryOptions {
  */
 export const buildAgentTools = async (
   context: AppContext,
-  options: AgentToolRegistryOptions,
+  options: AgentToolRegistryOptions
 ): Promise<AgentTool[]> => {
   const tools: AgentTool[] = [];
+  const daytonaAgentMode = isDaytonaAgentModeEnabled(context.config);
 
-  if (options.mcpEnabled) {
+  if (options.mcpEnabled && !daytonaAgentMode) {
     tools.push(...(await buildMcpTools(context)));
   }
 
   if (options.agentMode) {
     tools.push(...buildPlanTools(context, options));
+  }
+
+  if (options.agentMode && daytonaAgentMode) {
+    tools.push(...buildDaytonaTools(context, options));
   }
 
   if (options.agentMode || options.agentFiles) {

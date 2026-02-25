@@ -19,6 +19,9 @@ This list documents environment variables referenced in code or docker-compose. 
 | VLLM_STUDIO_STRICT_OPENAI_MODELS | - | When truthy, restricts to explicit OpenAI models. |
 | VLLM_STUDIO_DAYTONA_API_KEY | - | Optional API key used for routing `daytona/*` model calls. |
 | VLLM_STUDIO_DAYTONA_API_URL | https://app.daytona.io/api | Optional Daytona API base URL override. |
+| VLLM_STUDIO_DAYTONA_PROXY_URL | derived from API URL | Optional Daytona toolbox proxy URL override. |
+| VLLM_STUDIO_DAYTONA_SANDBOX_ID | - | Optional fixed sandbox ID for all Daytona-backed agent/file operations. |
+| VLLM_STUDIO_DAYTONA_AGENT_MODE | true | Enables Daytona-backed agent tools/files; disables MCP tool injection when Daytona key is configured. |
 | VLLM_STUDIO_VERSION | dev | Version label surfaced in /studio payloads. |
 | TEMPORAL_ADDRESS | localhost:7233 | Temporal server address. |
 
