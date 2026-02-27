@@ -1,4 +1,4 @@
-export type { Backend, RecipeBase, RecipePayload } from "./recipe";
+// CRITICAL
 export {
   CONTROLLER_BROWSER_EVENT_CHANNEL,
   CONTROLLER_EVENTS,
@@ -6,10 +6,11 @@ export {
   getBrowserEventChannelForControllerEvent,
   getControllerEventDomain,
   isControllerStreamEventType,
-} from "./controller-events";
+} from "../../../shared/src/controller-events";
+
 export type {
   ControllerBrowserEventChannel,
   ControllerEventDomain,
   ControllerEventType,
   ControllerStreamEventType,
-} from "./controller-events";
+} from "../../../shared/src/controller-events";

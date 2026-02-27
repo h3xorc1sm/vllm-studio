@@ -5,6 +5,7 @@ import { randomUUID } from "node:crypto";
 import type { Config } from "../../config/env";
 import type { Logger } from "../../core/logger";
 import { Event, type EventManager } from "../monitoring/event-manager";
+import { CONTROLLER_EVENTS } from "../../contracts/controller-events";
 import type { DownloadFileInfo, DownloadStatus, ModelDownload } from "./types";
 import type { DownloadStore } from "./store";
 import { resolveDownloadRoot, sanitizePathSegments } from "./download-paths";
@@ -438,7 +439,7 @@ export class DownloadManager {
         status: file.status,
       },
     };
-    void this.eventManager.publish(new Event("download_progress", payload));
+    void this.eventManager.publish(new Event(CONTROLLER_EVENTS.DOWNLOAD_PROGRESS, payload));
   }
 
   /**
@@ -455,6 +456,6 @@ export class DownloadManager {
       total_bytes: download.total_bytes,
       error: download.error,
     };
-    void this.eventManager.publish(new Event("download_state", payload));
+    void this.eventManager.publish(new Event(CONTROLLER_EVENTS.DOWNLOAD_STATE, payload));
   }
 }

@@ -15,3 +15,6 @@ These docs are a focused maintainability pack for the controller, frontend, and 
 3. [`03-execution-workpacks.md`](./03-execution-workpacks.md)
    - Sprint-style workpacks with scope, tasks, tests, and outputs.
    - Designed for parallel execution without losing system coherence.
+
+4. [`04-7-day-execution-schedule.md`](./04-7-day-execution-schedule.md)
+   - Strict 7-day rollout with daily deliverables, validation, and handoff checklist.

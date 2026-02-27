@@ -4,6 +4,7 @@ import { unlinkSync } from "node:fs";
 import type { AppContext } from "../../types/context";
 import { badRequest, notFound } from "../../core/errors";
 import { streamAsyncStrings, buildSseHeaders } from "../../http/sse";
+import { CONTROLLER_EVENTS } from "../../contracts/controller-events";
 import { Event } from "./event-manager";
 import { isRecipeRunning } from "../lifecycle/recipes/recipe-matching";
 import {
@@ -148,7 +149,7 @@ export const registerLogsRoutes = (app: Hono, context: AppContext): void => {
           const lines = tailFileLines(path, replayLimit);
           for (const line of lines) {
             if (!line) continue;
-            yield new Event("log", { session_id: sessionId, line }).toSse();
+            yield new Event(CONTROLLER_EVENTS.LOG, { session_id: sessionId, line }).toSse();
           }
         }
         for await (const event of context.eventManager.subscribe(`logs:${sessionId}`)) {

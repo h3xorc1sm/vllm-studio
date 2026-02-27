@@ -5,10 +5,16 @@ import { useCallback, useEffect, useRef } from "react";
 import { getApiKey } from "@/lib/api-key";
 import api from "@/lib/api";
 import { resolveControllerEventsBaseUrl } from "@/lib/backend-config";
+import { CONTROLLER_BROWSER_EVENT_CHANNEL, CONTROLLER_EVENTS } from "@/lib/controller-events-contract";
 import type { AgentState, ChatSession, StoredMessage } from "@/lib/types";
 import { useAppStore } from "@/store";
 import { CONTROLLER_EVENT_TYPES } from "./use-controller-events/event-types";
 import { dispatchCustomEvent, normalizePlan } from "./use-controller-events/helpers";
+import {
+  dispatchControllerDomainEvent,
+  isKnownControllerEvent,
+  logUnknownControllerEvent,
+} from "./use-controller-events/routing";
 
 interface SSEPayload<T = unknown> {
   data: T;
@@ -82,16 +88,16 @@ export function useControllerEvents(apiBaseUrl: string = resolveControllerEvents
         const currentId = currentSessionIdRef.current;
 
         switch (eventType) {
-          case "chat_session_created":
-          case "chat_session_updated":
-          case "chat_session_forked":
-          case "chat_session_compacted": {
+          case CONTROLLER_EVENTS.CHAT_SESSION_CREATED:
+          case CONTROLLER_EVENTS.CHAT_SESSION_UPDATED:
+          case CONTROLLER_EVENTS.CHAT_SESSION_FORKED:
+          case CONTROLLER_EVENTS.CHAT_SESSION_COMPACTED: {
             const session = (data["session"] ?? null) as ChatSession | null;
             upsertSession(session);
-            dispatchCustomEvent("vllm:chat-event", { type: eventType, data });
+            dispatchCustomEvent(CONTROLLER_BROWSER_EVENT_CHANNEL.chat, { type: eventType, data });
             break;
           }
-          case "chat_session_deleted": {
+          case CONTROLLER_EVENTS.CHAT_SESSION_DELETED: {
             const sessionId = String(data["session_id"] ?? "");
             if (sessionId) {
               updateSessions((prev) => prev.filter((item) => item.id !== sessionId));
@@ -102,10 +108,10 @@ export function useControllerEvents(apiBaseUrl: string = resolveControllerEvents
                 setAgentFiles([]);
               }
             }
-            dispatchCustomEvent("vllm:chat-event", { type: eventType, data });
+            dispatchCustomEvent(CONTROLLER_BROWSER_EVENT_CHANNEL.chat, { type: eventType, data });
             break;
           }
-          case "chat_message_upserted": {
+          case CONTROLLER_EVENTS.CHAT_MESSAGE_UPSERTED: {
             const session = (data["session"] ?? null) as ChatSession | null;
             const message = data["message"] as StoredMessage | undefined;
             const sessionId = String(data["session_id"] ?? "");
@@ -113,11 +119,11 @@ export function useControllerEvents(apiBaseUrl: string = resolveControllerEvents
               upsertSession(session);
             }
             if (sessionId && currentId === sessionId && message) {
-              dispatchCustomEvent("vllm:chat-event", { type: eventType, data });
+              dispatchCustomEvent(CONTROLLER_BROWSER_EVENT_CHANNEL.chat, { type: eventType, data });
             }
             break;
           }
-          case "chat_usage_updated": {
+          case CONTROLLER_EVENTS.CHAT_USAGE_UPDATED: {
             const usage = data["usage"] as Record<string, number> | undefined;
             const sessionId = String(data["session_id"] ?? "");
             if (usage && sessionId && currentId === sessionId) {
@@ -131,79 +137,49 @@ export function useControllerEvents(apiBaseUrl: string = resolveControllerEvents
                     : null,
               });
             }
-            dispatchCustomEvent("vllm:chat-event", { type: eventType, data });
+            dispatchCustomEvent(CONTROLLER_BROWSER_EVENT_CHANNEL.chat, { type: eventType, data });
             break;
           }
-          case "agent_files_listed": {
+          case CONTROLLER_EVENTS.AGENT_FILES_LISTED: {
             const sessionId = String(data["session_id"] ?? "");
             if (sessionId && currentId === sessionId) {
               const files = Array.isArray(data["files"]) ? data["files"] : [];
               setAgentFiles(files);
             }
-            dispatchCustomEvent("vllm:chat-event", { type: eventType, data });
+            dispatchCustomEvent(CONTROLLER_BROWSER_EVENT_CHANNEL.chat, { type: eventType, data });
             break;
           }
-          case "agent_file_read": {
-            dispatchCustomEvent("vllm:chat-event", { type: eventType, data });
+          case CONTROLLER_EVENTS.AGENT_FILE_READ: {
+            dispatchCustomEvent(CONTROLLER_BROWSER_EVENT_CHANNEL.chat, { type: eventType, data });
             break;
           }
-          case "agent_file_written":
-          case "agent_file_deleted":
-          case "agent_directory_created":
-          case "agent_file_moved": {
+          case CONTROLLER_EVENTS.AGENT_FILE_WRITTEN:
+          case CONTROLLER_EVENTS.AGENT_FILE_DELETED:
+          case CONTROLLER_EVENTS.AGENT_DIRECTORY_CREATED:
+          case CONTROLLER_EVENTS.AGENT_FILE_MOVED: {
             const sessionId = String(data["session_id"] ?? "");
             if (sessionId && currentId === sessionId) {
               refreshAgentFiles(sessionId);
             }
-            dispatchCustomEvent("vllm:chat-event", { type: eventType, data });
+            dispatchCustomEvent(CONTROLLER_BROWSER_EVENT_CHANNEL.chat, { type: eventType, data });
             break;
           }
-          case "agent_plan_updated": {
+          case CONTROLLER_EVENTS.AGENT_PLAN_UPDATED: {
             const sessionId = String(data["session_id"] ?? "");
             const plan = normalizePlan(data["plan"]);
             if (sessionId && currentId === sessionId) {
               setAgentPlan(plan);
             }
-            dispatchCustomEvent("vllm:chat-event", { type: eventType, data });
+            dispatchCustomEvent(CONTROLLER_BROWSER_EVENT_CHANNEL.chat, { type: eventType, data });
             break;
           }
-          case "recipe_created":
-          case "recipe_updated":
-          case "recipe_deleted": {
-            dispatchCustomEvent("vllm:recipe-event", { type: eventType, data });
+          default: {
+            const handled = dispatchControllerDomainEvent(eventType, data, dispatchCustomEvent);
+            if (!handled && !isKnownControllerEvent(eventType)) {
+              logUnknownControllerEvent(eventType, data);
+            }
             break;
           }
-          case "runtime_vllm_upgraded":
-          case "runtime_sglang_upgraded":
-          case "runtime_llamacpp_upgraded":
-          case "runtime_cuda_upgraded":
-          case "runtime_rocm_upgraded": {
-            dispatchCustomEvent("vllm:runtime-event", { type: eventType, data });
-            break;
-          }
-          case "model_switch": {
-            dispatchCustomEvent("vllm:controller-event", { type: eventType, data });
-            break;
-          }
-          case "distributed_node_updated":
-          case "distributed_topology_updated": {
-            dispatchCustomEvent("vllm:distributed-event", { type: eventType, data });
-            break;
-          }
-          case "status":
-          case "gpu":
-          case "metrics":
-          case "runtime_summary":
-          case "launch_progress":
-          case "download_progress":
-          case "download_state":
-          case "temporal_status":
-          case "job_updated": {
-            dispatchCustomEvent("vllm:controller-event", { type: eventType, data });
-            break;
-          }
-          default:
-            break;
         }
       } catch (err) {
         console.error("[Controller SSE] Failed to parse event:", err);

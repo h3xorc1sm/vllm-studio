@@ -4,6 +4,7 @@ import { serviceUnavailable } from "../../../core/errors";
 import { primaryLogPathFor, readFileTailBytes, sanitizeLogSessionId } from "../../../core/log-files";
 import { fetchLocal } from "../../../http/local-fetch";
 import { Event, type EventManager } from "../../monitoring/event-manager";
+import { CONTROLLER_EVENTS } from "../../../contracts/controller-events";
 import { pidExists } from "../process/process-utilities";
 import { isRecipeRunning } from "../recipes/recipe-matching";
 import type { LaunchResult, ProcessInfo, Recipe } from "../types";
@@ -152,7 +153,7 @@ export const createLifecycleCoordinator = (args: {
 
       if (publishEvents) {
         await deps.eventManager.publish(
-          new Event("model_switch", {
+          new Event(CONTROLLER_EVENTS.MODEL_SWITCH, {
             status: "started",
             from_model: fromModel,
             from_backend: fromBackend,
@@ -170,7 +171,7 @@ export const createLifecycleCoordinator = (args: {
         const message = `Failed to launch model ${recipe.id}: ${launch.message}`;
         if (publishEvents) {
           await deps.eventManager.publish(
-            new Event("model_switch", {
+            new Event(CONTROLLER_EVENTS.MODEL_SWITCH, {
               status: "error",
               to_recipe_id: recipe.id,
               to_model: recipe.served_model_name ?? recipe.id,
@@ -198,7 +199,7 @@ export const createLifecycleCoordinator = (args: {
       if (ready.ready) {
         if (publishEvents) {
           await deps.eventManager.publish(
-            new Event("model_switch", {
+            new Event(CONTROLLER_EVENTS.MODEL_SWITCH, {
               status: "ready",
               to_recipe_id: recipe.id,
               to_model: recipe.served_model_name ?? recipe.id,
@@ -222,7 +223,7 @@ export const createLifecycleCoordinator = (args: {
       }
       if (publishEvents) {
         await deps.eventManager.publish(
-          new Event("model_switch", {
+          new Event(CONTROLLER_EVENTS.MODEL_SWITCH, {
             status: "error",
             to_recipe_id: recipe.id,
             to_model: recipe.served_model_name ?? recipe.id,

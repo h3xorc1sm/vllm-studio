@@ -1,5 +1,6 @@
 // CRITICAL
 import { describe, expect, it } from "bun:test";
+import { CONTROLLER_EVENTS } from "../contracts/controller-events";
 import type { Event } from "../modules/monitoring/event-manager";
 import { createEventManager } from "../modules/monitoring/event-manager";
 
@@ -31,7 +32,7 @@ describe("runtime_summary event contract", () => {
 
     expect(collected.length).toBe(1);
     const event = collected[0]!;
-    expect(event.type).toBe("runtime_summary");
+    expect(event.type).toBe(CONTROLLER_EVENTS.RUNTIME_SUMMARY);
     expect(event.data["platform"]).toBeDefined();
 
     const platform = event.data["platform"] as { kind: string };
@@ -70,7 +71,7 @@ describe("runtime_summary event contract", () => {
     await sub;
 
     expect(collected.length).toBe(1);
-    expect(collected[0]!.type).toBe("job_updated");
+    expect(collected[0]!.type).toBe(CONTROLLER_EVENTS.JOB_UPDATED);
     expect(collected[0]!.data["id"]).toBe("job-1");
     expect(collected[0]!.data["status"]).toBe("running");
   });

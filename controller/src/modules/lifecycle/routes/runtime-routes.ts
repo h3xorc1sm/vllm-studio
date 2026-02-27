@@ -17,6 +17,7 @@ import {
   upgradeSglangRuntime,
 } from "../runtime/runtime-upgrade";
 import { Event } from "../../monitoring/event-manager";
+import { CONTROLLER_EVENTS } from "../../../contracts/controller-events";
 
 export const registerRuntimeRoutes = (app: Hono, context: AppContext): void => {
   app.get("/runtime/vllm", async (ctx) => {
@@ -71,7 +72,7 @@ export const registerRuntimeRoutes = (app: Hono, context: AppContext): void => {
       ...(parsedArguments.length > 0 ? { args: parsedArguments as string[] } : {}),
     });
     await context.eventManager.publish(
-      new Event("runtime_sglang_upgraded", {
+      new Event(CONTROLLER_EVENTS.RUNTIME_SGLANG_UPGRADED, {
         success: finalResult.success,
         version: finalResult.version,
         used_command: finalResult.used_command,
@@ -93,7 +94,7 @@ export const registerRuntimeRoutes = (app: Hono, context: AppContext): void => {
       ...(parsedArguments.length > 0 ? { args: parsedArguments as string[] } : {}),
     });
     await context.eventManager.publish(
-      new Event("runtime_llamacpp_upgraded", {
+      new Event(CONTROLLER_EVENTS.RUNTIME_LLAMACPP_UPGRADED, {
         success: result.success,
         version: result.version,
         used_command: result.used_command,
@@ -114,7 +115,7 @@ export const registerRuntimeRoutes = (app: Hono, context: AppContext): void => {
       ...(parsedArguments.length > 0 ? { args: parsedArguments as string[] } : {}),
     });
     await context.eventManager.publish(
-      new Event("runtime_cuda_upgraded", {
+      new Event(CONTROLLER_EVENTS.RUNTIME_CUDA_UPGRADED, {
         success: result.success,
         version: result.version,
         used_command: result.used_command,
@@ -135,7 +136,7 @@ export const registerRuntimeRoutes = (app: Hono, context: AppContext): void => {
       ...(parsedArguments.length > 0 ? { args: parsedArguments as string[] } : {}),
     });
     await context.eventManager.publish(
-      new Event("runtime_rocm_upgraded", {
+      new Event(CONTROLLER_EVENTS.RUNTIME_ROCM_UPGRADED, {
         success: result.success,
         version: result.version,
         used_command: result.used_command,
@@ -163,7 +164,7 @@ export const registerRuntimeRoutes = (app: Hono, context: AppContext): void => {
       ...(requestedVersion ? { version: requestedVersion } : {}),
     });
     await context.eventManager.publish(
-      new Event("runtime_vllm_upgraded", {
+      new Event(CONTROLLER_EVENTS.RUNTIME_VLLM_UPGRADED, {
         success: result.success,
         version: result.version,
         used_wheel: result.used_wheel,

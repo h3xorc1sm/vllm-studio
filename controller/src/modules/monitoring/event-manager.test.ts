@@ -1,5 +1,6 @@
 // CRITICAL
 import { describe, expect, it } from "bun:test";
+import { CONTROLLER_EVENTS } from "../../contracts/controller-events";
 import { Event, EventManager } from "./event-manager";
 
 const delay = (ms: number): Promise<void> =>
@@ -16,7 +17,7 @@ const withTimeout = async <T>(promise: Promise<T>, ms = 300): Promise<T> => {
 
 describe("event-manager", () => {
   it("formats Event values as SSE wire payloads", () => {
-    const event = new Event("status", { ready: true });
+    const event = new Event(CONTROLLER_EVENTS.STATUS, { ready: true });
     const sse = event.toSse();
 
     expect(sse).toContain(`event: ${event.type}`);
@@ -35,11 +36,11 @@ describe("event-manager", () => {
 
     // Let both generators register before publishing.
     await delay(0);
-    await manager.publish(new Event("status", { ok: true }));
+    await manager.publish(new Event(CONTROLLER_EVENTS.STATUS, { ok: true }));
 
     const defaultResult = await withTimeout(defaultNext);
     expect(defaultResult.done).toBe(false);
-    expect(defaultResult.value?.type).toBe("status");
+    expect(defaultResult.value?.type).toBe(CONTROLLER_EVENTS.STATUS);
 
     const logsOutcome = await Promise.race([
       logsNext.then(() => "received"),
@@ -48,9 +49,9 @@ describe("event-manager", () => {
     expect(logsOutcome).toBe("timeout");
 
     // Unblock the logs iterator cleanly after verifying channel isolation.
-    await manager.publish(new Event("log", { line: "cleanup" }), "logs:session-1");
+    await manager.publish(new Event(CONTROLLER_EVENTS.LOG, { line: "cleanup" }), "logs:session-1");
     const cleanupResult = await withTimeout(logsNext);
-    expect(cleanupResult.value?.type).toBe("log");
+    expect(cleanupResult.value?.type).toBe(CONTROLLER_EVENTS.LOG);
 
     await defaultIterator.return?.();
     await logsIterator.return?.();
@@ -73,12 +74,12 @@ describe("event-manager", () => {
     expect(channels["default"]).toBe(1);
     expect(channels["logs:job-42"]).toBe(1);
 
-    await manager.publish(new Event("status", { stage: "boot" }));
-    await manager.publish(new Event("log", { line: "started" }), "logs:job-42");
+    await manager.publish(new Event(CONTROLLER_EVENTS.STATUS, { stage: "boot" }));
+    await manager.publish(new Event(CONTROLLER_EVENTS.LOG, { line: "started" }), "logs:job-42");
 
     const [eventA, eventB] = await Promise.all([withTimeout(pendingA), withTimeout(pendingB)]);
-    expect(eventA.value?.type).toBe("status");
-    expect(eventB.value?.type).toBe("log");
+    expect(eventA.value?.type).toBe(CONTROLLER_EVENTS.STATUS);
+    expect(eventB.value?.type).toBe(CONTROLLER_EVENTS.LOG);
 
     const after = manager.getStats();
     expect(after["total_events_published"]).toBe(2);

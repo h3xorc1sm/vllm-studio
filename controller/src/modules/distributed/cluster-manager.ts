@@ -5,6 +5,7 @@ import type {
   DistributedStore,
 } from "../../stores/distributed-store";
 import type { AppContext } from "../../types/context";
+import { CONTROLLER_EVENTS } from "../../contracts/controller-events";
 import { Event } from "../monitoring/event-manager";
 
 export interface DistributedNodeView {
@@ -123,7 +124,9 @@ export class DistributedClusterManager {
     const node = this.store.getNode(nodeId);
     if (!node) return;
     await this.context.eventManager.publish(
-      new Event("distributed_node_updated", { node: toNodeView(node, this.staleAfterMs) })
+      new Event(CONTROLLER_EVENTS.DISTRIBUTED_NODE_UPDATED, {
+        node: toNodeView(node, this.staleAfterMs),
+      })
     );
   }
 
@@ -133,7 +136,9 @@ export class DistributedClusterManager {
    */
   private async emitTopologyUpdated(modelId: string): Promise<void> {
     await this.context.eventManager.publish(
-      new Event("distributed_topology_updated", { topology: this.getTopology(modelId, null) })
+      new Event(CONTROLLER_EVENTS.DISTRIBUTED_TOPOLOGY_UPDATED, {
+        topology: this.getTopology(modelId, null),
+      })
     );
   }
 

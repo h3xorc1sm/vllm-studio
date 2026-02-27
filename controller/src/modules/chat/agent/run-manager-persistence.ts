@@ -2,6 +2,7 @@
 import type { AssistantMessage, ToolResultMessage, Usage } from "@mariozechner/pi-ai";
 import { Event } from "../../monitoring/event-manager";
 import type { AppContext } from "../../../types/context";
+import { AGENT_RUN_EVENT_TYPES } from "./contracts";
 
 /**
  * Convert model usage to stored usage format.
@@ -161,7 +162,7 @@ export function persistAssistantMessage(
 
   const sessionSummary = context.stores.chatStore.getSessionSummary(sessionId);
   context.eventManager.publish(
-    new Event("chat_message_upserted", {
+    new Event(AGENT_RUN_EVENT_TYPES.CHAT_MESSAGE_UPSERTED, {
       session_id: sessionId,
       message: {
         id: messageId,
@@ -177,6 +178,9 @@ export function persistAssistantMessage(
   );
   const usageSummary = context.stores.chatStore.getUsage(sessionId);
   context.eventManager.publish(
-    new Event("chat_usage_updated", { session_id: sessionId, usage: usageSummary })
+    new Event(AGENT_RUN_EVENT_TYPES.CHAT_USAGE_UPDATED, {
+      session_id: sessionId,
+      usage: usageSummary,
+    })
   );
 }

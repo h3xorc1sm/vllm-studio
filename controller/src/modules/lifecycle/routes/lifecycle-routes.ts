@@ -6,6 +6,7 @@ import { delay } from "../../../core/async";
 import { badRequest, notFound } from "../../../core/errors";
 import { parseRecipe } from "../recipes/recipe-serializer";
 import { Event } from "../../monitoring/event-manager";
+import { CONTROLLER_EVENTS } from "../../../contracts/controller-events";
 import { fetchInference } from "../../../services/inference/inference-client";
 import { isRecipeRunning } from "../recipes/recipe-matching";
 
@@ -59,7 +60,7 @@ export const registerLifecycleRoutes = (app: Hono, context: AppContext): void =>
     try {
       const recipe = parseRecipe(body);
       context.stores.recipeStore.save(recipe);
-      await context.eventManager.publish(new Event("recipe_created", { recipe }));
+      await context.eventManager.publish(new Event(CONTROLLER_EVENTS.RECIPE_CREATED, { recipe }));
       return ctx.json({ success: true, id: recipe.id });
     } catch (error) {
       throw badRequest(String(error));
@@ -72,7 +73,7 @@ export const registerLifecycleRoutes = (app: Hono, context: AppContext): void =>
     try {
       const recipe = parseRecipe({ ...body, id: recipeId });
       context.stores.recipeStore.save(recipe);
-      await context.eventManager.publish(new Event("recipe_updated", { recipe }));
+      await context.eventManager.publish(new Event(CONTROLLER_EVENTS.RECIPE_UPDATED, { recipe }));
       return ctx.json({ success: true, id: recipe.id });
     } catch (error) {
       throw badRequest(String(error));
@@ -85,7 +86,9 @@ export const registerLifecycleRoutes = (app: Hono, context: AppContext): void =>
     if (!deleted) {
       throw notFound("Recipe not found");
     }
-    await context.eventManager.publish(new Event("recipe_deleted", { recipe_id: recipeId }));
+    await context.eventManager.publish(
+      new Event(CONTROLLER_EVENTS.RECIPE_DELETED, { recipe_id: recipeId })
+    );
     return ctx.json({ success: true });
   });
 

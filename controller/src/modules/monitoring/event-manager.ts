@@ -1,5 +1,6 @@
 // CRITICAL
 import { AsyncLock, AsyncQueue } from "../../core/async";
+import { CONTROLLER_EVENTS } from "../../contracts/controller-events";
 
 /**
  * SSE event payload structure.
@@ -130,7 +131,7 @@ export class EventManager {
    * @returns Promise that resolves after publish.
    */
   public async publishStatus(statusData: Record<string, unknown>): Promise<void> {
-    await this.publish(new Event("status", statusData));
+    await this.publish(new Event(CONTROLLER_EVENTS.STATUS, statusData));
   }
 
   /**
@@ -139,7 +140,7 @@ export class EventManager {
    * @returns Promise that resolves after publish.
    */
   public async publishGpu(gpuData: Record<string, unknown>[]): Promise<void> {
-    await this.publish(new Event("gpu", { gpus: gpuData, count: gpuData.length }));
+    await this.publish(new Event(CONTROLLER_EVENTS.GPU, { gpus: gpuData, count: gpuData.length }));
   }
 
   /**
@@ -148,7 +149,7 @@ export class EventManager {
    * @returns Promise that resolves after publish.
    */
   public async publishMetrics(metricsData: Record<string, unknown>): Promise<void> {
-    await this.publish(new Event("metrics", metricsData));
+    await this.publish(new Event(CONTROLLER_EVENTS.METRICS, metricsData));
   }
 
   /**
@@ -157,7 +158,7 @@ export class EventManager {
    * @returns Promise that resolves after publish.
    */
   public async publishRuntimeSummary(summaryData: Record<string, unknown>): Promise<void> {
-    await this.publish(new Event("runtime_summary", summaryData));
+    await this.publish(new Event(CONTROLLER_EVENTS.RUNTIME_SUMMARY, summaryData));
   }
 
   /**
@@ -166,7 +167,7 @@ export class EventManager {
    * @returns Promise that resolves after publish.
    */
   public async publishJobUpdated(jobData: Record<string, unknown>): Promise<void> {
-    await this.publish(new Event("job_updated", jobData));
+    await this.publish(new Event(CONTROLLER_EVENTS.JOB_UPDATED, jobData));
   }
 
   /**
@@ -176,7 +177,10 @@ export class EventManager {
    * @returns Promise that resolves after publish.
    */
   public async publishLogLine(sessionId: string, line: string): Promise<void> {
-    await this.publish(new Event("log", { session_id: sessionId, line }), `logs:${sessionId}`);
+    await this.publish(
+      new Event(CONTROLLER_EVENTS.LOG, { session_id: sessionId, line }),
+      `logs:${sessionId}`
+    );
   }
 
   /**
@@ -197,7 +201,7 @@ export class EventManager {
     if (progress !== undefined) {
       payload["progress"] = progress;
     }
-    await this.publish(new Event("launch_progress", payload));
+    await this.publish(new Event(CONTROLLER_EVENTS.LAUNCH_PROGRESS, payload));
   }
 
   /**
