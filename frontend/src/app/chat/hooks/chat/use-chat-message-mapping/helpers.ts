@@ -15,7 +15,6 @@ function stripToolCallOnlyText(text: string): string {
   let foundToolText = false;
 
   const xmlPatterns = [
-    /<use_mcp_tool[\s\S]*?<\/use_mcp[\s_]*tool>/gi,
     /<tool_call>[\s\S]*?<\/tool_call>/gi,
     /\{"name"\s*:\s*"[^"]+"\s*,\s*"arguments"\s*:\s*(?:\{[\s\S]*?\}|\[[\s\S]*?\]|".*?")\s*\}/gi,
   ];

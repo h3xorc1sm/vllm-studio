@@ -58,6 +58,48 @@ function normalizeBackendUrl(value: string | null): string | null {
   }
 }
 
+function buildTargetUrl(backendUrl: string, path: string[], searchParams: string): string {
+  return `${backendUrl}/${path.join("/")}${searchParams ? `?${searchParams}` : ""}`;
+}
+
+function shouldFallbackFromResponse(response: Response): boolean {
+  if (response.ok) return false;
+  if (response.status !== 404) return false;
+  const contentType = response.headers.get("content-type") || "";
+  return contentType.includes("text/plain");
+}
+
+async function fetchWithOptionalFallback(
+  primaryUrl: string,
+  fallbackUrl: string | null,
+  init: RequestInit,
+  context: {
+    client: { ip: string; country: string; ua: string };
+    method: string;
+    path: string[];
+    overrideUsed: boolean;
+  },
+): Promise<{ response: Response; usedFallback: boolean }> {
+  const canFallback = Boolean(context.overrideUsed && fallbackUrl && fallbackUrl !== primaryUrl);
+
+  try {
+    const primaryResponse = await fetch(primaryUrl, init);
+    if (canFallback && shouldFallbackFromResponse(primaryResponse)) {
+      console.warn(
+        `[PROXY FALLBACK] ip=${context.client.ip} | country=${context.client.country} | method=${context.method} | path=/${context.path.join("/")} | reason=override-404-text`,
+      );
+      return { response: await fetch(fallbackUrl as string, init), usedFallback: true };
+    }
+    return { response: primaryResponse, usedFallback: false };
+  } catch (error) {
+    if (!canFallback) throw error;
+    console.warn(
+      `[PROXY FALLBACK] ip=${context.client.ip} | country=${context.client.country} | method=${context.method} | path=/${context.path.join("/")} | reason=override-network-error | error=${String(error)}`,
+    );
+    return { response: await fetch(fallbackUrl as string, init), usedFallback: true };
+  }
+}
+
 async function handleRequest(request: NextRequest, method: string, path: string[]) {
   const startTime = Date.now();
   const client = getClientInfo(request);
@@ -69,8 +111,9 @@ async function handleRequest(request: NextRequest, method: string, path: string[
     const overrideCookieUrl = normalizeBackendUrl(
       request.cookies.get("vllmstudio_backend_url")?.value ?? null,
     );
+    const defaultBackendUrl = normalizeBackendUrl(settings.backendUrl) ?? settings.backendUrl;
     const overrideUrl = overrideHeaderUrl ?? overrideCookieUrl;
-    const BACKEND_URL = overrideUrl ?? settings.backendUrl;
+    const backendUrl = overrideUrl ?? defaultBackendUrl;
     const API_KEY = settings.apiKey;
 
     const url = new URL(request.url);
@@ -79,11 +122,15 @@ async function handleRequest(request: NextRequest, method: string, path: string[
     // Never forward credentials to the controller as query params.
     if (apiKeyQuery) forwardedParams.delete("api_key");
     const searchParams = forwardedParams.toString();
-    const targetUrl = `${BACKEND_URL}/${path.join("/")}${searchParams ? `?${searchParams}` : ""}`;
+    const targetUrl = buildTargetUrl(backendUrl, path, searchParams);
+    const fallbackTargetUrl =
+      overrideUrl && defaultBackendUrl !== overrideUrl
+        ? buildTargetUrl(defaultBackendUrl, path, searchParams)
+        : null;
     const hasAuth = Boolean(request.headers.get("authorization"));
 
     console.log(
-      `[PROXY] ip=${client.ip} | country=${client.country} | method=${method} | path=/${path.join("/")} | backend=${BACKEND_URL} | override=${overrideUrl ? "yes" : "no"} | auth=${hasAuth ? "present" : "none"}`,
+      `[PROXY] ip=${client.ip} | country=${client.country} | method=${method} | path=/${path.join("/")} | backend=${backendUrl} | override=${overrideUrl ? "yes" : "no"} | auth=${hasAuth ? "present" : "none"}`,
     );
 
     const headers: HeadersInit = {
@@ -105,11 +152,17 @@ async function handleRequest(request: NextRequest, method: string, path: string[
 
     const body = method !== "GET" && method !== "DELETE" ? await request.text() : undefined;
 
-    const response = await fetch(targetUrl, {
-      method,
-      headers,
-      body,
-    });
+    const { response, usedFallback } = await fetchWithOptionalFallback(
+      targetUrl,
+      fallbackTargetUrl,
+      { method, headers, body },
+      {
+        client,
+        method,
+        path,
+        overrideUsed: Boolean(overrideUrl),
+      },
+    );
 
     const contentType = response.headers.get("content-type") || "application/json";
 
@@ -120,6 +173,10 @@ async function handleRequest(request: NextRequest, method: string, path: string[
         headers: {
           "Content-Type": contentType,
           "Cache-Control": response.headers.get("cache-control") || "no-cache",
+          ...(usedFallback ? { "X-Backend-Override-Invalid": "1" } : {}),
+          ...(usedFallback
+            ? { "Set-Cookie": "vllmstudio_backend_url=; Path=/; Max-Age=0; SameSite=Lax" }
+            : {}),
           ...(runId ? { "X-Run-Id": runId } : {}),
         },
       });
@@ -128,7 +185,13 @@ async function handleRequest(request: NextRequest, method: string, path: string[
     const data = await response.text();
     return new NextResponse(data, {
       status: response.status,
-      headers: { "Content-Type": contentType },
+      headers: {
+        "Content-Type": contentType,
+        ...(usedFallback ? { "X-Backend-Override-Invalid": "1" } : {}),
+        ...(usedFallback
+          ? { "Set-Cookie": "vllmstudio_backend_url=; Path=/; Max-Age=0; SameSite=Lax" }
+          : {}),
+      },
     });
   } catch (error) {
     const duration = Date.now() - startTime;

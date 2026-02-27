@@ -2,8 +2,6 @@
 "use client";
 
 import { memo, useCallback, useEffect, useRef, useState } from "react";
-import { Loader2 } from "lucide-react";
-import { UiPulseLabel, UiTimelineMarker } from "@/components/ui-kit";
 
 export const ThinkingItem = memo(
   function ThinkingItem({ content, isActive }: { content?: string; isActive?: boolean }) {
@@ -17,42 +15,37 @@ export const ThinkingItem = memo(
       }
     }, [content, isActive, expanded]);
 
-    return (
-      <div className="relative pl-7 pr-2 py-2">
-        <UiTimelineMarker
-          tone={isActive ? "active" : "neutral"}
-          pulsing={Boolean(isActive)}
-          className="absolute left-1.75 top-2.5 w-2.25 h-2.25"
-          innerClassName="w-1.5 h-1.5"
-        />
+    const preview = content ? content.trim().slice(0, 140) : "";
+    const hasPreviewOverflow = Boolean(content && content.trim().length > 140);
 
-        <button onClick={toggleExpanded} className="flex items-center gap-2 w-full text-left group">
-          {isActive ? (
-            <Loader2 className="h-3 w-3 text-(--hl1) animate-spin shrink-0" />
-          ) : (
-            <BrainIcon className="h-3 w-3 text-(--fg) shrink-0" />
-          )}
-          {isActive ? (
-            <UiPulseLabel
-              className="text-[11px] group-hover:text-(--fg) transition-colors"
-              tone="active"
-            >
-              Thinking...
-            </UiPulseLabel>
-          ) : (
-            <span className="text-[11px] text-(--fg) group-hover:text-(--fg) transition-colors">
-              Thought
+    return (
+      <div className="relative pl-7 pr-1 py-2">
+        <span className="absolute left-3.5 top-3.5 h-1.25 w-1.25 rounded-full bg-(--fg)/35" />
+        <button
+          onClick={toggleExpanded}
+          className="flex items-baseline gap-2 w-full text-left"
+          disabled={!content}
+        >
+          <span className="text-base leading-tight text-(--fg)">{isActive ? "Thinking" : "Reasoning"}</span>
+          {isActive && <span className="text-sm text-(--fg)/60">Live</span>}
+          {content && (
+            <span className="ml-auto text-sm text-(--fg)/60">
+              {expanded ? "Less" : "More"}
             </span>
           )}
-          {content && (
-            <span className="ml-auto text-[9px] text-(--dim)">{expanded ? "−" : "+"}</span>
-          )}
         </button>
+
+        {!expanded && preview && (
+          <p className="mt-1 text-sm leading-relaxed text-(--fg)/70 line-clamp-2">
+            {preview}
+            {hasPreviewOverflow ? "..." : ""}
+          </p>
+        )}
 
         {expanded && content && (
           <div
             ref={contentRef}
-            className="mt-2 max-h-50 overflow-y-auto text-[11px] leading-relaxed text-(--fg) whitespace-pre-wrap wrap-break-word scrollbar-thin"
+            className="mt-2 max-h-56 overflow-y-auto text-base leading-relaxed text-(--fg)/85 whitespace-pre-wrap break-words scrollbar-thin"
           >
             {content}
           </div>
@@ -64,20 +57,3 @@ export const ThinkingItem = memo(
     return prev.content === next.content && prev.isActive === next.isActive;
   },
 );
-
-function BrainIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      className={className}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 1.98-3A2.5 2.5 0 0 1 9.5 2Z" />
-      <path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-1.98-3A2.5 2.5 0 0 0 14.5 2Z" />
-    </svg>
-  );
-}

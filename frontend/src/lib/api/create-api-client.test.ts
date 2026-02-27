@@ -11,10 +11,6 @@ describe("createApiClient", () => {
     expect(typeof api.listDistributedNodes).toBe("function");
     expect(typeof api.setDistributedAllocation).toBe("function");
 
-    expect("getMCPServers" in api).toBe(false);
-    expect("getMCPTools" in api).toBe(false);
-    expect("callMCPTool" in api).toBe(false);
-
     expect("switchModel" in api).toBe(false);
     expect("evictModel" in api).toBe(false);
     expect("getLogContent" in api).toBe(false);

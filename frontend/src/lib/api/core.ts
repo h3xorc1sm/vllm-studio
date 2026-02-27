@@ -1,6 +1,6 @@
 // CRITICAL
 import { getApiKey } from "../api-key";
-import { getStoredBackendUrl } from "../backend-url";
+import { clearStoredBackendUrl, getStoredBackendUrl } from "../backend-url";
 import { delay } from "../async";
 
 const DEFAULT_TIMEOUT_MS = 30_000;
@@ -38,6 +38,12 @@ export type ApiCore = ReturnType<typeof createApiCore>;
 
 export function createApiCore(params: { baseUrl: string; useProxy: boolean }) {
   const { baseUrl, useProxy } = params;
+
+  const maybeClearInvalidBackendOverride = (response: Response): void => {
+    if (!useProxy) return;
+    if (response.headers.get("x-backend-override-invalid") !== "1") return;
+    clearStoredBackendUrl();
+  };
 
   const buildUrl = (endpoint: string): string => {
     const path = endpoint.startsWith("/") ? endpoint.slice(1) : endpoint;
@@ -95,6 +101,7 @@ export function createApiCore(params: { baseUrl: string; useProxy: boolean }) {
 
         clearTimeout(timeoutId);
         lastStatus = response.status;
+        maybeClearInvalidBackendOverride(response);
 
         if (!response.ok) {
           const errorBody = await response.json().catch(() => ({ detail: "Request failed" }));
@@ -211,6 +218,7 @@ export function createApiCore(params: { baseUrl: string; useProxy: boolean }) {
       signal: options.signal,
       credentials: "include",
     });
+    maybeClearInvalidBackendOverride(response);
 
     if (!response.ok || !response.body) {
       const errorBody = await response.json().catch(() => ({ detail: "Request failed" }));

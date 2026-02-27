@@ -1,4 +1,7 @@
 # CRITICAL
+# Infrastructure services only.
+# Controller and frontend run natively on the host (not in Docker)
+# because they need nvidia-smi access and host process visibility.
 
 services:
   postgres:
@@ -19,7 +22,6 @@ services:
       timeout: 5s
       retries: 5
 
-  # LiteLLM - API gateway (handles routing, format translation, cost tracking)
   litellm:
     image: ghcr.io/berriai/litellm:main-latest
     container_name: vllm-studio-litellm
@@ -52,133 +54,3 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
-
-  # Redis - Caching and rate limiting for LiteLLM
-  redis:
-    image: redis:7-alpine
-    container_name: vllm-studio-redis
-    ports:
-      - "6379:6379"
-    volumes:
-      - ./data/redis:/data
-    command: redis-server --appendonly yes --save 60 1
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-
-  # Temporal - Local workflow engine (open source)
-  temporal:
-    image: temporalio/temporal:latest
-    container_name: vllm-studio-temporal
-    ports:
-      - "7233:7233"
-      - "8233:8233"
-    volumes:
-      - ./data/temporal:/var/lib/temporal
-    command:
-      [
-        "server",
-        "start-dev",
-        "--ip",
-        "0.0.0.0",
-        "--db-filename",
-        "/var/lib/temporal/temporal.db",
-      ]
-    restart: unless-stopped
-
-  # Prometheus - Time-series metrics collection
-  prometheus:
-    image: prom/prometheus:latest
-    container_name: vllm-studio-prometheus
-    ports:
-      - "9090:9090"
-    volumes:
-      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - ./data/prometheus:/prometheus
-    command:
-      - "--config.file=/etc/prometheus/prometheus.yml"
-      - "--storage.tsdb.path=/prometheus"
-      - "--storage.tsdb.retention.time=30d"
-      - "--web.enable-lifecycle"
-    restart: unless-stopped
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-
-  # Grafana - Monitoring dashboards
-  grafana:
-    image: grafana/grafana:latest
-    container_name: vllm-studio-grafana
-    ports:
-      - "3100:3000"
-    volumes:
-      - ./data/grafana:/var/lib/grafana
-      - ./config/grafana/provisioning:/etc/grafana/provisioning:ro
-      - ./config/grafana/dashboards:/var/lib/grafana/dashboards:ro
-    environment:
-      - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
-      - GF_AUTH_ANONYMOUS_ENABLED=true
-      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
-      - GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH=/var/lib/grafana/dashboards/vllm-studio.json
-    restart: unless-stopped
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    depends_on:
-      - prometheus
-
-  # Frontend - Next.js web UI
-  controller:
-    build:
-      context: ./controller
-    container_name: vllm-studio-controller
-    user: "${VLLM_STUDIO_UID:-1000}:${VLLM_STUDIO_GID:-1000}"
-    network_mode: host
-    volumes:
-      - ./data:/app/data
-      - ./models:/models
-    environment:
-      - VLLM_STUDIO_HOST=0.0.0.0
-      - VLLM_STUDIO_PORT=8080
-      - VLLM_STUDIO_DATA_DIR=/app/data
-      - VLLM_STUDIO_DB_PATH=/app/data/controller.db
-      - VLLM_STUDIO_MODELS_DIR=/models
-      - VLLM_STUDIO_API_KEY=${VLLM_STUDIO_API_KEY:-}
-      - VLLM_STUDIO_DAYTONA_API_KEY=${VLLM_STUDIO_DAYTONA_API_KEY:-}
-      - VLLM_STUDIO_DAYTONA_API_URL=${VLLM_STUDIO_DAYTONA_API_URL:-https://app.daytona.io/api}
-      - VLLM_STUDIO_DAYTONA_PROXY_URL=${VLLM_STUDIO_DAYTONA_PROXY_URL:-}
-      - VLLM_STUDIO_DAYTONA_SANDBOX_ID=${VLLM_STUDIO_DAYTONA_SANDBOX_ID:-}
-      - VLLM_STUDIO_DAYTONA_AGENT_MODE=${VLLM_STUDIO_DAYTONA_AGENT_MODE:-true}
-      - VLLM_STUDIO_LITELLM_DATABASE_URL=${LITELLM_DATABASE_URL:-}
-      - DATABASE_URL=${DATABASE_URL:-}
-      - LITELLM_DATABASE_URL=${LITELLM_DATABASE_URL:-}
-    restart: unless-stopped
-    depends_on:
-      - litellm
-      - redis
-      - temporal
-
-  # Frontend - Next.js web UI
-  frontend:
-    build:
-      context: ./frontend
-      args:
-        NEXT_PUBLIC_API_URL: ""
-    container_name: vllm-studio-frontend
-    user: "${VLLM_STUDIO_UID:-1000}:${VLLM_STUDIO_GID:-1000}"
-    network_mode: host
-    volumes:
-      - ./data:/app/data
-    environment:
-      - BACKEND_URL=http://localhost:8080
-      - LITELLM_URL=http://localhost:4100
-      - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY:-sk-master}
-      - API_KEY=${VLLM_STUDIO_API_KEY:-}
-      - NEXT_PUBLIC_LITELLM_URL=${NEXT_PUBLIC_LITELLM_URL:-http://localhost:4100}
-      - EXA_API_KEY=${EXA_API_KEY:-}
-      - RAG_ENDPOINT=${RAG_ENDPOINT:-http://localhost:3002}
-    restart: unless-stopped
-    depends_on:
-      - controller

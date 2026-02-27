@@ -26,11 +26,10 @@ export function ToolBelt({
   selectedModel,
   availableModels = [],
   onModelChange,
-  mcpEnabled = false,
-  onMcpToggle,
+  toolsEnabled = false,
+  onToolsToggle,
   artifactsEnabled = false,
   onArtifactsToggle,
-  onOpenMcpSettings,
   onOpenChatSettings,
   hasSystemPrompt = false,
   deepResearchEnabled = false,
@@ -256,7 +255,7 @@ export function ToolBelt({
             disabled={isDisabled}
             canSend={canSend}
             hasSystemPrompt={hasSystemPrompt}
-            mcpEnabled={mcpEnabled}
+            toolsEnabled={toolsEnabled}
             artifactsEnabled={artifactsEnabled}
             deepResearchEnabled={deepResearchEnabled}
             isTTSEnabled={isTTSEnabled}
@@ -265,8 +264,7 @@ export function ToolBelt({
             selectedModel={selectedModel}
             onModelChange={onModelChange}
             onOpenChatSettings={onOpenChatSettings}
-            onOpenMcpSettings={onOpenMcpSettings}
-            onMcpToggle={onMcpToggle}
+            onToolsToggle={onToolsToggle}
             onArtifactsToggle={onArtifactsToggle}
             onDeepResearchToggle={onDeepResearchToggle}
             onTTSToggle={handleTTSToggle}

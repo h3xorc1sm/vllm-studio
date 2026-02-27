@@ -144,22 +144,8 @@ litellm_settings:
   enable_message_redaction: false
   force_ipv4: true
 
-  # Redis caching for LLM responses (optional)
-  cache: true
-  cache_params:
-    type: "redis"
-    host: "vllm-studio-redis"
-    port: 6379
-    ttl: 3600
-    namespace: "litellm:cache"
-    supported_call_types: ["acompletion", "completion", "embedding"]
-
   # Custom callback: extract <think> blocks into reasoning_content
   callbacks: think_parser.think_parser
-
-  # Prometheus metrics collection
-  success_callback: ["prometheus"]
-  failure_callback: ["prometheus"]
 
 # General settings
 general_settings:

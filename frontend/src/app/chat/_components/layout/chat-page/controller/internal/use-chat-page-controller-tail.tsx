@@ -459,13 +459,6 @@ export function useChatPageControllerTail({
       openActivityPanel,
       openContextPanel,
     },
-    mcp: {
-      mcpServers: tools.mcpServers,
-      addMcpServer: tools.addMcpServer,
-      updateMcpServer: tools.updateMcpServer,
-      removeMcpServer: tools.removeMcpServer,
-      loadMCPServers: tools.loadMCPServers,
-    },
     exportActions: { onExportJson, onExportMarkdown },
   });
 }

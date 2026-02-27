@@ -5,7 +5,12 @@ import { useSyncExternalStore } from "react";
 import type { GPU, LaunchProgressData, Metrics, ProcessInfo } from "@/lib/types";
 import api from "@/lib/api";
 import type { RealtimeStatusSnapshot } from "./realtime-status-store/types";
-import type { JobEntry, LeaseInfo, RuntimeSummaryData, ServiceEntry } from "./realtime-status-store/types";
+import type {
+  JobEntry,
+  LeaseInfo,
+  RuntimeSummaryData,
+  ServiceEntry,
+} from "./realtime-status-store/types";
 import {
   areGpusEqual,
   areJobsEqual,
@@ -115,7 +120,29 @@ async function fetchStatusNow() {
       lastEventAt: Date.now(),
     });
   } catch {
-    // ignore; keep last known values
+    try {
+      const health = await api.getHealth();
+      if (health?.status === "ok") {
+        emitIfChanged({
+          status: snapshot.status ?? {
+            running: false,
+            process: null,
+            inference_port: 8000,
+          },
+          gpus: snapshot.gpus,
+          metrics: snapshot.metrics,
+          launchProgress: snapshot.launchProgress,
+          platformKind: snapshot.platformKind,
+          runtimeSummary: snapshot.runtimeSummary,
+          services: snapshot.services,
+          lease: snapshot.lease,
+          jobs: snapshot.jobs,
+          lastEventAt: Date.now(),
+        });
+      }
+    } catch {
+      // ignore; keep last known values
+    }
   }
 }
 
@@ -192,7 +219,11 @@ function start() {
       const backends = data["backends"] as RuntimeSummaryData["backends"] | undefined;
       const nextSummary: RuntimeSummaryData | null =
         platform && gpuMon && backends
-          ? { platform: { kind: nextKind ?? "unknown", vendor: nextVendor }, gpu_monitoring: gpuMon, backends }
+          ? {
+              platform: { kind: nextKind ?? "unknown", vendor: nextVendor },
+              gpu_monitoring: gpuMon,
+              backends,
+            }
           : snapshot.runtimeSummary;
 
       const rawServices = data["services"] as ServiceEntry[] | undefined;

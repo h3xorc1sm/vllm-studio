@@ -17,7 +17,7 @@ export interface ToolBeltToolbarProps {
   disabled?: boolean;
   canSend: boolean;
   hasSystemPrompt?: boolean;
-  mcpEnabled?: boolean;
+  toolsEnabled?: boolean;
   artifactsEnabled?: boolean;
   deepResearchEnabled?: boolean;
   isTTSEnabled?: boolean;
@@ -26,8 +26,7 @@ export interface ToolBeltToolbarProps {
   selectedModel?: string;
   onModelChange?: (modelId: string) => void;
   onOpenChatSettings?: () => void;
-  onOpenMcpSettings?: () => void;
-  onMcpToggle?: () => void;
+  onToolsToggle?: () => void;
   onArtifactsToggle?: () => void;
   onDeepResearchToggle?: () => void;
   onTTSToggle?: () => void;
@@ -49,4 +48,3 @@ export const ToolBeltToolbar = memo(function ToolBeltToolbar(props: ToolBeltTool
     </div>
   );
 });
-

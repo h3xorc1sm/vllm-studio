@@ -4,8 +4,6 @@ import type {
   AgentFileVersion,
   ChatSession,
   DeepResearchConfig,
-  MCPServer,
-  MCPTool,
   SessionUsage,
   ToolResult,
 } from "@/lib/types";
@@ -35,11 +33,8 @@ export interface ChatState {
   isMobile: boolean;
   userScrolledUp: boolean;
 
-  mcpEnabled: boolean;
+  toolsEnabled: boolean;
   artifactsEnabled: boolean;
-  mcpServers: MCPServer[];
-  mcpSettingsOpen: boolean;
-  mcpTools: MCPTool[];
   executingTools: Set<string>;
   toolResultsMap: Map<string, ToolResult>;
 
@@ -60,9 +55,6 @@ export interface ChatState {
 
   callModeEnabled: boolean;
   callModeSpeakingMessageId: string | null;
-
-  mcpPendingServer: string | null;
-  mcpActionError: string | null;
 
   copiedMessageId: string | null;
   messageInlineThinkingExpanded: Record<string, boolean>;
@@ -139,12 +131,9 @@ export interface ChatActions {
   setIsMobile: (isMobile: boolean) => void;
   setUserScrolledUp: (userScrolledUp: boolean) => void;
 
-  setMcpEnabled: (mcpEnabled: boolean) => void;
+  setToolsEnabled: (toolsEnabled: boolean) => void;
   setArtifactsEnabled: (artifactsEnabled: boolean) => void;
   setActiveArtifactId: (artifactId: string | null) => void;
-  setMcpServers: (mcpServers: MCPServer[]) => void;
-  setMcpSettingsOpen: (mcpSettingsOpen: boolean) => void;
-  setMcpTools: (mcpTools: MCPTool[]) => void;
   setExecutingTools: (executingTools: Set<string>) => void;
   updateExecutingTools: (updater: (executingTools: Set<string>) => Set<string>) => void;
   setToolResultsMap: (toolResultsMap: Map<string, ToolResult>) => void;
@@ -170,9 +159,6 @@ export interface ChatActions {
 
   setCallModeEnabled: (callModeEnabled: boolean) => void;
   setCallModeSpeakingMessageId: (id: string | null) => void;
-
-  setMcpPendingServer: (mcpPendingServer: string | null) => void;
-  setMcpActionError: (mcpActionError: string | null) => void;
 
   setCopiedMessageId: (copiedMessageId: string | null) => void;
   setMessageInlineThinkingExpanded: (messageId: string, expanded: boolean) => void;

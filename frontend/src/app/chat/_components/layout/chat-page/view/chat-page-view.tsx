@@ -18,7 +18,6 @@ export const ChatPageView = memo(function ChatPageView(props: ChatPageViewProps)
     sidebarOpen,
     setSidebarOpen,
     setSettingsOpen,
-    setMcpSettingsOpen,
     setUsageOpen,
     setExportOpen,
   } = props;
@@ -33,9 +32,6 @@ export const ChatPageView = memo(function ChatPageView(props: ChatPageViewProps)
 
   const openSettings = useCallback(() => setSettingsOpen(true), [setSettingsOpen]);
   const closeSettings = useCallback(() => setSettingsOpen(false), [setSettingsOpen]);
-
-  const openMcpSettings = useCallback(() => setMcpSettingsOpen(true), [setMcpSettingsOpen]);
-  const closeMcpSettings = useCallback(() => setMcpSettingsOpen(false), [setMcpSettingsOpen]);
 
   const openUsage = useCallback(() => setUsageOpen(true), [setUsageOpen]);
   const closeUsage = useCallback(() => setUsageOpen(false), [setUsageOpen]);
@@ -109,7 +105,6 @@ export const ChatPageView = memo(function ChatPageView(props: ChatPageViewProps)
               onOpenActivity={props.openActivityPanel}
               onOpenContext={props.openContextPanel}
               onOpenSettings={openSettings}
-              onOpenMcpSettings={openMcpSettings}
               onOpenUsage={openUsage}
               onOpenExport={openExport}
             />
@@ -122,8 +117,6 @@ export const ChatPageView = memo(function ChatPageView(props: ChatPageViewProps)
       <ChatModals
         settingsOpen={props.settingsOpen}
         onCloseSettings={closeSettings}
-        mcpSettingsOpen={props.mcpSettingsOpen}
-        onCloseMcpSettings={closeMcpSettings}
         usageOpen={props.usageOpen}
         onCloseUsage={closeUsage}
         exportOpen={props.exportOpen}
@@ -138,11 +131,6 @@ export const ChatPageView = memo(function ChatPageView(props: ChatPageViewProps)
         onRemoveCustomChatModel={props.onRemoveCustomChatModel}
         deepResearch={props.deepResearch}
         onDeepResearchChange={props.setDeepResearch}
-        mcpServers={props.mcpServers}
-        onAddServer={props.addMcpServer}
-        onUpdateServer={props.updateMcpServer}
-        onRemoveServer={props.removeMcpServer}
-        onRefreshServers={props.loadMCPServers}
         sessionUsage={props.sessionUsage}
         messages={props.messages}
         onExportJson={props.onExportJson}

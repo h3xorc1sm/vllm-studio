@@ -9,7 +9,6 @@ import type { AgentPlan } from "@/app/chat/_components/agent/agent-types";
 
 export interface UseChatPageServicesArgs {
   store: {
-    mcpEnabled: boolean;
     selectedModel: string;
     updateSessions: (updater: (sessions: ChatSession[]) => ChatSession[]) => void;
     setAgentPlan: (next: AgentPlan | null) => void;
@@ -47,7 +46,7 @@ export function useChatPageServices({
   const agentFiles = Hooks.useAgentFiles();
   const agentState = Hooks.useAgentState();
   const sessions = Hooks.useChatSessions();
-  const tools = Hooks.useChatTools({ mcpEnabled: store.mcpEnabled });
+  const tools = Hooks.useChatTools();
   const usage = Hooks.useChatUsage();
 
   const sessionIdRef = useRef<string | null>(sessions.currentSessionId);

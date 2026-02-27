@@ -10,7 +10,6 @@ import type {
   AgentStateService,
   ChatPageStore,
   ChatSessionsService,
-  ChatToolsService,
   ChatUsageService,
   MessageMappingService,
   MessagesLengthRef,
@@ -23,7 +22,6 @@ import type {
 export interface UseChatPageLifecycleArgs {
   store: ChatPageStore;
   sessions: ChatSessionsService;
-  tools: ChatToolsService;
   usage: ChatUsageService;
   agentFiles: AgentFilesService;
   agentState: AgentStateService;
@@ -55,7 +53,6 @@ export interface UseChatPageLifecycleArgs {
 export function useChatPageLifecycle({
   store,
   sessions,
-  tools,
   usage,
   agentFiles,
   agentState,
@@ -135,27 +132,11 @@ export function useChatPageLifecycle({
     setLastSessionId,
   });
 
-  // Load MCP servers/tools when enabled
-  const { loadMCPServers, loadMCPTools } = tools;
-  useEffect(() => {
-    if (!store.mcpEnabled) return;
-    void loadMCPServers().then(() => {
-      void loadMCPTools();
-    });
-  }, [store.mcpEnabled, loadMCPServers, loadMCPTools]);
-
   // Load agent files when agent mode is enabled
   useEffect(() => {
     if (!store.agentMode || !sessions.currentSessionId) return;
     void loadAgentFiles({ sessionId: sessions.currentSessionId });
   }, [loadAgentFiles, sessions.currentSessionId, store.agentMode]);
-
-  // Load MCP servers when settings modal opens
-  useEffect(() => {
-    if (store.mcpSettingsOpen) {
-      loadMCPServers();
-    }
-  }, [store.mcpSettingsOpen, loadMCPServers]);
 
   // Refresh usage when modal opens
   useEffect(() => {

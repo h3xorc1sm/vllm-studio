@@ -74,10 +74,6 @@ export interface IThinkingParser extends IParser<string, ThinkingResult> {
   readonly name: "thinking";
 }
 
-export interface IMcpXmlParser extends IParser<string, string> {
-  readonly name: "mcp-xml";
-}
-
 export interface IArtifactsParser extends IParser<string, ArtifactsResult> {
   readonly name: "artifacts";
   getArtifactType(language: string): ArtifactType | null;
@@ -97,8 +93,6 @@ export interface MessageParsingConfig {
   enableArtifacts: boolean;
   /** Enable thinking/reasoning extraction */
   enableThinkingExtraction: boolean;
-  /** Enable MCP XML stripping */
-  enableMcpXmlStripping: boolean;
   /** Enable box tag stripping */
   enableBoxTagStripping: boolean;
   /** Maximum cache size for parsed results */
@@ -108,7 +102,6 @@ export interface MessageParsingConfig {
 export const DEFAULT_CONFIG: MessageParsingConfig = {
   enableArtifacts: true,
   enableThinkingExtraction: true,
-  enableMcpXmlStripping: true,
   enableBoxTagStripping: true,
   cacheSize: 100,
 };

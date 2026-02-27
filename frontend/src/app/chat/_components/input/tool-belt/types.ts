@@ -12,11 +12,10 @@ export interface ToolBeltProps {
   selectedModel?: string;
   availableModels?: ModelOption[];
   onModelChange?: (modelId: string) => void;
-  mcpEnabled?: boolean;
-  onMcpToggle?: () => void;
+  toolsEnabled?: boolean;
+  onToolsToggle?: () => void;
   artifactsEnabled?: boolean;
   onArtifactsToggle?: () => void;
-  onOpenMcpSettings?: () => void;
   onOpenChatSettings?: () => void;
   hasSystemPrompt?: boolean;
   deepResearchEnabled?: boolean;
@@ -25,4 +24,3 @@ export interface ToolBeltProps {
   callModeEnabled?: boolean;
   onCallModeToggle?: () => void;
 }
-

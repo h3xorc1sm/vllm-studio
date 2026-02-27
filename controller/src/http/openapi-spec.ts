@@ -62,6 +62,17 @@ export const createOpenApiSpec = (context: AppContext): Record<string, unknown> 
         },
       },
     },
+    "/config": {
+      get: {
+        summary: "System configuration",
+        description: "Get controller config, service status, environment URLs, and runtime details",
+        responses: {
+          "200": {
+            description: "System configuration payload",
+          },
+        },
+      },
+    },
     "/compat": {
       get: {
         summary: "Compatibility report",
@@ -214,6 +225,17 @@ export const createOpenApiSpec = (context: AppContext): Record<string, unknown> 
         },
       },
     },
+    "/evict": {
+      post: {
+        summary: "Evict running model",
+        description: "Stop the active inference process",
+        responses: {
+          "200": {
+            description: "Eviction result",
+          },
+        },
+      },
+    },
     "/launch/{recipe_id}": {
       post: {
         summary: "Launch model",
@@ -229,6 +251,17 @@ export const createOpenApiSpec = (context: AppContext): Record<string, unknown> 
         responses: {
           "200": {
             description: "Model launched",
+          },
+        },
+      },
+    },
+    "/lifetime-metrics": {
+      get: {
+        summary: "Lifetime metrics",
+        description: "Get cumulative token/request/energy counters used by the CLI dashboard",
+        responses: {
+          "200": {
+            description: "Lifetime metrics payload",
           },
         },
       },
@@ -375,8 +408,7 @@ export const createOpenApiSpec = (context: AppContext): Record<string, unknown> 
     "/distributed/broadcast": {
       post: {
         summary: "Broadcast distributed cluster state",
-        description:
-          "Re-emit current distributed node and topology snapshots to SSE subscribers",
+        description: "Re-emit current distributed node and topology snapshots to SSE subscribers",
         responses: {
           "200": {
             description: "Broadcast accepted",

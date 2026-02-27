@@ -10,7 +10,6 @@ import {
   Globe,
   Code,
   Brain,
-  Settings,
   SlidersHorizontal,
   Clock,
   Loader2,
@@ -34,7 +33,7 @@ type Props = {
   disabled?: boolean;
   canSend: boolean;
   hasSystemPrompt?: boolean;
-  mcpEnabled?: boolean;
+  toolsEnabled?: boolean;
   artifactsEnabled?: boolean;
   deepResearchEnabled?: boolean;
   isTTSEnabled?: boolean;
@@ -42,8 +41,7 @@ type Props = {
   selectedModel?: string;
   onModelChange?: (modelId: string) => void;
   onOpenChatSettings?: () => void;
-  onOpenMcpSettings?: () => void;
-  onMcpToggle?: () => void;
+  onToolsToggle?: () => void;
   onArtifactsToggle?: () => void;
   onDeepResearchToggle?: () => void;
   onTTSToggle?: () => void;
@@ -66,7 +64,7 @@ export function ToolBeltToolbarDesktop({
   disabled,
   canSend,
   hasSystemPrompt,
-  mcpEnabled,
+  toolsEnabled,
   artifactsEnabled,
   deepResearchEnabled,
   isTTSEnabled,
@@ -74,8 +72,7 @@ export function ToolBeltToolbarDesktop({
   selectedModel,
   onModelChange,
   onOpenChatSettings,
-  onOpenMcpSettings,
-  onMcpToggle,
+  onToolsToggle,
   onArtifactsToggle,
   onDeepResearchToggle,
   onTTSToggle,
@@ -88,7 +85,7 @@ export function ToolBeltToolbarDesktop({
   callModeEnabled,
   onCallModeToggle,
 }: Props) {
-  const hasActiveTools = Boolean(mcpEnabled || artifactsEnabled || deepResearchEnabled);
+  const hasActiveTools = Boolean(toolsEnabled || artifactsEnabled || deepResearchEnabled);
   const activeSendButtonClass =
     "bg-white text-black border border-white hover:bg-white/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--accent) focus-visible:ring-offset-2 focus-visible:ring-offset-(--bg)";
 
@@ -187,8 +184,8 @@ export function ToolBeltToolbarDesktop({
           <DropdownItem
             icon={Globe}
             label="Web search & tools"
-            isActive={mcpEnabled}
-            onClick={onMcpToggle}
+            isActive={toolsEnabled}
+            onClick={onToolsToggle}
             disabled={disabled}
           />
           {onArtifactsToggle && (
@@ -208,17 +205,6 @@ export function ToolBeltToolbarDesktop({
               onClick={onDeepResearchToggle}
               disabled={disabled}
             />
-          )}
-          {onOpenMcpSettings && (
-            <>
-              <div className="h-px bg-(--border) my-1" />
-              <DropdownItem
-                icon={Settings}
-                label="MCP servers"
-                onClick={onOpenMcpSettings}
-                disabled={disabled}
-              />
-            </>
           )}
         </ToolDropdown>
 

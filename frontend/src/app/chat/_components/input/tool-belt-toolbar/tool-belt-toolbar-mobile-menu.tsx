@@ -8,7 +8,6 @@ import {
   Globe,
   Code,
   Brain,
-  Settings,
   SlidersHorizontal,
   Clock,
   Loader2,
@@ -36,14 +35,13 @@ type Props = {
   attachmentsCount: number;
   disabled?: boolean;
   hasSystemPrompt?: boolean;
-  mcpEnabled?: boolean;
+  toolsEnabled?: boolean;
   artifactsEnabled?: boolean;
   deepResearchEnabled?: boolean;
   isTTSEnabled?: boolean;
   onOpenResults?: () => void;
   onOpenChatSettings?: () => void;
-  onOpenMcpSettings?: () => void;
-  onMcpToggle?: () => void;
+  onToolsToggle?: () => void;
   onArtifactsToggle?: () => void;
   onDeepResearchToggle?: () => void;
   onTTSToggle?: () => void;
@@ -64,14 +62,13 @@ export function ToolBeltToolbarMobileMenu({
   attachmentsCount,
   disabled,
   hasSystemPrompt,
-  mcpEnabled,
+  toolsEnabled,
   artifactsEnabled,
   deepResearchEnabled,
   isTTSEnabled,
   onOpenResults,
   onOpenChatSettings,
-  onOpenMcpSettings,
-  onMcpToggle,
+  onToolsToggle,
   onArtifactsToggle,
   onDeepResearchToggle,
   onTTSToggle,
@@ -82,7 +79,7 @@ export function ToolBeltToolbarMobileMenu({
   callModeEnabled,
   onCallModeToggle,
 }: Props) {
-  const hasActiveTools = Boolean(mcpEnabled || artifactsEnabled || deepResearchEnabled);
+  const hasActiveTools = Boolean(toolsEnabled || artifactsEnabled || deepResearchEnabled);
   const hasMobileMenuActive = Boolean(
     attachmentsCount > 0 ||
       hasActiveTools ||
@@ -96,7 +93,7 @@ export function ToolBeltToolbarMobileMenu({
   const showAttachmentSection = Boolean(onAttachFile || onAttachImage);
   const showVoiceSection = Boolean(onStartRecording || onStopRecording || onTTSToggle);
   const showToolsSection = Boolean(
-    onMcpToggle || onArtifactsToggle || onDeepResearchToggle || onOpenMcpSettings,
+    onToolsToggle || onArtifactsToggle || onDeepResearchToggle,
   );
   const showSettingsSection = Boolean(onOpenChatSettings);
 
@@ -188,20 +185,14 @@ export function ToolBeltToolbarMobileMenu({
 
       {showToolsSection && (
         <>
-          {onMcpToggle && (
-            <DropdownItem icon={Globe} label="Web search & tools" isActive={mcpEnabled} onClick={onMcpToggle} disabled={disabled} closeOnClick />
+          {onToolsToggle && (
+            <DropdownItem icon={Globe} label="Web search & tools" isActive={toolsEnabled} onClick={onToolsToggle} disabled={disabled} closeOnClick />
           )}
           {onArtifactsToggle && (
             <DropdownItem icon={Code} label="Code preview" isActive={artifactsEnabled} onClick={onArtifactsToggle} disabled={disabled} closeOnClick />
           )}
           {onDeepResearchToggle && (
             <DropdownItem icon={Brain} label="Deep Research" isActive={deepResearchEnabled} onClick={onDeepResearchToggle} disabled={disabled} closeOnClick />
-          )}
-          {onOpenMcpSettings && (
-            <>
-              <div className="h-px bg-(--border) my-1" />
-              <DropdownItem icon={Settings} label="MCP servers" onClick={onOpenMcpSettings} disabled={disabled} closeOnClick />
-            </>
           )}
           {showSettingsSection && <div className="h-px bg-(--border) my-1" />}
         </>
@@ -220,4 +211,3 @@ export function ToolBeltToolbarMobileMenu({
     </ToolDropdown>
   );
 }
-

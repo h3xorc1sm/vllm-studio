@@ -162,7 +162,6 @@ export function useChatPageController(): ChatPageViewProps {
   useChatPageLifecycle({
     store,
     sessions,
-    tools,
     usage,
     agentFiles: agentFilesService,
     agentState,

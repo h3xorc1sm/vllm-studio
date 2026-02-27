@@ -30,7 +30,7 @@ export const useAppStore = create<AppStore>()(
         selectedModel: state.selectedModel,
         systemPrompt: state.systemPrompt,
         customChatModels: state.customChatModels,
-        mcpEnabled: state.mcpEnabled,
+        toolsEnabled: state.toolsEnabled,
         artifactsEnabled: state.artifactsEnabled,
         deepResearch: state.deepResearch,
         themeId: state.themeId,

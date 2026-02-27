@@ -2,18 +2,15 @@
 "use client";
 
 import { memo } from "react";
-import type { DeepResearchConfig, SessionUsage, MCPServer, ChatMessage } from "@/lib/types";
+import type { DeepResearchConfig, SessionUsage, ChatMessage } from "@/lib/types";
 import type { ModelOption } from "@/app/chat/types";
 import { ChatSettingsModal } from "../../modals/chat-settings-modal";
-import { MCPSettingsModal } from "../../modals/mcp-settings-modal";
 import { UsageModal } from "../../modals/usage-modal";
 import { ExportModal } from "../../modals/export-modal";
 
 interface ChatModalsProps {
   settingsOpen: boolean;
   onCloseSettings: () => void;
-  mcpSettingsOpen: boolean;
-  onCloseMcpSettings: () => void;
   usageOpen: boolean;
   onCloseUsage: () => void;
   exportOpen: boolean;
@@ -28,11 +25,6 @@ interface ChatModalsProps {
   onRemoveCustomChatModel: (modelId: string) => void;
   deepResearch: DeepResearchConfig;
   onDeepResearchChange: (config: DeepResearchConfig) => void;
-  mcpServers: MCPServer[];
-  onAddServer: (server: MCPServer) => Promise<void>;
-  onUpdateServer: (server: MCPServer) => Promise<void>;
-  onRemoveServer: (name: string) => Promise<void>;
-  onRefreshServers: () => void;
   sessionUsage: SessionUsage | null;
   messages: ChatMessage[];
   onExportJson: () => void;
@@ -42,8 +34,6 @@ interface ChatModalsProps {
 function ChatModalsBase({
   settingsOpen,
   onCloseSettings,
-  mcpSettingsOpen,
-  onCloseMcpSettings,
   usageOpen,
   onCloseUsage,
   exportOpen,
@@ -58,11 +48,6 @@ function ChatModalsBase({
   onRemoveCustomChatModel,
   deepResearch,
   onDeepResearchChange,
-  mcpServers,
-  onAddServer,
-  onUpdateServer,
-  onRemoveServer,
-  onRefreshServers,
   sessionUsage,
   messages,
   onExportJson,
@@ -85,16 +70,6 @@ function ChatModalsBase({
         onDeepResearchChange={onDeepResearchChange}
       />
 
-      <MCPSettingsModal
-        isOpen={mcpSettingsOpen}
-        onClose={onCloseMcpSettings}
-        servers={mcpServers}
-        onAddServer={onAddServer}
-        onUpdateServer={onUpdateServer}
-        onRemoveServer={onRemoveServer}
-        onRefresh={onRefreshServers}
-      />
-
       <UsageModal
         isOpen={usageOpen}
         onClose={onCloseUsage}
@@ -114,14 +89,13 @@ function ChatModalsBase({
 }
 
 function areChatModalsPropsEqual(prev: ChatModalsProps, next: ChatModalsProps): boolean {
-  const prevAnyOpen = prev.settingsOpen || prev.mcpSettingsOpen || prev.usageOpen || prev.exportOpen;
-  const nextAnyOpen = next.settingsOpen || next.mcpSettingsOpen || next.usageOpen || next.exportOpen;
+  const prevAnyOpen = prev.settingsOpen || prev.usageOpen || prev.exportOpen;
+  const nextAnyOpen = next.settingsOpen || next.usageOpen || next.exportOpen;
 
   // When everything is closed, none of the props matter since all modal components render `null`.
   if (!prevAnyOpen && !nextAnyOpen) return true;
 
   if (prev.settingsOpen !== next.settingsOpen) return false;
-  if (prev.mcpSettingsOpen !== next.mcpSettingsOpen) return false;
   if (prev.usageOpen !== next.usageOpen) return false;
   if (prev.exportOpen !== next.exportOpen) return false;
 
@@ -137,15 +111,6 @@ function areChatModalsPropsEqual(prev: ChatModalsProps, next: ChatModalsProps): 
       if (prev.deepResearch !== next.deepResearch) return false;
       if (prev.onDeepResearchChange !== next.onDeepResearchChange) return false;
       if (prev.onCloseSettings !== next.onCloseSettings) return false;
-  }
-
-  if (next.mcpSettingsOpen) {
-    if (prev.mcpServers !== next.mcpServers) return false;
-    if (prev.onAddServer !== next.onAddServer) return false;
-    if (prev.onUpdateServer !== next.onUpdateServer) return false;
-    if (prev.onRemoveServer !== next.onRemoveServer) return false;
-    if (prev.onRefreshServers !== next.onRefreshServers) return false;
-    if (prev.onCloseMcpSettings !== next.onCloseMcpSettings) return false;
   }
 
   if (next.usageOpen) {

@@ -120,9 +120,11 @@ export const getSglangRuntimeInfo = (config: Config): RuntimeBackendInfo => {
 
 const parseLlamaVersion = (output: string): string | null => {
   if (!output) return null;
-  const match = output.match(/version\s*[:=]\s*([^\s]+)/i);
+  // llama.cpp outputs: "version: 1 (32b17ab)\nbuilt with ..."
+  // Capture the full "N (hash)" or just "N" after "version:"
+  const match = output.match(/version\s*[:=]\s*(\d+\s*\([^)]+\)|\S+)/i);
   if (match) {
-    return match[1] ?? null;
+    return match[1]?.trim() ?? null;
   }
   const fallback = output.split("\n")[0]?.trim();
   return fallback || null;

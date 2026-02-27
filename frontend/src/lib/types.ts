@@ -7,7 +7,6 @@
 export type * from "./types/chat/agent";
 export type * from "./types/chat/artifacts";
 export type * from "./types/chat/chat";
-export type * from "./types/chat/mcp";
 
 export type * from "./types/recipes/downloads";
 export type * from "./types/recipes/launch";

@@ -29,12 +29,9 @@ export const initialChatState: ChatState = {
   isMobile: false,
   userScrolledUp: false,
 
-  // MCP & tools
-  mcpEnabled: false,
+  // Tooling
+  toolsEnabled: false,
   artifactsEnabled: false,
-  mcpServers: [],
-  mcpSettingsOpen: false,
-  mcpTools: [],
   executingTools: new Set(),
   toolResultsMap: new Map(),
 
@@ -58,10 +55,6 @@ export const initialChatState: ChatState = {
 
   callModeEnabled: false,
   callModeSpeakingMessageId: null,
-
-  // MCP action state
-  mcpPendingServer: null,
-  mcpActionError: null,
 
   // Message UI state
   copiedMessageId: null,

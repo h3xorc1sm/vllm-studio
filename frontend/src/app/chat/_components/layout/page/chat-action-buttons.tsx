@@ -2,14 +2,13 @@
 "use client";
 
 import { memo } from "react";
-import { PanelRightOpen, Gauge, Sliders, Plug, PieChart, Share2 } from "lucide-react";
+import { PanelRightOpen, Gauge, Sliders, PieChart, Share2 } from "lucide-react";
 
 interface ChatActionButtonsProps {
   activityCount: number;
   onOpenActivity: () => void;
   onOpenContext: () => void;
   onOpenSettings: () => void;
-  onOpenMcpSettings: () => void;
   onOpenUsage: () => void;
   onOpenExport: () => void;
 }
@@ -19,7 +18,6 @@ function ChatActionButtonsBase({
   onOpenActivity,
   onOpenContext,
   onOpenSettings,
-  onOpenMcpSettings,
   onOpenUsage,
   onOpenExport,
 }: ChatActionButtonsProps) {
@@ -52,13 +50,6 @@ function ChatActionButtonsBase({
         <Sliders className="h-4 w-4 text-(--dim)" />
       </button>
       <button
-        onClick={onOpenMcpSettings}
-        className="p-1.5 bg-(--surface) border border-(--border) rounded hover:bg-(--accent)"
-        title="MCP Servers"
-      >
-        <Plug className="h-4 w-4 text-(--dim)" />
-      </button>
-      <button
         onClick={onOpenUsage}
         className="p-1.5 bg-(--surface) border border-(--border) rounded hover:bg-(--accent)"
         title="Usage"
@@ -85,7 +76,6 @@ function areChatActionButtonsPropsEqual(
     prev.onOpenActivity === next.onOpenActivity &&
     prev.onOpenContext === next.onOpenContext &&
     prev.onOpenSettings === next.onOpenSettings &&
-    prev.onOpenMcpSettings === next.onOpenMcpSettings &&
     prev.onOpenUsage === next.onOpenUsage &&
     prev.onOpenExport === next.onOpenExport
   );

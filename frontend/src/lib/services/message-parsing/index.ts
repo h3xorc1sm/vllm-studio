@@ -5,7 +5,6 @@
  * A comprehensive service for parsing model responses with:
  * - Box tag stripping
  * - Thinking/reasoning extraction
- * - MCP XML stripping
  * - Artifact extraction
  * - Markdown segmentation and rendering
  *
@@ -42,7 +41,6 @@ export type {
   MessageParsingContextValue,
   IBoxTagsParser,
   IThinkingParser,
-  IMcpXmlParser,
   IArtifactsParser,
   IMarkdownParser,
 } from "./types";
@@ -71,8 +69,6 @@ export {
   boxTagsParser,
   ThinkingParser,
   thinkingParser,
-  McpXmlParser,
-  mcpXmlParser,
   ArtifactsParser,
   artifactsParser,
   MarkdownParser,

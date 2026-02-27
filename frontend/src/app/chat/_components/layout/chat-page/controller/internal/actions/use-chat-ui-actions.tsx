@@ -62,8 +62,8 @@ export function useChatUiActions({
     [store],
   );
 
-  const handleMcpToggle = useCallback(() => {
-    store.setMcpEnabled(!store.mcpEnabled);
+  const handleToolsToggle = useCallback(() => {
+    store.setToolsEnabled(!store.toolsEnabled);
   }, [store]);
 
   const handleArtifactsToggle = useCallback(() => {
@@ -73,11 +73,7 @@ export function useChatUiActions({
   const handleDeepResearchToggle = useCallback(() => {
     const nextEnabled = !store.deepResearch.enabled;
     store.setDeepResearch({ ...store.deepResearch, enabled: nextEnabled });
-    if (nextEnabled && !store.mcpEnabled) store.setMcpEnabled(true);
-  }, [store]);
-
-  const handleOpenMcpSettings = useCallback(() => {
-    store.setMcpSettingsOpen(true);
+    if (nextEnabled && !store.toolsEnabled) store.setToolsEnabled(true);
   }, [store]);
 
   const handleOpenChatSettings = useCallback(() => {
@@ -104,14 +100,13 @@ export function useChatUiActions({
     availableModels: store.availableModels,
     onModelChange: handleModelChange,
     systemPrompt: store.systemPrompt,
-    mcpEnabled: store.mcpEnabled,
-    onMcpToggle: handleMcpToggle,
+    toolsEnabled: store.toolsEnabled,
+    onToolsToggle: handleToolsToggle,
     artifactsEnabled: store.artifactsEnabled,
     onArtifactsToggle: handleArtifactsToggle,
     deepResearch: store.deepResearch,
     onDeepResearchToggle: handleDeepResearchToggle,
     onOpenResults: handleOpenResults,
-    onOpenMcpSettings: handleOpenMcpSettings,
     onOpenChatSettings: handleOpenChatSettings,
     agentPlan: store.agentPlan,
     clearPlan,

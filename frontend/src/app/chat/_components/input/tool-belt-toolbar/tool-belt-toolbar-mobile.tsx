@@ -15,7 +15,7 @@ type Props = {
   disabled?: boolean;
   canSend: boolean;
   hasSystemPrompt?: boolean;
-  mcpEnabled?: boolean;
+  toolsEnabled?: boolean;
   artifactsEnabled?: boolean;
   deepResearchEnabled?: boolean;
   isTTSEnabled?: boolean;
@@ -24,8 +24,7 @@ type Props = {
   selectedModel?: string;
   onModelChange?: (modelId: string) => void;
   onOpenChatSettings?: () => void;
-  onOpenMcpSettings?: () => void;
-  onMcpToggle?: () => void;
+  onToolsToggle?: () => void;
   onArtifactsToggle?: () => void;
   onDeepResearchToggle?: () => void;
   onTTSToggle?: () => void;
@@ -49,7 +48,7 @@ export function ToolBeltToolbarMobile({
   disabled,
   canSend,
   hasSystemPrompt,
-  mcpEnabled,
+  toolsEnabled,
   artifactsEnabled,
   deepResearchEnabled,
   isTTSEnabled,
@@ -58,8 +57,7 @@ export function ToolBeltToolbarMobile({
   selectedModel,
   onModelChange,
   onOpenChatSettings,
-  onOpenMcpSettings,
-  onMcpToggle,
+  onToolsToggle,
   onArtifactsToggle,
   onDeepResearchToggle,
   onTTSToggle,
@@ -86,14 +84,13 @@ export function ToolBeltToolbarMobile({
         attachmentsCount={attachmentsCount}
         disabled={disabled}
         hasSystemPrompt={hasSystemPrompt}
-        mcpEnabled={mcpEnabled}
+        toolsEnabled={toolsEnabled}
         artifactsEnabled={artifactsEnabled}
         deepResearchEnabled={deepResearchEnabled}
         isTTSEnabled={isTTSEnabled}
         onOpenResults={onOpenResults}
         onOpenChatSettings={onOpenChatSettings}
-        onOpenMcpSettings={onOpenMcpSettings}
-        onMcpToggle={onMcpToggle}
+        onToolsToggle={onToolsToggle}
         onArtifactsToggle={onArtifactsToggle}
         onDeepResearchToggle={onDeepResearchToggle}
         onTTSToggle={onTTSToggle}

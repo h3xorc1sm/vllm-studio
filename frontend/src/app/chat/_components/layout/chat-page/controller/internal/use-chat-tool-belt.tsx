@@ -16,15 +16,14 @@ export interface UseChatToolBeltArgs {
   onModelChange: (modelId: string) => void;
   systemPrompt: string;
 
-  mcpEnabled: boolean;
-  onMcpToggle: () => void;
+  toolsEnabled: boolean;
+  onToolsToggle: () => void;
   artifactsEnabled: boolean;
   onArtifactsToggle: () => void;
   deepResearch: DeepResearchConfig;
   onDeepResearchToggle: () => void;
 
   onOpenResults: () => void;
-  onOpenMcpSettings: () => void;
   onOpenChatSettings: () => void;
 
   agentPlan: AgentPlan | null;
@@ -44,14 +43,13 @@ export function useChatToolBelt({
   availableModels,
   onModelChange,
   systemPrompt,
-  mcpEnabled,
-  onMcpToggle,
+  toolsEnabled,
+  onToolsToggle,
   artifactsEnabled,
   onArtifactsToggle,
   deepResearch,
   onDeepResearchToggle,
   onOpenResults,
-  onOpenMcpSettings,
   onOpenChatSettings,
   agentPlan,
   clearPlan,
@@ -73,13 +71,12 @@ export function useChatToolBelt({
         selectedModel={selectedModel}
         availableModels={availableModels}
         onModelChange={onModelChange}
-        mcpEnabled={mcpEnabled}
-        onMcpToggle={onMcpToggle}
+        toolsEnabled={toolsEnabled}
+        onToolsToggle={onToolsToggle}
         artifactsEnabled={artifactsEnabled}
         onArtifactsToggle={onArtifactsToggle}
         deepResearchEnabled={deepResearch.enabled}
         onDeepResearchToggle={onDeepResearchToggle}
-        onOpenMcpSettings={onOpenMcpSettings}
         onOpenChatSettings={onOpenChatSettings}
         hasSystemPrompt={systemPrompt.trim().length > 0}
         planDrawer={agentPlan ? <AgentPlanDrawer plan={agentPlan} onClear={clearPlan} /> : null}
@@ -95,14 +92,13 @@ export function useChatToolBelt({
     clearPlan,
     deepResearch.enabled,
     isLoading,
-    mcpEnabled,
+    toolsEnabled,
     onArtifactsToggle,
     onCallModeToggle,
     onDeepResearchToggle,
-    onMcpToggle,
+    onToolsToggle,
     onModelChange,
     onOpenChatSettings,
-    onOpenMcpSettings,
     onOpenResults,
     onStop,
     onSubmit,

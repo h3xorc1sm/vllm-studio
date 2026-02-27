@@ -3,7 +3,6 @@
 
 import { useCallback, useMemo, useState } from "react";
 import type { ActivityGroup } from "@/app/chat/types";
-import { UiStatusBadge, UiTimelineMarker } from "@/components/ui-kit";
 import { getTurnSummary } from "./tool-categorization";
 import { ThinkingItem } from "./thinking-item";
 import { ToolItem } from "./tool-item";
@@ -23,44 +22,51 @@ export function TurnGroup({
     if (group.isLatest) return;
     setCollapsed((prev) => !prev);
   }, [group.isLatest]);
+  const latestThinkingIndex = useMemo(() => {
+    for (let i = group.items.length - 1; i >= 0; i -= 1) {
+      if (group.items[i]?.type === "thinking") return i;
+    }
+    return -1;
+  }, [group.items]);
+
+  const visibleItems = useMemo(
+    () =>
+      group.items.filter((item, index) => {
+        if (item.type !== "thinking") return true;
+        if (item.isActive) return true;
+        return index === latestThinkingIndex;
+      }),
+    [group.items, latestThinkingIndex],
+  );
 
   return (
-    <div>
+    <div className="relative pl-7">
+      <span className="absolute left-3.5 top-[1.35rem] h-1.5 w-1.5 rounded-full bg-(--fg)/45" />
       <button
         onClick={toggleCollapsed}
-        className="flex items-center gap-2 py-2 pl-1 pr-2 w-full text-left group"
+        className="w-full py-3 text-left"
       >
-        <UiTimelineMarker tone="neutral" className="w-5 h-5 z-10">
-          <span className="text-[9px] text-(--fg) font-medium">{group.turnNumber || 1}</span>
-        </UiTimelineMarker>
-        <span className="text-[10px] text-(--fg) uppercase tracking-wider">
-          {group.isLatest ? "Current" : "Turn"}
-        </span>
-        {!group.isLatest && summary.count > 0 && (
-          <UiStatusBadge
-            className="text-[9px]"
-            tone="neutral"
-            style={{ color: summary.color, backgroundColor: `${summary.color}15` }}
-          >
-            {summary.label}
-          </UiStatusBadge>
-        )}
-        {group.isLatest && hasActiveThinking && (
-          <span className="relative flex h-1.5 w-1.5 ml-auto mr-2">
-            <span className="animate-ping absolute h-full w-full rounded-full bg-(--hl2) opacity-60" />
-            <span className="relative h-1.5 w-1.5 rounded-full bg-(--hl2)" />
+        <div className="flex items-baseline gap-2">
+          <span className="text-lg leading-tight text-(--fg)">
+            {group.isLatest ? `Current turn ${group.turnNumber || 1}` : `Turn ${group.turnNumber || 1}`}
           </span>
-        )}
-        {!group.isLatest && (
-          <span className="ml-auto text-[9px] text-(--dim) group-hover:text-(--dim) transition-colors">
-            {isCollapsed ? "+" : "−"}
-          </span>
-        )}
+          {!group.isLatest && summary.count > 0 && (
+            <span className="text-sm text-(--fg)/60">{summary.label}</span>
+          )}
+          {group.isLatest && hasActiveThinking && (
+            <span className="text-sm text-(--fg)/60">Live</span>
+          )}
+          {!group.isLatest && (
+            <span className="ml-auto text-sm text-(--fg)/60">
+              {isCollapsed ? "Show" : "Hide"}
+            </span>
+          )}
+        </div>
       </button>
 
       {!isCollapsed && (
-        <div className="space-y-1">
-          {group.items.map((item) =>
+        <div className="space-y-0 pb-2">
+          {visibleItems.map((item) =>
             item.type === "thinking" ? (
               <ThinkingItem key={item.id} content={item.content} isActive={item.isActive} />
             ) : (

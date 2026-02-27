@@ -62,7 +62,8 @@ function computeModelName(process: unknown): string | null {
   const served = p["served_model_name"];
   if (typeof served === "string" && served.trim()) return served.trim();
   const modelPath = p["model_path"];
-  if (typeof modelPath === "string" && modelPath.trim()) return modelPath.split("/").pop() ?? modelPath;
+  if (typeof modelPath === "string" && modelPath.trim())
+    return modelPath.split("/").pop() ?? modelPath;
   return null;
 }
 
@@ -85,7 +86,8 @@ function updateFromStatusPayload(payload: Record<string, unknown>) {
 function updateFromLaunchProgressPayload(payload: Record<string, unknown>) {
   const stage = payload["stage"] as LaunchStage | undefined;
   const message = typeof payload["message"] === "string" ? payload["message"] : null;
-  const active = stage === "preempting" || stage === "evicting" || stage === "launching" || stage === "waiting";
+  const active =
+    stage === "preempting" || stage === "evicting" || stage === "launching" || stage === "waiting";
 
   const nextBase: InternalState = {
     ...state,
@@ -99,23 +101,12 @@ function updateFromLaunchProgressPayload(payload: Record<string, unknown>) {
 }
 
 async function fetchNow() {
-  try {
-    const [health, status] = await Promise.all([api.getHealth().catch(() => null), api.getStatus()]);
-    const inferenceOnline = Boolean(status.running || status.process);
-    const model =
-      computeModelName(status.process) ??
-      (typeof health?.running_model === "string" ? health.running_model.split("/").pop() ?? health.running_model : null);
+  const [healthResult, statusResult] = await Promise.allSettled([api.getHealth(), api.getStatus()]);
 
-    const nextBase: InternalState = {
-      ...state,
-      online: Boolean(health ? health.status === "ok" : true),
-      inferenceOnline,
-      model: model ?? state.model,
-      lastUpdateAt: Date.now(),
-    };
-    const next: InternalState = { ...nextBase, activityLine: recomputeActivityLine(nextBase) };
-    emitIfChanged(next);
-  } catch {
+  const health = healthResult.status === "fulfilled" ? healthResult.value : null;
+  const status = statusResult.status === "fulfilled" ? statusResult.value : null;
+
+  if (!health && !status) {
     const nextBase: InternalState = {
       ...state,
       online: false,
@@ -127,7 +118,25 @@ async function fetchNow() {
     };
     const next: InternalState = { ...nextBase, activityLine: recomputeActivityLine(nextBase) };
     emitIfChanged(next);
+    return;
   }
+
+  const inferenceOnline = Boolean(status?.running || status?.process);
+  const model =
+    computeModelName(status?.process ?? null) ??
+    (typeof health?.running_model === "string"
+      ? (health.running_model.split("/").pop() ?? health.running_model)
+      : null);
+
+  const nextBase: InternalState = {
+    ...state,
+    online: health ? health.status === "ok" : true,
+    inferenceOnline,
+    model: model ?? state.model,
+    lastUpdateAt: Date.now(),
+  };
+  const next: InternalState = { ...nextBase, activityLine: recomputeActivityLine(nextBase) };
+  emitIfChanged(next);
 }
 
 function start() {
