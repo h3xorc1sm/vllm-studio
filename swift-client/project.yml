@@ -56,3 +56,20 @@ targets:
       CODE_SIGN_STYLE: Automatic
       INFOPLIST_FILE: resources/info-mac.plist
       CODE_SIGN_ENTITLEMENTS: resources/vllm-studio-mac.entitlements
+    scheme:
+      testTargets:
+        - vllm-studio-mac-tests
+
+  vllm-studio-mac-tests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: tests
+        type: group
+    dependencies:
+      - target: vllm-studio-mac
+    settings:
+      PRODUCT_BUNDLE_IDENTIFIER: com.sero.vllmstudio.mac.tests
+      SWIFT_VERSION: "5.9"
+      GENERATE_INFOPLIST_FILE: YES
+      CODE_SIGNING_ALLOWED: NO

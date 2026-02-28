@@ -40,3 +40,10 @@ jobs:
           -scheme vllm-studio-mac
           -destination 'platform=macOS'
           clean build
+
+      - name: Run macOS unit tests
+        run: >-
+          xcodebuild -project vllm-studio.xcodeproj
+          -scheme vllm-studio-mac
+          -destination 'platform=macOS'
+          test
