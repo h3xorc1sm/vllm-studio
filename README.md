@@ -5,6 +5,7 @@ Unified local AI workstation for model lifecycle, chat/agent workflows, orchestr
 ## Release: v1.12.0
 
 This release consolidates major repo changes currently in the tree, including:
+
 - controller module reorganization and typed module boundaries
 - chat send/stream reliability fixes (done-state detection, attachment/send flow, rollback behavior)
 - SSE/run queue hardening to reduce stuck/incomplete UI states
@@ -23,18 +24,18 @@ This release consolidates major repo changes currently in the tree, including:
 - `controller/`: Bun/Hono backend, orchestration, chat runtime, lifecycle, metrics
 - `frontend/`: Next.js app, chat UI, proxy endpoints, client state
 - `cli/`: Bun CLI for controller access
-- `desktop/`: daemon scripts for running the controller in the background
 - `swift-client/`: iOS/macOS client (XcodeGen)
 - `shared/`: shared types/contracts
 - `config/`: runtime and integration configs
 - `docs/`: documentation index and environment notes
-- `scripts/`: operational scripts
+- `scripts/`: operational scripts (deployment + controller daemon helpers)
 - `docker-compose.yml`: full stack service definitions
-- `start.sh`: controller + infra launcher
+- `scripts/daemon-*.sh`: start/status/stop helpers for background controller runs
 
 ## Quick start
 
 1. Controller (local):
+
 ```bash
 cd controller
 npx tsc --noEmit
@@ -43,6 +44,7 @@ bun src/main.ts
 ```
 
 2. Frontend:
+
 ```bash
 cd frontend
 npm run test
@@ -52,13 +54,17 @@ npm run dev
 ```
 
 3. Full stack with Docker (controller + frontend + infra):
+
 ```bash
 docker compose up -d --build controller frontend
 ```
 
-4. Convenience entrypoint (controller + infra only):
+4. Run controller as a background daemon:
+
 ```bash
-./start.sh --dev
+./scripts/daemon-start.sh
+./scripts/daemon-status.sh
+./scripts/daemon-stop.sh
 ```
 
 ## Health checks
@@ -84,6 +90,7 @@ See `setup/README.md` for complete setup, deployment, and verification instructi
 - Release tags: `vX.Y.Z`
 
 For this release:
+
 - merge release work into `main` and `dev`
 - tag `v1.12.0`
 - create a new post-release working branch
