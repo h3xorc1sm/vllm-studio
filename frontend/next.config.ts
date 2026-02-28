@@ -1,5 +1,6 @@
 import type { NextConfig } from "next";
 import bundleAnalyzer from "@next/bundle-analyzer";
+import path from "path";
 
 const withBundleAnalyzer = bundleAnalyzer({
   enabled: process.env.ANALYZE === "true",
@@ -8,7 +9,7 @@ const withBundleAnalyzer = bundleAnalyzer({
 const nextConfig: NextConfig = {
   output: "standalone",
   images: { unoptimized: true },
-  turbopack: { root: __dirname },
+  turbopack: { root: path.join(__dirname, "..") },
   async redirects() {
     return [
       {
