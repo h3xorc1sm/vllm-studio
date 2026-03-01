@@ -6,6 +6,7 @@ import { PanelRightOpen, Gauge, Sliders, PieChart, Share2 } from "lucide-react";
 
 interface ChatActionButtonsProps {
   activityCount: number;
+  hasActiveThinking?: boolean;
   onOpenActivity: () => void;
   onOpenContext: () => void;
   onOpenSettings: () => void;
@@ -15,6 +16,7 @@ interface ChatActionButtonsProps {
 
 function ChatActionButtonsBase({
   activityCount,
+  hasActiveThinking = false,
   onOpenActivity,
   onOpenContext,
   onOpenSettings,
@@ -22,43 +24,43 @@ function ChatActionButtonsBase({
   onOpenExport,
 }: ChatActionButtonsProps) {
   return (
-    <div className="absolute right-3 top-3 z-10 hidden md:flex flex-col items-center gap-2">
+    <div className="absolute right-3 top-3 z-10 hidden md:flex flex-col items-center gap-1.5">
       <button
         onClick={onOpenActivity}
-        className="relative p-1.5 bg-(--surface) border border-(--border) rounded hover:bg-(--accent)"
+        className="relative p-1.5 rounded-lg hover:bg-(--fg)/[0.08] transition-colors"
         title="Show activity"
       >
-        <PanelRightOpen className="h-4 w-4 text-(--dim)" />
+        <PanelRightOpen className={`h-4 w-4 ${hasActiveThinking ? "text-(--hl2)" : "text-(--dim)"}`} />
         {activityCount > 0 && (
-          <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-(--hl2) rounded-full text-[9px] text-white font-medium flex items-center justify-center">
+          <span className="absolute -top-0.5 -right-0.5 w-3.5 h-3.5 bg-(--accent) rounded-full text-[9px] text-white font-medium flex items-center justify-center">
             {activityCount}
           </span>
         )}
       </button>
       <button
         onClick={onOpenContext}
-        className="p-1.5 bg-(--surface) border border-(--border) rounded hover:bg-(--accent)"
+        className="p-1.5 rounded-lg hover:bg-(--fg)/[0.08] transition-colors"
         title="Context"
       >
         <Gauge className="h-4 w-4 text-(--dim)" />
       </button>
       <button
         onClick={onOpenSettings}
-        className="p-1.5 bg-(--surface) border border-(--border) rounded hover:bg-(--accent)"
+        className="p-1.5 rounded-lg hover:bg-(--fg)/[0.08] transition-colors"
         title="Settings"
       >
         <Sliders className="h-4 w-4 text-(--dim)" />
       </button>
       <button
         onClick={onOpenUsage}
-        className="p-1.5 bg-(--surface) border border-(--border) rounded hover:bg-(--accent)"
+        className="p-1.5 rounded-lg hover:bg-(--fg)/[0.08] transition-colors"
         title="Usage"
       >
         <PieChart className="h-4 w-4 text-(--dim)" />
       </button>
       <button
         onClick={onOpenExport}
-        className="p-1.5 bg-(--surface) border border-(--border) rounded hover:bg-(--accent)"
+        className="p-1.5 rounded-lg hover:bg-(--fg)/[0.08] transition-colors"
         title="Export"
       >
         <Share2 className="h-4 w-4 text-(--dim)" />
@@ -73,6 +75,7 @@ function areChatActionButtonsPropsEqual(
 ): boolean {
   return (
     prev.activityCount === next.activityCount &&
+    prev.hasActiveThinking === next.hasActiveThinking &&
     prev.onOpenActivity === next.onOpenActivity &&
     prev.onOpenContext === next.onOpenContext &&
     prev.onOpenSettings === next.onOpenSettings &&

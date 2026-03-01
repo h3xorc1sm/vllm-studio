@@ -14,29 +14,13 @@ interface AgentPlanDrawerProps {
 function StepIcon({ status }: { status: AgentPlanStep["status"] }) {
   switch (status) {
     case "done":
-      return (
-        <div className="w-4.5 h-4.5 rounded bg-emerald-500/20 flex items-center justify-center shrink-0">
-          <Icons.Check className="h-3 w-3 text-emerald-400" strokeWidth={2.5} />
-        </div>
-      );
+      return <Icons.Check className="h-3 w-3 text-emerald-400 shrink-0" strokeWidth={2.5} />;
     case "running":
-      return (
-        <div className="w-4.5 h-4.5 rounded bg-blue-500/20 flex items-center justify-center shrink-0">
-          <Icons.Loader2 className="h-3 w-3 text-blue-400 animate-spin" />
-        </div>
-      );
+      return <Icons.Loader2 className="h-3 w-3 text-blue-400 animate-spin shrink-0" />;
     case "blocked":
-      return (
-        <div className="w-4.5 h-4.5 rounded bg-red-500/15 flex items-center justify-center shrink-0">
-          <Ban className="h-2.5 w-2.5 text-red-400" />
-        </div>
-      );
+      return <Ban className="h-3 w-3 text-red-400 shrink-0" />;
     default:
-      return (
-        <div className="w-4.5 h-4.5 rounded border border-white/8 flex items-center justify-center shrink-0">
-          <Icons.Circle className="h-2 w-2 text-(--dim)" />
-        </div>
-      );
+      return <Icons.Circle className="h-2.5 w-2.5 text-(--dim)/40 shrink-0" />;
   }
 }
 
@@ -49,11 +33,11 @@ export function AgentPlanDrawer({ plan, onClear }: AgentPlanDrawerProps) {
   const currentIndex = steps.findIndex((s) => s.status !== "done");
 
   return (
-    <div className="border-b border-white/6 bg-(--bg) overflow-hidden">
+    <div className="border-b border-(--border) bg-(--bg) overflow-hidden rounded-t-3xl">
       {/* Header */}
       <button
         onClick={() => setCollapsed(!collapsed)}
-        className="w-full flex items-center gap-2.5 px-3 py-2 hover:bg-white/2 transition-colors"
+        className="w-full flex items-center gap-2 px-4 py-2 hover:bg-(--fg)/[0.03] transition-colors"
       >
         {collapsed ? (
           <Icons.ChevronRight className="h-3 w-3 text-(--dim) shrink-0" />
@@ -61,12 +45,12 @@ export function AgentPlanDrawer({ plan, onClear }: AgentPlanDrawerProps) {
           <Icons.ChevronDown className="h-3 w-3 text-(--dim) shrink-0" />
         )}
 
-        <ListChecks className="h-3.5 w-3.5 text-violet-400 shrink-0" />
+        <ListChecks className="h-3.5 w-3.5 text-(--accent) shrink-0" />
 
-        <span className="text-[11px] font-medium text-(--dim)">Plan</span>
+        <span className="text-[11px] font-medium text-(--fg)">Plan</span>
 
         <span className="text-[10px] text-(--dim) font-mono">
-          {allDone ? `${steps.length} steps · Done` : `${doneCount}/${steps.length} steps`}
+          {allDone ? `${steps.length}/${steps.length} steps` : `${doneCount}/${steps.length} steps`}
         </span>
 
         {/* Mini progress dots */}
@@ -81,7 +65,7 @@ export function AgentPlanDrawer({ plan, onClear }: AgentPlanDrawerProps) {
                     ? "bg-blue-400 animate-pulse"
                     : s.status === "blocked"
                       ? "bg-red-400"
-                      : "bg-white/8"
+                      : "bg-(--fg)/12"
               }`}
             />
           ))}
@@ -100,7 +84,7 @@ export function AgentPlanDrawer({ plan, onClear }: AgentPlanDrawerProps) {
               onClear();
             }
           }}
-          className="p-0.5 rounded hover:bg-white/6 text-(--dim) hover:text-(--dim) shrink-0 cursor-pointer"
+          className="p-0.5 rounded hover:bg-(--fg)/[0.06] text-(--dim) shrink-0 cursor-pointer"
           title="Clear plan"
         >
           <Icons.X className="h-3 w-3" />
@@ -109,33 +93,28 @@ export function AgentPlanDrawer({ plan, onClear }: AgentPlanDrawerProps) {
 
       {/* Steps */}
       {!collapsed && (
-        <div className="px-3 pb-2 space-y-0.5">
+        <div className="px-4 pb-2 space-y-0">
           {steps.map((step, i) => {
             const isCurrent = i === currentIndex && step.status !== "blocked";
             return (
               <div
                 key={step.id}
-                className={`flex items-center gap-2 py-1 px-1.5 rounded transition-colors ${
-                  isCurrent ? "bg-white/3" : ""
+                className={`flex items-center gap-2 py-1 px-1 rounded transition-colors ${
+                  isCurrent ? "bg-(--fg)/[0.04]" : ""
                 }`}
               >
                 <StepIcon status={step.status} />
                 <span
-                  className={`text-[11px] leading-snug truncate ${
+                  className={`text-[11px] leading-snug ${
                     step.status === "done"
                       ? "text-(--dim) line-through decoration-(--border)"
                       : isCurrent
-                        ? "text-(--dim)"
+                        ? "text-(--fg)"
                         : "text-(--dim)"
                   }`}
                 >
                   {step.title}
                 </span>
-                {step.notes && (
-                  <span className="text-[10px] text-(--dim) truncate ml-auto shrink-0 max-w-30">
-                    {step.notes}
-                  </span>
-                )}
               </div>
             );
           })}

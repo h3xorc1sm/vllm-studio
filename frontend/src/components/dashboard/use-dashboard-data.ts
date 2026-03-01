@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useRealtimeStatus } from "@/hooks/use-realtime-status";
 import { useDashboardActions } from "./use-dashboard-actions";
@@ -14,8 +14,12 @@ export function useDashboardData() {
   const recipesState = useDashboardRecipes(currentProcess);
   const actions = useDashboardActions(recipesState.reload);
 
+  const prevStageRef = useRef(realtime.launchProgress?.stage);
   useEffect(() => {
-    if (DONE_STAGES.has(realtime.launchProgress?.stage || "")) {
+    const stage = realtime.launchProgress?.stage;
+    const prev = prevStageRef.current;
+    prevStageRef.current = stage;
+    if (stage !== prev && DONE_STAGES.has(stage || "")) {
       recipesState.reload();
     }
   }, [realtime.launchProgress?.stage, recipesState.reload]);

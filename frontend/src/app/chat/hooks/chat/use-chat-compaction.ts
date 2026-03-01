@@ -176,12 +176,12 @@ export function useChatCompaction(args: UseChatCompactionArgs) {
     await performCompaction({ reason: "manual", requireThreshold: false });
   }, [performCompaction]);
 
-  useEffect(() => {
+  const resetCompaction = useCallback(() => {
     lastCompactionSignatureRef.current = null;
     setCompactionError(null);
     setCompactionHistory([]);
     clearArtifactsCache();
-  }, [clearArtifactsCache, currentSessionId]);
+  }, [clearArtifactsCache]);
 
   // Auto-compaction effect: only check when streaming stops (not during streaming).
   const compactionAttemptedRef = useRef(false);
@@ -234,5 +234,5 @@ export function useChatCompaction(args: UseChatCompactionArgs) {
     !compacting &&
     !isLoading;
 
-  return { compactionHistory, compacting, compactionError, runManualCompaction, canManualCompact };
+  return { compactionHistory, compacting, compactionError, runManualCompaction, canManualCompact, resetCompaction };
 }

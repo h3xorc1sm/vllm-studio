@@ -61,6 +61,7 @@ markdownIt.renderer.rules.link_open = (
 export class MarkdownParser implements IMarkdownParser {
   readonly name = "markdown" as const;
   private readonly htmlCache = new LRUCache<string, string>(512);
+  private readonly normalizedCache = new LRUCache<string, string>(512);
 
   parse(input: string): MarkdownSegment[] {
     if (!input) return [];
@@ -128,6 +129,10 @@ export class MarkdownParser implements IMarkdownParser {
   normalizeForRender(content: string): string {
     if (!content) return "";
 
+    const key = hashString(content);
+    const cached = this.normalizedCache.get(key);
+    if (cached) return cached;
+
     let text = content;
 
     // Fix missing newlines where lowercase immediately precedes uppercase
@@ -166,6 +171,7 @@ export class MarkdownParser implements IMarkdownParser {
     // Fix mermaid without proper graph declaration
     text = text.replace(/```mermaid\s*(?:graph\s+)?(?=[A-Z]{1,3}\b)/gi, "```mermaid\ngraph ");
 
+    this.normalizedCache.set(key, text);
     return text;
   }
 }

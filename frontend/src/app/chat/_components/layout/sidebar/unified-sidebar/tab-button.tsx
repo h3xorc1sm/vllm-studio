@@ -18,14 +18,14 @@ export const TabButton = memo(
     return (
       <button
         onClick={onClick}
-        className={`px-2.5 py-1.5 rounded-md text-[11px] font-medium transition-colors whitespace-nowrap ${
+        className={`relative px-2.5 py-2 text-[11px] font-medium transition-colors whitespace-nowrap rounded-none border-b-2 ${
           active
             ? accent
-              ? "bg-(--hl2)/15 text-(--hl2)"
-              : "bg-(--surface) text-(--fg)"
+              ? "text-(--hl2) border-(--hl2)"
+              : "text-(--fg) border-(--fg)/70"
             : accent
-              ? "text-(--hl2)/70 hover:text-(--hl2) hover:bg-(--surface)"
-              : "text-(--dim) hover:text-(--fg) hover:bg-(--surface)"
+              ? "text-(--hl2)/60 border-transparent hover:text-(--hl2)"
+              : "text-(--dim) border-transparent hover:text-(--fg)"
         }`}
       >
         {label}

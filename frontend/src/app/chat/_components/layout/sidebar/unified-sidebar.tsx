@@ -18,10 +18,7 @@ export function UnifiedSidebar({
   onToggle,
   activeTab,
   onSetActiveTab,
-  activityContent,
-  contextContent,
-  artifactsContent,
-  filesContent,
+  panelContentMap,
   hasArtifacts,
   width,
   onWidthChange,
@@ -34,10 +31,7 @@ export function UnifiedSidebar({
         onToggle={onToggle}
         activeTab={activeTab}
         onSetActiveTab={onSetActiveTab}
-        activityContent={activityContent}
-        contextContent={contextContent}
-        artifactsContent={artifactsContent}
-        filesContent={filesContent}
+        panelContentMap={panelContentMap}
         hasArtifacts={hasArtifacts}
         width={width}
         onWidthChange={onWidthChange}

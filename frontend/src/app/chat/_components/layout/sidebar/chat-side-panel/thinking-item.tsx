@@ -1,55 +1,60 @@
 // CRITICAL
 "use client";
 
-import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { ChevronRight } from "lucide-react";
+import { memo, useCallback, useMemo, useState } from "react";
+
+const THINKING_PREVIEW_LIMIT = 260;
+
+interface ThinkingItemProps {
+  content?: string;
+  isActive?: boolean;
+}
 
 export const ThinkingItem = memo(
-  function ThinkingItem({ content, isActive }: { content?: string; isActive?: boolean }) {
+  function ThinkingItem({ content, isActive }: ThinkingItemProps) {
     const [expanded, setExpanded] = useState(false);
-    const contentRef = useRef<HTMLDivElement>(null);
     const toggleExpanded = useCallback(() => setExpanded((prev) => !prev), []);
 
-    useEffect(() => {
-      if (isActive && expanded && contentRef.current) {
-        contentRef.current.scrollTop = contentRef.current.scrollHeight;
-      }
-    }, [content, isActive, expanded]);
-
-    const preview = content ? content.trim().slice(0, 140) : "";
-    const hasPreviewOverflow = Boolean(content && content.trim().length > 140);
+    const fullText = useMemo(() => (content ?? "").trim(), [content]);
+    const compactText = useMemo(() => fullText.replace(/\s+/g, " "), [fullText]);
+    const hasContent = fullText.length > 0;
+    const isTruncated = compactText.length > THINKING_PREVIEW_LIMIT;
+    const previewText = compactText.slice(0, THINKING_PREVIEW_LIMIT);
+    const displayText = expanded || !isTruncated ? fullText : previewText;
 
     return (
-      <div className="relative pl-7 pr-1 py-2">
-        <span className="absolute left-3.5 top-3.5 h-1.25 w-1.25 rounded-full bg-(--fg)/35" />
-        <button
-          onClick={toggleExpanded}
-          className="flex items-baseline gap-2 w-full text-left"
-          disabled={!content}
-        >
-          <span className="text-base leading-tight text-(--fg)">{isActive ? "Thinking" : "Reasoning"}</span>
-          {isActive && <span className="text-sm text-(--fg)/60">Live</span>}
-          {content && (
-            <span className="ml-auto text-sm text-(--fg)/60">
-              {expanded ? "Less" : "More"}
-            </span>
+      <div className="flex items-start gap-2.5 pl-1">
+        <span
+          className={`mt-1.5 inline-flex h-1.5 w-1.5 shrink-0 rounded-full ${
+            isActive ? "bg-(--hl2) animate-pulse" : "bg-(--dim)/70"
+          }`}
+        />
+
+        <div className="min-w-0 flex-1">
+          {hasContent ? (
+            <p
+              className={`text-xs leading-relaxed break-words whitespace-pre-wrap ${
+                isActive ? "text-(--fg)/90" : "text-(--dim)"
+              }`}
+            >
+              {displayText}
+              {!expanded && isTruncated ? "…" : ""}
+            </p>
+          ) : (
+            <p className="text-xs leading-relaxed text-(--dim)">Thinking…</p>
           )}
-        </button>
 
-        {!expanded && preview && (
-          <p className="mt-1 text-sm leading-relaxed text-(--fg)/70 line-clamp-2">
-            {preview}
-            {hasPreviewOverflow ? "..." : ""}
-          </p>
-        )}
-
-        {expanded && content && (
-          <div
-            ref={contentRef}
-            className="mt-2 max-h-56 overflow-y-auto text-base leading-relaxed text-(--fg)/85 whitespace-pre-wrap break-words scrollbar-thin"
-          >
-            {content}
-          </div>
-        )}
+          {hasContent && isTruncated && (
+            <button
+              onClick={toggleExpanded}
+              className="mt-1 inline-flex items-center gap-1 text-[11px] text-(--dim) hover:text-(--fg) transition-colors"
+            >
+              <span>{expanded ? "Show less" : "Show more"}</span>
+              <ChevronRight className={`h-3 w-3 transition-transform ${expanded ? "-rotate-90" : "rotate-90"}`} />
+            </button>
+          )}
+        </div>
       </div>
     );
   },

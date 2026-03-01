@@ -138,6 +138,9 @@ export function useConfigs() {
       setData(configData);
       setCompatibilityReport(compatibility);
       setBackendOnline(true);
+      if (typeof window !== "undefined" && !localStorage.getItem("vllm-studio-setup-complete")) {
+        localStorage.setItem("vllm-studio-setup-complete", "true");
+      }
     } catch (e) {
       setError((e as Error).message);
       await checkBackendHealth();

@@ -3,7 +3,7 @@
 
 import { useCallback, useEffect, useRef } from "react";
 import type { MutableRefObject } from "react";
-import type { ChatMessage, ChatSessionDetail, StoredMessage } from "@/lib/types";
+import type { ChatMessage, ChatSessionDetail, StoredMessage, ToolResult } from "@/lib/types";
 
 export interface UseChatSessionBootstrapArgs {
   newChatFromUrl: boolean;
@@ -21,6 +21,9 @@ export interface UseChatSessionBootstrapArgs {
   loadAgentFiles: (args: { sessionId: string }) => void;
   clearPlan: () => void;
   clearAgentFiles: () => void;
+  setExecutingTools: (value: Set<string>) => void;
+  setToolResultsMap: (value: Map<string, ToolResult>) => void;
+  resetCompaction: () => void;
   messagesLengthRef: MutableRefObject<number>;
   sessionIdRef: MutableRefObject<string | null>;
   activeRunIdRef: MutableRefObject<string | null>;
@@ -61,6 +64,9 @@ export function useChatSessionBootstrap({
   loadAgentFiles,
   clearPlan,
   clearAgentFiles,
+  setExecutingTools,
+  setToolResultsMap,
+  resetCompaction,
   messagesLengthRef,
   sessionIdRef,
   activeRunIdRef,
@@ -79,7 +85,12 @@ export function useChatSessionBootstrap({
   const resetActiveSession = useCallback(() => {
     startNewSession();
     clearActiveRun();
-  }, [startNewSession, clearActiveRun]);
+    setExecutingTools(new Set());
+    setToolResultsMap(new Map());
+    clearPlan();
+    clearAgentFiles();
+    resetCompaction();
+  }, [startNewSession, clearActiveRun, setExecutingTools, setToolResultsMap, clearPlan, clearAgentFiles, resetCompaction]);
   const handledNewChatResetRef = useRef(false);
 
   // Load sessions on mount

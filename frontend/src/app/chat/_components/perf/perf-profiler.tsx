@@ -28,6 +28,12 @@ const recordPerfEntry = (entry: PerfEntry) => {
 };
 
 export function PerfProfiler({ id, children }: { id: string; children: ReactNode }) {
+  // Profiler adds noticeable overhead when rendering large lists.
+  // Keep it available in dev for diagnosis, but no-op in production.
+  if (process.env.NODE_ENV === "production") {
+    return children;
+  }
+
   return (
     <Profiler
       id={id}

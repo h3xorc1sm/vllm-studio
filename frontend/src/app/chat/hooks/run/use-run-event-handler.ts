@@ -4,6 +4,7 @@
 import { useCallback } from "react";
 import type { ChatRunStreamEvent } from "@/lib/api";
 import { useAppStore } from "@/store";
+import { pushStreamErrorToast } from "../../_components/layout/chat-page/controller/internal/use-stream-error-toast";
 import { normalizePlanSteps } from "../../_components/agent/agent-types";
 import type { RunMeta, UseRunEventHandlerArgs } from "./use-run-event-handler/types";
 
@@ -214,7 +215,12 @@ export function useRunEventHandler(args: UseRunEventHandlerArgs) {
           }
 
           if (data["status"] && data["status"] !== "completed") {
-            setStreamError(typeof data["error"] === "string" ? data["error"] : "Run failed");
+            const errorMsg = typeof data["error"] === "string" ? data["error"] : "Run failed";
+            setStreamError(errorMsg);
+            pushStreamErrorToast(errorMsg, {
+              activeRunId: activeRunIdRef.current,
+              lastEventTime: lastEventTimeRef.current,
+            });
           }
           const titleSessionId = currentSessionId || eventSessionId;
           if (

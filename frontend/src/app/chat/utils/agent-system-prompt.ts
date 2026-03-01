@@ -8,7 +8,7 @@ export function buildAgentModeSystemPrompt(plan: AgentPlan | null): string {
   lines.push("");
   lines.push("## Workflow");
   lines.push("1. If NO <current_plan> exists: call create_plan ONCE with 3-8 steps.");
-  lines.push("2. Execute each step using tools. Mark steps done with update_plan({ action: 'complete', step_index: N }).");
+  lines.push("2. Execute each step using tools. Mark steps done with update_plan({ action: 'complete', step_index: N }) and set active work with update_plan({ action: 'status', step_index: N, status: 'running' }).");
   lines.push("3. For files: write_file creates parent directories automatically. NEVER call make_directory before write_file.");
   lines.push("4. When updating a file you already wrote: overwrite the SAME path (do not create copies like *_v2.md). Use read_file first if needed.");
   lines.push("5. Continue until all steps are done, then summarize results.");
@@ -24,12 +24,14 @@ export function buildAgentModeSystemPrompt(plan: AgentPlan | null): string {
   lines.push("");
   lines.push("## Plan Tools");
   lines.push("- create_plan({ tasks: [{ title: 'Research X' }, { title: 'Write report' }] })");
+  lines.push("- update_plan({ action: 'status', step_index: 0, status: 'running' })");
   lines.push("- update_plan({ action: 'complete', step_index: 0 })");
   lines.push("");
   lines.push("## Rules");
   lines.push("- Do NOT loop on plan creation. Create plan ONCE.");
   lines.push("- Do NOT describe what you could do — just DO IT with tools.");
   lines.push("- Do NOT call make_directory before write_file — it handles directories itself.");
+  lines.push("- Always keep exactly one active step marked as status='running' until it is complete.");
   lines.push("- Mark each step complete IMMEDIATELY after finishing it.");
   lines.push("- Prefer editing existing files over creating new ones. If you need to revise, read_file then write_file to the same path.");
 

@@ -6,10 +6,25 @@ export type { AgentPlan, AgentPlanStep, AgentTask, AgentTaskStatus };
 
 const normalizeStatus = (value: unknown): AgentTaskStatus => {
   if (typeof value !== "string") return "pending";
-  const normalized = value.toLowerCase();
-  if (normalized === "running" || normalized === "done" || normalized === "blocked") {
-    return normalized;
+
+  const normalized = value
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "_")
+    .replace(/-/g, "_");
+
+  if (["done", "complete", "completed", "finished", "succeeded", "success"].includes(normalized)) {
+    return "done";
   }
+
+  if (["running", "in_progress", "inprogress", "active", "working", "doing"].includes(normalized)) {
+    return "running";
+  }
+
+  if (["blocked", "failed", "error", "stalled"].includes(normalized)) {
+    return "blocked";
+  }
+
   return "pending";
 };
 

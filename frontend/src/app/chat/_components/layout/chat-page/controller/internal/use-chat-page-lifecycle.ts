@@ -10,7 +10,6 @@ import type {
   AgentStateService,
   ChatPageStore,
   ChatSessionsService,
-  ChatUsageService,
   MessageMappingService,
   MessagesLengthRef,
   MessagesRef,
@@ -22,7 +21,6 @@ import type {
 export interface UseChatPageLifecycleArgs {
   store: ChatPageStore;
   sessions: ChatSessionsService;
-  usage: ChatUsageService;
   agentFiles: AgentFilesService;
   agentState: AgentStateService;
   messageMapping: MessageMappingService;
@@ -40,6 +38,7 @@ export interface UseChatPageLifecycleArgs {
   router: RouterLike;
 
   clearPlan: () => void;
+  resetCompaction: () => void;
   executingToolsSize: number;
   activeRunIdRef: MutableRefObject<string | null>;
   runAbortControllerRef: MutableRefObject<AbortController | null>;
@@ -53,7 +52,6 @@ export interface UseChatPageLifecycleArgs {
 export function useChatPageLifecycle({
   store,
   sessions,
-  usage,
   agentFiles,
   agentState,
   messageMapping,
@@ -67,6 +65,7 @@ export function useChatPageLifecycle({
   isLoading,
   router,
   clearPlan,
+  resetCompaction,
   executingToolsSize,
   activeRunIdRef,
   runAbortControllerRef,
@@ -84,18 +83,6 @@ export function useChatPageLifecycle({
   useEffect(() => {
     messagesLengthRef.current = messages.length;
   }, [messages.length, messagesLengthRef]);
-
-  useEffect(() => {
-    store.setExecutingTools(new Set());
-    store.setToolResultsMap(new Map());
-  }, [sessions.currentSessionId, store]);
-
-  useEffect(() => {
-    if (!sessions.currentSessionId) {
-      clearPlan();
-      clearAgentFiles();
-    }
-  }, [clearPlan, clearAgentFiles, sessions.currentSessionId]);
 
   useChatPageTimers({
     isLoading,
@@ -124,6 +111,9 @@ export function useChatPageLifecycle({
     loadAgentFiles,
     clearPlan,
     clearAgentFiles,
+    setExecutingTools: store.setExecutingTools,
+    setToolResultsMap: store.setToolResultsMap,
+    resetCompaction,
     messagesLengthRef,
     sessionIdRef,
     activeRunIdRef,
@@ -138,10 +128,4 @@ export function useChatPageLifecycle({
     void loadAgentFiles({ sessionId: sessions.currentSessionId });
   }, [loadAgentFiles, sessions.currentSessionId, store.agentMode]);
 
-  // Refresh usage when modal opens
-  useEffect(() => {
-    if (store.usageOpen && sessions.currentSessionId) {
-      usage.refreshUsage(sessions.currentSessionId);
-    }
-  }, [sessions.currentSessionId, store.usageOpen, usage]);
 }

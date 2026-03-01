@@ -9,7 +9,12 @@ const withBundleAnalyzer = bundleAnalyzer({
 const nextConfig: NextConfig = {
   output: "standalone",
   images: { unoptimized: true },
-  turbopack: { root: path.join(__dirname, "..") },
+  turbopack: {
+    root: path.join(__dirname, ".."),
+    resolveAlias: {
+      tailwindcss: path.join(__dirname, "node_modules/tailwindcss"),
+    },
+  },
   async redirects() {
     return [
       {

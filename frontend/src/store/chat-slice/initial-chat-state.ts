@@ -28,6 +28,7 @@ export const initialChatState: ChatState = {
   // Layout
   isMobile: false,
   userScrolledUp: false,
+  sidebar: { collapsed: false, mobileOpen: false },
 
   // Tooling
   toolsEnabled: false,

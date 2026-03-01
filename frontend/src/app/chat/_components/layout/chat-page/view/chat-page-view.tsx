@@ -50,10 +50,7 @@ export const ChatPageView = memo(function ChatPageView(props: ChatPageViewProps)
         activeTab={props.sidebarTab}
         onSetActiveTab={props.setSidebarTab}
         hasArtifacts={props.sessionArtifacts.length > 0}
-        activityContent={mobileSidebarContents.activityContent}
-        contextContent={mobileSidebarContents.contextContent}
-        artifactsContent={mobileSidebarContents.artifactsContent}
-        filesContent={mobileSidebarContents.filesContent}
+        panelContentMap={mobileSidebarContents}
       />
 
       <UnifiedSidebar
@@ -62,10 +59,7 @@ export const ChatPageView = memo(function ChatPageView(props: ChatPageViewProps)
         activeTab={props.sidebarTab}
         onSetActiveTab={props.setSidebarTab}
         hasArtifacts={props.sessionArtifacts.length > 0}
-        activityContent={desktopSidebarContents.activityContent}
-        contextContent={desktopSidebarContents.contextContent}
-        artifactsContent={desktopSidebarContents.artifactsContent}
-        filesContent={desktopSidebarContents.filesContent}
+        panelContentMap={desktopSidebarContents}
         width={props.sidebarWidth}
         onWidthChange={props.setSidebarWidth}
       >
@@ -102,6 +96,7 @@ export const ChatPageView = memo(function ChatPageView(props: ChatPageViewProps)
 
             <ChatActionButtons
               activityCount={props.activityCount}
+              hasActiveThinking={props.thinkingActive}
               onOpenActivity={props.openActivityPanel}
               onOpenContext={props.openContextPanel}
               onOpenSettings={openSettings}

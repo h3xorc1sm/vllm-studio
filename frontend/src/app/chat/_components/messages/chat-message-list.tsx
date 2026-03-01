@@ -184,7 +184,7 @@ export function ChatMessageList({
   const Footer = useCallback(() => {
     return (
       <div className="pt-4">
-        {isLoading && runStatusLine?.trim() && <ChatRunStatusLine line={runStatusLine} />}
+        {!isLoading && runStatusLine?.trim() && <ChatRunStatusLine line={runStatusLine} />}
 
         {hasAgentFiles && onOpenAgentFile && (
           <div className="mb-4">

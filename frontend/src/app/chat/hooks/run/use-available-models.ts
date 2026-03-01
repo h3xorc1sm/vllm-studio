@@ -1,8 +1,9 @@
 // CRITICAL
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import api from "@/lib/api";
+import { useAppStore } from "@/store";
 import type { ModelOption } from "@/app/chat/types";
 import { buildDisplayModelLabel, parseChatModelId } from "@/app/chat/types";
 
@@ -148,6 +149,21 @@ export function useAvailableModels({
           .sort((a, b) => a.id.localeCompare(b.id));
 
         setCatalogModels(mappedModels);
+
+        // Auto-select a model after initial load
+        const currentSelected = useAppStore.getState().selectedModel;
+        const selectedNorm = normalizeModelId(currentSelected);
+        if (!selectedNorm && mappedModels.length > 0) {
+          const lastModel = localStorage.getItem("vllm-studio-last-model") ?? "";
+          const mappedIds = new Set(mappedModels.map((m) => m.id));
+          if (lastModel && mappedIds.has(lastModel)) {
+            setSelectedModel(lastModel);
+          } else {
+            const activeModel = mappedModels.find((m) => m.active)?.id;
+            const fallback = activeModel ?? mappedModels[0].id;
+            if (fallback) setSelectedModel(fallback);
+          }
+        }
       } catch (err) {
         console.error("Failed to load models:", err);
         setCatalogModels([]);
@@ -155,9 +171,9 @@ export function useAvailableModels({
     };
 
     void loadModels();
-  }, []);
+  }, [setSelectedModel]);
 
-  useEffect(() => {
+  const mergedModels = useMemo(() => {
     const normalizedCustomModels = Array.from(
       new Set(
         (customChatModels ?? [])
@@ -184,33 +200,14 @@ export function useAvailableModels({
       );
     }
 
-    const mergedModels = Array.from(modelMap.values()).sort((a, b) => {
+    return Array.from(modelMap.values()).sort((a, b) => {
       const aLabel = buildDisplayModelLabel(a.id, a.provider);
       const bLabel = buildDisplayModelLabel(b.id, b.provider);
       return aLabel.localeCompare(bLabel);
     });
+  }, [catalogModels, customChatModels, selectedModel]);
+
+  useEffect(() => {
     setAvailableModels(mergedModels);
-
-    const hasLastModel =
-      selectedModelNormalized.length === 0
-        ? false
-        : modelMap.has(localStorage.getItem("vllm-studio-last-model") ?? "");
-
-    if (!selectedModelNormalized && mergedModels.length > 0 && hasLastModel) {
-      setSelectedModel(localStorage.getItem("vllm-studio-last-model") ?? "");
-      return;
-    }
-
-    if (!selectedModelNormalized && mergedModels.length > 0) {
-      const activeModel = mergedModels.find((model) => model.active)?.id;
-      const fallback = activeModel ?? mergedModels[0].id;
-      if (fallback && fallback !== selectedModelNormalized) {
-        setSelectedModel(fallback);
-      }
-    }
-
-    if (!selectedModelNormalized && mergedModels.length === 0) {
-      setSelectedModel("");
-    }
-  }, [catalogModels, customChatModels, selectedModel, setAvailableModels, setSelectedModel]);
+  }, [mergedModels, setAvailableModels]);
 }

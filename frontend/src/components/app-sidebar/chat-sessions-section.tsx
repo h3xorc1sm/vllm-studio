@@ -8,8 +8,7 @@ import type { ChatSession } from "@/lib/types";
 
 export function ChatSessionsSection({
   sessions,
-  open,
-  setOpen,
+  open: defaultOpen,
   isMobile,
   onCloseMobile,
   onNewChat,
@@ -17,13 +16,14 @@ export function ChatSessionsSection({
 }: {
   sessions: ChatSession[];
   open: boolean;
-  setOpen: (next: boolean) => void;
   isMobile: boolean;
   onCloseMobile: () => void;
   onNewChat: () => void;
   onDeleteSession: (sessionId: string, displayTitle: string) => void;
 }) {
   const [query, setQuery] = useState("");
+  const [localOpen, setLocalOpen] = useState(defaultOpen);
+  const open = defaultOpen || localOpen;
 
   const sessionRows = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -78,7 +78,7 @@ export function ChatSessionsSection({
       </button>
 
       <button
-        onClick={() => setOpen(!open)}
+        onClick={() => setLocalOpen(!open)}
         className="w-full flex items-center gap-2 px-3 py-1.5 text-(--dim) hover:text-(--fg) rounded-md hover:bg-(--surface) text-xs font-medium transition-colors"
       >
         <ChevronDown className={`h-3.5 w-3.5 transition-transform ${open ? "" : "-rotate-90"}`} />

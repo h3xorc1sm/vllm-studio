@@ -1,7 +1,7 @@
 // CRITICAL
 "use client";
 
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import type { Artifact, ChatMessage } from "@/lib/types";
 import { extractArtifacts } from "../../_components/artifacts/artifact-renderer";
 
@@ -19,7 +19,7 @@ export function useChatArtifacts(args: UseChatArtifactsArgs): {
   activeArtifact: Artifact | null;
   clearArtifactsCache: () => void;
 } {
-  const { messages, artifactsEnabled, currentSessionId, activeArtifactId, setActiveArtifactId } = args;
+  const { messages, artifactsEnabled, currentSessionId, activeArtifactId } = args;
 
   const emptyArtifacts = useMemo(() => [] as Artifact[], []);
   const emptyByMessage = useMemo(() => new Map<string, Artifact[]>(), []);
@@ -112,12 +112,6 @@ export function useChatArtifacts(args: UseChatArtifactsArgs): {
     () => sessionArtifacts.find((artifact) => artifact.id === activeArtifactId) ?? null,
     [activeArtifactId, sessionArtifacts],
   );
-
-  useEffect(() => {
-    if (activeArtifactId && !activeArtifact) {
-      setActiveArtifactId(null);
-    }
-  }, [activeArtifact, activeArtifactId, setActiveArtifactId]);
 
   return { sessionArtifacts, artifactsByMessage, activeArtifact, clearArtifactsCache };
 }

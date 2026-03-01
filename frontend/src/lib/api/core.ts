@@ -188,6 +188,13 @@ export function createApiCore(params: { baseUrl: string; useProxy: boolean }) {
           continue;
         }
 
+        // SSE comment lines (e.g. ": keepalive") — emit a synthetic event
+        // so the stream consumer can reset idle timers.
+        if (line.startsWith(":")) {
+          yield { event: "keepalive", data: {} };
+          continue;
+        }
+
         if (line.startsWith("event:")) {
           eventType = line.slice(6).trim();
           continue;

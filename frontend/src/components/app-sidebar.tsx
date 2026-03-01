@@ -5,7 +5,8 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback } from "react";
+import { useShallow } from "zustand/react/shallow";
 import api from "@/lib/api";
 import { useAppStore } from "@/store";
 import { ChatSessionsSection } from "./app-sidebar/chat-sessions-section";
@@ -19,94 +20,31 @@ interface AppSidebarProps {
 
 export function AppSidebar({ children }: AppSidebarProps) {
   const pathname = usePathname();
-  const [collapsed, setCollapsed] = useState(false);
-  const [isMobile, setIsMobile] = useState(false);
-  const [mobileOpen, setMobileOpen] = useState(false);
-  const [chatHistoryOpen, setChatHistoryOpen] = useState(pathname === "/chat");
-  const [hydrated, setHydrated] = useState(useAppStore.persist.hasHydrated());
-  const loadingSessionsRef = useRef(false);
   const router = useRouter();
-  const chatSessions = useAppStore((state) => state.sessions);
-  const setSessions = useAppStore((state) => state.setSessions);
-  const updateSessions = useAppStore((state) => state.updateSessions);
-  const currentSessionId = useAppStore((state) => state.currentSessionId);
-  const setCurrentSessionId = useAppStore((state) => state.setCurrentSessionId);
-  const setCurrentSessionTitle = useAppStore((state) => state.setCurrentSessionTitle);
 
-  useEffect(() => {
-    if (hydrated) return;
-    const unsubscribe = useAppStore.persist.onFinishHydration(() => {
-      setHydrated(true);
-    });
-    void useAppStore.persist.rehydrate();
-    return unsubscribe;
-  }, [hydrated]);
+  // Store selectors — no local state
+  const { collapsed, mobileOpen } = useAppStore(useShallow((s) => s.sidebar));
+  const isMobile = useAppStore((s) => s.isMobile);
+  const chatSessions = useAppStore((s) => s.sessions);
+  const currentSessionId = useAppStore((s) => s.currentSessionId);
+  const setSidebarCollapsed = useAppStore((s) => s.setSidebarCollapsed);
+  const setSidebarMobileOpen = useAppStore((s) => s.setSidebarMobileOpen);
+  const toggleSidebarCollapsed = useAppStore((s) => s.toggleSidebarCollapsed);
+  const updateSessions = useAppStore((s) => s.updateSessions);
+  const setCurrentSessionId = useAppStore((s) => s.setCurrentSessionId);
+  const setCurrentSessionTitle = useAppStore((s) => s.setCurrentSessionTitle);
 
-  // Detect mobile and restore collapsed state after mount
-  useEffect(() => {
-    const applyLayout = () => {
-      const mobile = window.innerWidth < 768;
-      setIsMobile(mobile);
-      if (mobile) {
-        setCollapsed(true);
-        return;
-      }
-      const saved = localStorage.getItem("app-sidebar-collapsed");
-      setCollapsed(saved === "true");
-    };
-    applyLayout();
-    window.addEventListener("resize", applyLayout);
-    return () => window.removeEventListener("resize", applyLayout);
-  }, []);
+  // Derived — no useState needed
+  const chatHistoryOpen = pathname === "/chat";
 
-  // Allow mobile sidebar control from chat page
-  useEffect(() => {
-    const handleToggle = (event: Event) => {
-      const custom = event as CustomEvent<{ open?: boolean }>;
-      const requested = custom?.detail?.open;
-      if (typeof requested === "boolean") {
-        setMobileOpen(requested);
-      } else {
-        setMobileOpen((current) => !current);
-      }
-    };
-    window.addEventListener("vllm:toggle-sidebar", handleToggle as EventListener);
-    return () => {
-      window.removeEventListener("vllm:toggle-sidebar", handleToggle as EventListener);
-    };
-  }, []);
+  const toggleCollapsed = useCallback(() => {
+    toggleSidebarCollapsed();
+  }, [toggleSidebarCollapsed]);
 
-  // Save collapsed state
-  const toggleCollapsed = () => {
-    const newVal = !collapsed;
-    setCollapsed(newVal);
-    if (!isMobile) {
-      localStorage.setItem("app-sidebar-collapsed", String(newVal));
-    }
-  };
-
-  useEffect(() => {
-    setChatHistoryOpen(pathname === "/chat");
-  }, [pathname]);
-
-  // Load chat sessions once after hydration so sidebar search/list is available across pages.
-  useEffect(() => {
-    if (!hydrated) return;
-    if (loadingSessionsRef.current) return;
-    loadingSessionsRef.current = true;
-    api
-      .getChatSessions()
-      .then((result) => setSessions(result.sessions || []))
-      .catch(() => setSessions([]))
-      .finally(() => {
-        loadingSessionsRef.current = false;
-      });
-  }, [hydrated, setSessions]);
-
-  const createNewChat = () => {
-    setMobileOpen(false);
+  const createNewChat = useCallback(() => {
+    setSidebarMobileOpen(false);
     router.push("/chat?new=1");
-  };
+  }, [setSidebarMobileOpen, router]);
 
   const handleDeleteSession = useCallback(
     async (sessionId: string, displayTitle: string) => {
@@ -148,7 +86,7 @@ export function AppSidebar({ children }: AppSidebarProps) {
       {isMobile && mobileOpen && (
         <div
           className="fixed inset-0 bg-black/60 z-40 animate-fade-in"
-          onClick={() => setMobileOpen(false)}
+          onClick={() => setSidebarMobileOpen(false)}
         />
       )}
 
@@ -165,7 +103,7 @@ export function AppSidebar({ children }: AppSidebarProps) {
       >
         {/* Logo */}
         <div
-          className={`flex items-center h-14 px-3 border-b border-(--border) ${collapsed && !isMobile ? "justify-center" : "gap-3"}`}
+          className={`flex items-center h-14 px-3 ${collapsed && !isMobile ? "justify-center" : "gap-3"}`}
         >
           <Image
             src="/mocks/logo-1.svg"
@@ -175,7 +113,7 @@ export function AppSidebar({ children }: AppSidebarProps) {
             className="rounded shrink-0"
           />
           {(!collapsed || isMobile) && (
-            <span className="font-semibold text-sm truncate">vLLM Studio</span>
+            <span className="font-medium text-sm truncate">vLLM Studio</span>
           )}
         </div>
 
@@ -190,14 +128,14 @@ export function AppSidebar({ children }: AppSidebarProps) {
                 <Link
                   href={item.href}
                   onClick={() => {
-                    if (isMobile) setMobileOpen(false);
+                    if (isMobile) setSidebarMobileOpen(false);
                   }}
                   className={`
                     flex items-center gap-3 px-3 py-2.5 rounded-lg mb-0.5 transition-colors
                     ${
                       isActive
-                        ? "bg-(--border) text-foreground"
-                        : "text-(--dim) hover:text-foreground hover:bg-(--border)"
+                        ? "bg-(--surface) text-(--fg)"
+                        : "text-(--dim) hover:text-(--fg) hover:bg-(--fg)/[0.06]"
                     }
                     ${collapsed && !isMobile ? "justify-center" : ""}
                   `}
@@ -205,7 +143,7 @@ export function AppSidebar({ children }: AppSidebarProps) {
                 >
                   <Icon className="h-5 w-5 shrink-0" strokeWidth={1.5} />
                   {(!collapsed || isMobile) && (
-                    <span className="text-sm font-medium">{item.label}</span>
+                    <span className="text-sm">{item.label}</span>
                   )}
                 </Link>
               </div>
@@ -214,13 +152,12 @@ export function AppSidebar({ children }: AppSidebarProps) {
 
           {/* Chat sessions section (after nav items) */}
           {(!collapsed || isMobile) && (
-            <div className="mt-3 pt-2 border-t border-(--border)/50">
+            <div className="mt-3 pt-2">
               <ChatSessionsSection
                 sessions={chatSessions}
                 open={chatHistoryOpen}
-                setOpen={setChatHistoryOpen}
                 isMobile={isMobile}
-                onCloseMobile={() => setMobileOpen(false)}
+                onCloseMobile={() => setSidebarMobileOpen(false)}
                 onNewChat={createNewChat}
                 onDeleteSession={handleDeleteSession}
               />
@@ -230,7 +167,7 @@ export function AppSidebar({ children }: AppSidebarProps) {
 
         {/* Status */}
         <div
-          className={`px-3 py-3 border-t border-(--border) ${collapsed && !isMobile ? "flex justify-center" : ""}`}
+          className={`px-3 py-3 ${collapsed && !isMobile ? "flex justify-center" : ""}`}
         >
           <SidebarStatus collapsed={collapsed} isMobile={isMobile} />
         </div>
@@ -239,7 +176,7 @@ export function AppSidebar({ children }: AppSidebarProps) {
         {!isMobile && (
           <button
             onClick={toggleCollapsed}
-            className="absolute -right-3 top-20 w-6 h-6 bg-(--bg) border border-(--border) rounded-full flex items-center justify-center hover:bg-(--border) hover:border-(--border) transition-colors shadow-lg shadow-black/50"
+            className="absolute -right-3 top-20 w-6 h-6 bg-(--surface) border border-(--border) rounded-full flex items-center justify-center hover:bg-(--fg)/10 transition-colors shadow-lg shadow-black/40"
           >
             {collapsed ? (
               <ChevronRight className="h-3.5 w-3.5 text-(--dim)" />
@@ -259,7 +196,7 @@ export function AppSidebar({ children }: AppSidebarProps) {
             style={{ paddingTop: "calc(0.5rem + env(safe-area-inset-top, 0))" }}
           >
             <button
-              onClick={() => setMobileOpen(true)}
+              onClick={() => setSidebarMobileOpen(true)}
               className="p-1 -ml-1 rounded hover:bg-(--accent)"
             >
               <Image

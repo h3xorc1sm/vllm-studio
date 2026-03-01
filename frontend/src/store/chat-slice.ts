@@ -88,6 +88,26 @@ export const createChatSlice: StateCreator<ChatSlice, [], [], ChatSlice> = (set)
   setIsMobile: (isMobile) => set({ isMobile }),
   setUserScrolledUp: (userScrolledUp) => set({ userScrolledUp }),
 
+  // Sidebar
+  setSidebarCollapsed: (collapsed) =>
+    set((state) => {
+      if (state.sidebar.collapsed === collapsed) return state;
+      return { sidebar: { ...state.sidebar, collapsed } };
+    }),
+  toggleSidebarCollapsed: () =>
+    set((state) => ({
+      sidebar: { ...state.sidebar, collapsed: !state.sidebar.collapsed },
+    })),
+  setSidebarMobileOpen: (mobileOpen) =>
+    set((state) => {
+      if (state.sidebar.mobileOpen === mobileOpen) return state;
+      return { sidebar: { ...state.sidebar, mobileOpen } };
+    }),
+  toggleSidebarMobileOpen: () =>
+    set((state) => ({
+      sidebar: { ...state.sidebar, mobileOpen: !state.sidebar.mobileOpen },
+    })),
+
   // Tooling
   setToolsEnabled: (toolsEnabled) => set({ toolsEnabled }),
   setArtifactsEnabled: (artifactsEnabled) => set({ artifactsEnabled }),

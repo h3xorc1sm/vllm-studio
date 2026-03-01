@@ -4,6 +4,8 @@
 import { useEffect, useRef } from "react";
 import { useRafThrottle } from "../ui/use-raf-throttle";
 
+const BOTTOM_STICKY_THRESHOLD_PX = 160;
+
 type UseChatScrollArgs = {
   isLoading: boolean;
   messageCount: number;
@@ -24,7 +26,7 @@ export function useChatScroll({ isLoading, messageCount }: UseChatScrollArgs): {
     if (!container) return;
     const { scrollTop, scrollHeight, clientHeight } = container;
     const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
-    userScrolledUpRef.current = distanceFromBottom >= 160;
+    userScrolledUpRef.current = distanceFromBottom >= BOTTOM_STICKY_THRESHOLD_PX;
   });
 
   const prevMessageCountRef = useRef(messageCount);
@@ -42,28 +44,38 @@ export function useChatScroll({ isLoading, messageCount }: UseChatScrollArgs): {
 
   // While streaming, the last assistant message grows without changing `messageCount`.
   // Keep the view pinned to bottom unless the user has scrolled up.
-  const streamingScrollHeightRef = useRef<number>(0);
+  // IMPORTANT: avoid polling scrollHeight (expensive) — use ResizeObserver instead.
+  const lastPinnedAtRef = useRef<number>(0);
   useEffect(() => {
     if (!isLoading) return;
     const container = messagesContainerRef.current;
     if (!container) return;
 
-    streamingScrollHeightRef.current = container.scrollHeight;
+    const endNode = messagesEndRef.current;
+    if (!endNode) return;
 
-    const tick = () => {
-      const c = messagesContainerRef.current;
-      if (!c) return;
-      const nextHeight = c.scrollHeight;
-      if (nextHeight !== streamingScrollHeightRef.current) {
-        streamingScrollHeightRef.current = nextHeight;
-        if (!userScrolledUpRef.current) {
-          messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
-        }
-      }
+    const maybePinToBottom = () => {
+      if (userScrolledUpRef.current) return;
+      const now = Date.now();
+      // Guard against ResizeObserver cascades triggering too many scroll operations.
+      if (now - lastPinnedAtRef.current < 80) return;
+      lastPinnedAtRef.current = now;
+      endNode.scrollIntoView({ behavior: "auto" });
     };
 
-    const interval = window.setInterval(tick, 120);
-    return () => window.clearInterval(interval);
+    const ro = new ResizeObserver(() => {
+      // Schedule after layout; avoids scroll jitter during streaming.
+      window.requestAnimationFrame(maybePinToBottom);
+    });
+
+    ro.observe(container);
+
+    // Initial pin when streaming starts.
+    window.requestAnimationFrame(maybePinToBottom);
+
+    return () => {
+      ro.disconnect();
+    };
   }, [isLoading]);
 
   return {

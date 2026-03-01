@@ -3,7 +3,8 @@
 
 import { GripVertical, PanelRightClose } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { SidebarPaneProps } from "./types";
+import { buildSidebarPanelInstances, resolveSidebarActiveTab, resolveSidebarPanelContent } from "./panel-registry";
+import type { SidebarPaneProps, SidebarTab } from "./types";
 import { TabButton } from "./tab-button";
 
 const MIN_WIDTH = 280;
@@ -15,10 +16,7 @@ export function SidebarPane({
   onToggle,
   activeTab,
   onSetActiveTab,
-  activityContent,
-  contextContent,
-  artifactsContent,
-  filesContent,
+  panelContentMap,
   hasArtifacts,
   width: controlledWidth,
   onWidthChange,
@@ -103,39 +101,39 @@ export function SidebarPane({
     };
   }, [commitWidth, isResizing]);
 
-  const handleSetActivity = useCallback(() => onSetActiveTab("activity"), [onSetActiveTab]);
-  const handleSetContext = useCallback(() => onSetActiveTab("context"), [onSetActiveTab]);
-  const handleSetArtifacts = useCallback(() => onSetActiveTab("artifacts"), [onSetActiveTab]);
-  const handleSetFiles = useCallback(() => onSetActiveTab("files"), [onSetActiveTab]);
+  const panels = useMemo(
+    () => buildSidebarPanelInstances("desktop", hasArtifacts, panelContentMap),
+    [hasArtifacts, panelContentMap],
+  );
+  const resolvedActiveTab = useMemo(() => resolveSidebarActiveTab(activeTab, panels), [activeTab, panels]);
 
-  const activeContent = useMemo(() => {
-    switch (activeTab) {
-      case "activity":
-        return activityContent;
-      case "context":
-        return contextContent;
-      case "artifacts":
-        return artifactsContent;
-      case "files":
-        return filesContent ?? null;
-      default:
-        return activityContent;
-    }
-  }, [activeTab, activityContent, artifactsContent, contextContent, filesContent]);
+  const activeContent = useMemo(
+    () => resolveSidebarPanelContent(resolvedActiveTab, panels),
+    [panels, resolvedActiveTab],
+  );
+
+  const setActiveTab = useCallback(
+    (tab: SidebarTab) => {
+      if (tab !== resolvedActiveTab) onSetActiveTab(tab);
+    },
+    [onSetActiveTab, resolvedActiveTab],
+  );
 
   if (!isOpen) return null;
 
   return (
     <>
       <div
-        className="hidden md:flex shrink-0 flex-col h-full border-l border-(--border) bg-(--bg) relative shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
+        className="hidden md:flex shrink-0 flex-col h-full bg-(--bg) relative border-l border-(--border)"
         style={{
           width: `${displayWidth}px`,
-          backgroundImage:
-            "linear-gradient(180deg, var(--bg), var(--surface))",
+          backgroundImage: "linear-gradient(180deg, var(--surface), var(--bg))",
         }}
       >
-        <div className="absolute inset-0 border-l border-(--border)" />
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{ boxShadow: "inset 1px 0 0 rgba(255,255,255,0.05)" }}
+        />
 
         <div
           className={`absolute left-0 top-0 bottom-0 w-1 cursor-col-resize z-10 group flex items-center justify-center ${
@@ -152,17 +150,25 @@ export function SidebarPane({
           </div>
         </div>
 
-        <div className="relative flex items-center justify-between px-2 py-1.5 border-b border-(--border)">
-          <div className="flex items-center gap-0.5 overflow-x-auto scrollbar-hide">
-            <TabButton active={activeTab === "activity"} onClick={handleSetActivity} label="Activity" />
-            <TabButton active={activeTab === "context"} onClick={handleSetContext} label="Context" />
-            {hasArtifacts && <TabButton active={activeTab === "artifacts"} onClick={handleSetArtifacts} label="Preview" />}
-            <div className="w-px h-4 bg-(--border) mx-1" />
-            <TabButton active={activeTab === "files"} onClick={handleSetFiles} label="Files" accent />
+        <div className="relative flex items-center justify-between px-2 border-b border-(--border)">
+          <div className="flex items-center gap-0 overflow-x-auto scrollbar-hide">
+            {panels.map((panel) => (
+              <TabButton
+                key={panel.id}
+                active={resolvedActiveTab === panel.id}
+                onClick={() => setActiveTab(panel.id)}
+                label={panel.label}
+                accent={panel.accent}
+              />
+            ))}
           </div>
 
           <div className="flex items-center gap-1 shrink-0 ml-2">
-            <button onClick={onToggle} className="p-1.5 rounded hover:bg-(--border) text-(--dim)" title="Close sidebar">
+            <button
+              onClick={onToggle}
+              className="p-1.5 rounded-lg hover:bg-(--fg)/[0.06] text-(--dim) transition-colors"
+              title="Close sidebar"
+            >
               <PanelRightClose className="h-4 w-4" />
             </button>
           </div>

@@ -33,6 +33,11 @@ export interface ChatState {
   isMobile: boolean;
   userScrolledUp: boolean;
 
+  sidebar: {
+    collapsed: boolean;
+    mobileOpen: boolean;
+  };
+
   toolsEnabled: boolean;
   artifactsEnabled: boolean;
   executingTools: Set<string>;
@@ -130,6 +135,11 @@ export interface ChatActions {
 
   setIsMobile: (isMobile: boolean) => void;
   setUserScrolledUp: (userScrolledUp: boolean) => void;
+
+  setSidebarCollapsed: (collapsed: boolean) => void;
+  toggleSidebarCollapsed: () => void;
+  setSidebarMobileOpen: (open: boolean) => void;
+  toggleSidebarMobileOpen: () => void;
 
   setToolsEnabled: (toolsEnabled: boolean) => void;
   setArtifactsEnabled: (artifactsEnabled: boolean) => void;

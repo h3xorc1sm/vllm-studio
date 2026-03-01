@@ -14,6 +14,7 @@ import {
   getMermaid,
   looksLikeMermaidDiagram,
   sanitizeMermaidCode,
+  summarizeMermaidError,
 } from "@/lib/mermaid";
 import { useAppStore } from "@/store";
 
@@ -67,7 +68,7 @@ const MermaidDiagram = memo(function MermaidDiagram({ code }: { code: string }) 
         setMermaidState(id, svg, null);
       } catch (e) {
         if (seq !== renderSeqRef.current) return;
-        setMermaidState(id, "", e instanceof Error ? e.message : "Failed to render diagram");
+        setMermaidState(id, "", summarizeMermaidError(e));
       }
     };
 
@@ -82,13 +83,12 @@ const MermaidDiagram = memo(function MermaidDiagram({ code }: { code: string }) 
 
   if (error) {
     return (
-      <div className="my-3 p-4 rounded-lg border border-red-500/30 bg-red-500/10">
-        <div className="flex items-center gap-2 text-red-400 text-sm mb-2">
-          <AlertCircle className="h-4 w-4" />
-          <span>Diagram Error</span>
+      <div className="my-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 max-w-full overflow-hidden">
+        <div className="flex items-center gap-2 text-red-300 text-xs leading-5">
+          <AlertCircle className="h-4 w-4 shrink-0" />
+          <span className="font-medium shrink-0">Diagram preview unavailable</span>
+          <span className="min-w-0 truncate text-red-200/90">{error}</span>
         </div>
-        <div className="text-xs text-red-300 mb-2 break-words">{error}</div>
-        <pre className="text-xs text-(--dim) overflow-x-auto">{code}</pre>
       </div>
     );
   }
@@ -142,15 +142,15 @@ const MarkdownBlock = memo(function MarkdownBlock({ html }: MarkdownBlockProps) 
 });
 
 function MessageRendererBase({ content, isStreaming }: MessageRendererProps) {
-  const { service: parsingService, renderMarkdown } = useMessageParsing();
+  const { parse, renderMarkdown } = useMessageParsing();
 
   const parsed = useMemo(() => {
     if (isStreaming) return null;
-    return parsingService.parse(content, {
+    return parse(content, {
       isStreaming: false,
       extractArtifacts: false,
     });
-  }, [parsingService, content, isStreaming]);
+  }, [parse, content, isStreaming]);
 
   const mainContent = parsed?.thinking.mainContent ?? content;
   const segments = parsed?.segments ?? [];

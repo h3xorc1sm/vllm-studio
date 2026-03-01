@@ -1,7 +1,7 @@
 // CRITICAL
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import {
   Activity,
@@ -63,21 +63,8 @@ export default function DistributedPage() {
 
   const cluster = useDistributedCluster(scopeModelId, totalLayers);
 
-  useEffect(() => {
-    if (scopeModelId.trim()) return;
-    const firstModel = cluster.status?.models[0];
-    if (firstModel) {
-      setScopeModelId(firstModel);
-    }
-  }, [cluster.status?.models, scopeModelId]);
-
-  useEffect(() => {
-    if (allocationForm.node_id) return;
-    const firstNode = cluster.nodes[0]?.node_id ?? "";
-    if (firstNode) {
-      setAllocationForm((current) => ({ ...current, node_id: firstNode }));
-    }
-  }, [allocationForm.node_id, cluster.nodes]);
+  const effectiveScopeModelId = scopeModelId.trim() || cluster.status?.models[0] || "";
+  const effectiveNodeId = allocationForm.node_id || cluster.nodes[0]?.node_id || "";
 
   const handleRegisterNode = async (event: FormEvent) => {
     event.preventDefault();
@@ -109,12 +96,12 @@ export default function DistributedPage() {
 
   const handleSetAllocation = async (event: FormEvent) => {
     event.preventDefault();
-    const modelId = scopeModelId.trim();
-    if (!modelId) {
+    if (!effectiveScopeModelId) {
       setActionError("Model scope is required before setting allocations");
       return;
     }
-    if (!allocationForm.node_id.trim()) {
+    const nodeId = effectiveNodeId.trim();
+    if (!nodeId) {
       setActionError("node_id is required");
       return;
     }
@@ -122,13 +109,13 @@ export default function DistributedPage() {
     setActionError(null);
     setActionMessage(null);
     try {
-      await api.setDistributedAllocation(allocationForm.node_id.trim(), {
-        model_id: modelId,
+      await api.setDistributedAllocation(nodeId, {
+        model_id: effectiveScopeModelId,
         start_layer: Number(allocationForm.start_layer),
         end_layer: Number(allocationForm.end_layer),
       });
       setActionMessage(
-        `Allocation set for ${allocationForm.node_id.trim()} [${allocationForm.start_layer}, ${allocationForm.end_layer})`,
+        `Allocation set for ${nodeId} [${allocationForm.start_layer}, ${allocationForm.end_layer})`,
       );
       await cluster.refresh();
     } catch (error) {
@@ -139,12 +126,11 @@ export default function DistributedPage() {
   };
 
   const handleClearAllocation = async (nodeId: string) => {
-    const modelId = scopeModelId.trim();
-    if (!modelId) return;
+    if (!effectiveScopeModelId) return;
     setActionError(null);
     setActionMessage(null);
     try {
-      await api.clearDistributedAllocation(nodeId, modelId);
+      await api.clearDistributedAllocation(nodeId, effectiveScopeModelId);
       setActionMessage(`Removed allocation for ${nodeId}`);
       await cluster.refresh();
     } catch (error) {
@@ -426,7 +412,7 @@ export default function DistributedPage() {
               <div className="text-sm">Set Allocation</div>
               <div className="grid grid-cols-3 gap-2">
                 <select
-                  value={allocationForm.node_id}
+                  value={effectiveNodeId}
                   onChange={(event) =>
                     setAllocationForm((v) => ({ ...v, node_id: event.target.value }))
                   }
@@ -458,7 +444,7 @@ export default function DistributedPage() {
               </div>
               <button
                 type="submit"
-                disabled={savingAllocation || !scopeModelId.trim()}
+                disabled={savingAllocation || !effectiveScopeModelId}
                 className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-(--hl1) text-white text-sm disabled:opacity-60"
               >
                 {savingAllocation ? <Activity className="h-4 w-4 animate-spin" /> : null}
@@ -469,7 +455,7 @@ export default function DistributedPage() {
 
           <UiInsetSurface className="space-y-3">
             <div className="text-sm">Topology</div>
-            {!scopeModelId.trim() ? (
+            {!effectiveScopeModelId ? (
               <p className="text-xs text-(--dim)">
                 Set a model scope to load topology and allocations.
               </p>
@@ -500,7 +486,7 @@ export default function DistributedPage() {
 
         <UiInsetSurface className="overflow-hidden p-0">
           <div className="px-4 py-3 border-b border-(--border) text-sm">
-            Allocations {scopeModelId.trim() ? `(${scopeModelId.trim()})` : ""}
+            Allocations {effectiveScopeModelId ? `(${effectiveScopeModelId})` : ""}
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">

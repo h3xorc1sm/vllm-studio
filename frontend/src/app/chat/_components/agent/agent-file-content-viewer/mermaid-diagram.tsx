@@ -3,7 +3,12 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 import { AlertCircle } from "lucide-react";
-import { getMermaid, looksLikeMermaidDiagram, sanitizeMermaidCode } from "@/lib/mermaid";
+import {
+  getMermaid,
+  looksLikeMermaidDiagram,
+  sanitizeMermaidCode,
+  summarizeMermaidError,
+} from "@/lib/mermaid";
 
 export function MermaidDiagram({ code }: { code: string }) {
   const id = useId().replace(/:/g, "_");
@@ -33,7 +38,7 @@ export function MermaidDiagram({ code }: { code: string }) {
         setState({ svg, error: null });
       } catch (e) {
         if (seq !== renderSeqRef.current) return;
-        setState({ svg: "", error: e instanceof Error ? e.message : "Failed to render diagram" });
+        setState({ svg: "", error: summarizeMermaidError(e) });
       }
     };
 
@@ -43,13 +48,12 @@ export function MermaidDiagram({ code }: { code: string }) {
 
   if (state.error) {
     return (
-      <div className="my-3 p-4 rounded-lg border border-red-500/30 bg-red-500/10">
-        <div className="flex items-center gap-2 text-red-400 text-sm mb-2">
-          <AlertCircle className="h-4 w-4" />
-          <span>Diagram Error</span>
+      <div className="my-3 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 max-w-full overflow-hidden">
+        <div className="flex items-center gap-2 text-red-300 text-xs leading-5">
+          <AlertCircle className="h-4 w-4 shrink-0" />
+          <span className="font-medium shrink-0">Diagram preview unavailable</span>
+          <span className="min-w-0 truncate text-red-200/90">{state.error}</span>
         </div>
-        <div className="text-xs text-red-300 mb-2 break-words">{state.error}</div>
-        <pre className="text-xs text-(--dim) overflow-x-auto">{code}</pre>
       </div>
     );
   }

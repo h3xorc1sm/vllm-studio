@@ -59,8 +59,39 @@ export default function RootLayout({
             __html: `
               try {
                 var s = JSON.parse(localStorage.getItem('vllm-studio-chat-state') || '{}');
-                var t = (s.state || s).themeId;
+                var state = (s.state || s);
+                var t = state.themeId;
                 if (t) document.documentElement.setAttribute('data-theme', t);
+
+                var fontFamilyId = state.fontFamilyId;
+                var fontSizeId = state.fontSizeId;
+
+                var fontFamilyMap = {
+                  geist: "var(--font-geist-sans), system-ui, sans-serif",
+                  system: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+                  serif: "ui-serif, Georgia, Cambria, 'Times New Roman', Times, serif",
+                  mono: "var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
+                  rounded: "ui-rounded, 'SF Pro Rounded', 'Hiragino Maru Gothic ProN', 'Avenir Next Rounded', system-ui, sans-serif"
+                };
+
+                var fontSizeMap = {
+                  sm: "14px",
+                  md: "16px",
+                  lg: "17px",
+                  xl: "18px",
+                  '2xl': "20px"
+                };
+
+                if (fontFamilyId && fontFamilyMap[fontFamilyId]) {
+                  document.documentElement.style.setProperty('--font-sans', fontFamilyMap[fontFamilyId]);
+                } else {
+                  document.documentElement.style.setProperty('--font-sans', fontFamilyMap.geist);
+                }
+                if (fontSizeId && fontSizeMap[fontSizeId]) {
+                  document.documentElement.style.setProperty('--app-font-size', fontSizeMap[fontSizeId]);
+                } else {
+                  document.documentElement.style.setProperty('--app-font-size', fontSizeMap.md);
+                }
               } catch(e) {}
               const isProd = ${process.env.NODE_ENV === "production" ? "true" : "false"};
               if (isProd && 'serviceWorker' in navigator) {

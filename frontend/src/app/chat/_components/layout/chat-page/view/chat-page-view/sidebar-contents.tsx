@@ -2,6 +2,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import type { SidebarPanelContentMap } from "../../../sidebar/unified-sidebar/types";
 import { PerfProfiler } from "../../../../perf/perf-profiler";
 import { ActivityPanel, ContextPanel } from "../../../sidebar/chat-side-panel";
 import { ArtifactPreviewPanel } from "../../../../artifacts/artifact-preview-panel";
@@ -51,16 +52,11 @@ export type SidebarContentsProps = {
   hasSession: boolean;
 };
 
-export function buildSidebarContents(props: SidebarContentsProps): {
-  activityContent: ReactNode;
-  contextContent: ReactNode;
-  artifactsContent: ReactNode;
-  filesContent: ReactNode;
-} {
+export function buildSidebarContents(props: SidebarContentsProps): SidebarPanelContentMap {
   const prefix = props.variant === "mobile" ? "mobile-" : "";
 
   return {
-    activityContent: (
+    activity: (
       <div className="h-full flex flex-col">
         <PerfProfiler id={`${prefix}activity-panel`}>
           <ActivityPanel
@@ -72,7 +68,7 @@ export function buildSidebarContents(props: SidebarContentsProps): {
         </PerfProfiler>
       </div>
     ),
-    contextContent: (
+    context: (
       <div className="p-4 overflow-y-auto h-full">
         <PerfProfiler id={`${prefix}context-panel`}>
           <ContextPanel
@@ -88,12 +84,12 @@ export function buildSidebarContents(props: SidebarContentsProps): {
         </PerfProfiler>
       </div>
     ),
-    artifactsContent: (
+    artifacts: (
       <PerfProfiler id={`${prefix}artifact-preview-panel`}>
         <ArtifactPreviewPanel artifacts={props.sessionArtifacts} />
       </PerfProfiler>
     ),
-    filesContent: (
+    files: (
       <PerfProfiler id={`${prefix}agent-files-panel`}>
         <AgentFilesPanel
           files={props.agentFiles}

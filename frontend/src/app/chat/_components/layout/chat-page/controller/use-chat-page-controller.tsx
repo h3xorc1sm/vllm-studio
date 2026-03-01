@@ -1,7 +1,7 @@
 // CRITICAL
 "use client";
 
-import { useEffect, useRef, useCallback, useMemo, useState } from "react";
+import { useRef, useCallback, useMemo, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import type { ChatMessage } from "@/lib/types";
 import * as Hooks from "../../../../hooks";
@@ -12,7 +12,6 @@ import type { ChatPageViewProps } from "../view/chat-page-view/types";
 import { useChatPageEvents } from "./use-chat-page-events";
 import { useChatPageStore } from "./internal/use-chat-page-store";
 import { useThinkingSnippet } from "./internal/use-thinking-snippet";
-import { useStreamErrorToast } from "./internal/use-stream-error-toast";
 import { useChatPageLifecycle } from "./internal/use-chat-page-lifecycle";
 import { useChatPageServices } from "./internal/use-chat-page-services";
 import { useChatPageContext } from "./internal/use-chat-page-context";
@@ -122,15 +121,6 @@ export function useChatPageController(): ChatPageViewProps {
     messages,
   });
 
-  useStreamErrorToast({
-    streamError,
-    currentSessionId: sessions.currentSessionId,
-    selectedModel: store.selectedModel || "",
-    executingTools: tools.executingTools,
-    lastEventTimeRef,
-    activeRunIdRef,
-  });
-
   const {
     messagesContainerRef,
     messagesEndRef,
@@ -156,13 +146,12 @@ export function useChatPageController(): ChatPageViewProps {
   });
 
   const { contextStats, contextUsageLabel, contextBreakdown, formatTokenCount } = context;
-  const { compactionHistory, compacting, compactionError, runManualCompaction, canManualCompact } =
+  const { compactionHistory, compacting, compactionError, runManualCompaction, canManualCompact, resetCompaction } =
     compaction;
 
   useChatPageLifecycle({
     store,
     sessions,
-    usage,
     agentFiles: agentFilesService,
     agentState,
     messageMapping,
@@ -176,6 +165,7 @@ export function useChatPageController(): ChatPageViewProps {
     isLoading,
     router,
     clearPlan,
+    resetCompaction,
     executingToolsSize: tools.executingTools.size,
     activeRunIdRef,
     runAbortControllerRef,
@@ -185,8 +175,24 @@ export function useChatPageController(): ChatPageViewProps {
     setLastSessionId,
   });
 
+  // Wrap setUsageOpen to refresh usage when opening the modal
+  const setUsageOpenWithRefresh = useCallback(
+    (open: boolean) => {
+      store.setUsageOpen(open);
+      if (open && sessions.currentSessionId) {
+        usage.refreshUsage(sessions.currentSessionId);
+      }
+    },
+    [store, sessions.currentSessionId, usage],
+  );
+
+  const storeWithUsageRefresh = useMemo(
+    () => ({ ...store, setUsageOpen: setUsageOpenWithRefresh }),
+    [store, setUsageOpenWithRefresh],
+  );
+
   return useChatPageControllerTail({
-    store,
+    store: storeWithUsageRefresh,
     sessions,
     tools,
     agentFiles: agentFilesService,

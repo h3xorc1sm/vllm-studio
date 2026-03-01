@@ -15,6 +15,7 @@ import {
   type UploadedAttachment,
 } from "@/app/chat/utils/chat-attachments";
 import { buildRunSystemPrompt } from "./run-system-prompt";
+import { pushStreamErrorToast } from "./controller/internal/use-stream-error-toast";
 
 export interface UseChatSendUserMessageArgs {
   selectedModel: string;
@@ -209,7 +210,9 @@ export function useChatSendUserMessage({
           const session = await createSession("New Chat", selectedModel);
           if (!session) {
             removeLocalMessage();
-            setStreamError("Failed to start a new chat session");
+            const errMsg = "Failed to start a new chat session";
+            setStreamError(errMsg);
+            pushStreamErrorToast(errMsg, { activeRunId: null, lastEventTime: 0 });
             return;
           }
           sessionId = session.id;
@@ -238,7 +241,9 @@ export function useChatSendUserMessage({
           }
           if (failures.length > 0) {
             const names = failures.map((failure) => failure.name).join(", ");
-            setStreamError(`Failed to upload ${failures.length} attachment(s): ${names}`);
+            const uploadErrMsg = `Failed to upload ${failures.length} attachment(s): ${names}`;
+            setStreamError(uploadErrMsg);
+            pushStreamErrorToast(uploadErrMsg, { activeRunId: null, lastEventTime: 0 });
             if (uploaded.length === 0 && payloadImages.length === 0) {
               removeLocalMessage();
               return;

@@ -3,7 +3,8 @@
 
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { GripVertical, PanelRightClose } from "lucide-react";
-import type { SidebarTab } from "./unified-sidebar";
+import { buildSidebarPanelInstances, resolveSidebarActiveTab, resolveSidebarPanelContent } from "./unified-sidebar/panel-registry";
+import type { SidebarPanelContentMap, SidebarTab } from "./unified-sidebar/types";
 
 interface MobileResultsDrawerProps {
   isOpen: boolean;
@@ -11,10 +12,7 @@ interface MobileResultsDrawerProps {
   activeTab: SidebarTab;
   onSetActiveTab: (tab: SidebarTab) => void;
   hasArtifacts: boolean;
-  activityContent: React.ReactNode;
-  contextContent: React.ReactNode;
-  artifactsContent: React.ReactNode;
-  filesContent: React.ReactNode;
+  panelContentMap: SidebarPanelContentMap;
 }
 
 const MIN_DRAWER_HEIGHT = 220;
@@ -22,56 +20,31 @@ const DEFAULT_DRAWER_RATIO = 0.72;
 const MAX_DRAWER_RATIO = 0.92;
 const FALLBACK_DRAWER_HEIGHT = 420;
 
-const TAB_LABELS: Record<SidebarTab, string> = {
-  activity: "Activity",
-  context: "Context",
-  artifacts: "Preview",
-  files: "Files",
-};
-
 export const MobileResultsDrawer = memo(function MobileResultsDrawer({
   isOpen,
   onClose,
   activeTab,
   onSetActiveTab,
   hasArtifacts,
-  activityContent,
-  contextContent,
-  artifactsContent,
-  filesContent,
+  panelContentMap,
 }: MobileResultsDrawerProps) {
-  const tabs = useMemo(() => {
-    const list: Array<{ id: SidebarTab; enabled: boolean }> = [
-      { id: "activity", enabled: true },
-      { id: "files", enabled: true },
-      { id: "artifacts", enabled: hasArtifacts },
-      { id: "context", enabled: true },
-    ];
-    return list;
-  }, [hasArtifacts]);
+  const panels = useMemo(
+    () => buildSidebarPanelInstances("mobile", hasArtifacts, panelContentMap),
+    [hasArtifacts, panelContentMap],
+  );
+  const resolvedActiveTab = useMemo(() => resolveSidebarActiveTab(activeTab, panels), [activeTab, panels]);
 
   const handleSelect = useCallback(
-    (tab: SidebarTab, enabled: boolean) => {
-      if (!enabled) return;
-      onSetActiveTab(tab);
+    (tab: SidebarTab) => {
+      if (tab !== resolvedActiveTab) onSetActiveTab(tab);
     },
-    [onSetActiveTab],
+    [onSetActiveTab, resolvedActiveTab],
   );
 
-  const content = useMemo(() => {
-    switch (activeTab) {
-      case "activity":
-        return activityContent;
-      case "files":
-        return filesContent;
-      case "artifacts":
-        return hasArtifacts ? artifactsContent : null;
-      case "context":
-        return contextContent;
-      default:
-        return activityContent;
-    }
-  }, [activeTab, activityContent, artifactsContent, contextContent, filesContent, hasArtifacts]);
+  const content = useMemo(
+    () => resolveSidebarPanelContent(resolvedActiveTab, panels),
+    [panels, resolvedActiveTab],
+  );
 
   const computeMaxHeight = useCallback(() => {
     if (typeof window === "undefined") return 0;
@@ -86,64 +59,57 @@ export const MobileResultsDrawer = memo(function MobileResultsDrawer({
   }, [computeMaxHeight]);
 
   const [drawerHeightPx, setDrawerHeightPx] = useState<number>(() => {
-    // Initialize with a function to avoid setState in effect
     if (typeof window === "undefined") return FALLBACK_DRAWER_HEIGHT;
     const maxHeight = Math.floor(window.innerHeight * MAX_DRAWER_RATIO);
     const ratioHeight = Math.floor(window.innerHeight * DEFAULT_DRAWER_RATIO);
-    const defaultHeight = Math.max(MIN_DRAWER_HEIGHT, Math.min(ratioHeight, maxHeight || ratioHeight));
-    return defaultHeight;
+    return Math.max(MIN_DRAWER_HEIGHT, Math.min(ratioHeight, maxHeight || ratioHeight));
   });
+  const [isDragging, setIsDragging] = useState(false);
+
   const heightRef = useRef<number>(drawerHeightPx);
+  const dragRef = useRef<{ startY: number; startHeight: number } | null>(null);
+  const animationRef = useRef<number | null>(null);
+  const isDraggingRef = useRef(false);
+  const isOpenRef = useRef(isOpen);
+  const onCloseRef = useRef(onClose);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
     heightRef.current = drawerHeightPx;
   }, [drawerHeightPx]);
 
-  const [isDragging, setIsDragging] = useState(false);
-  const dragRef = useRef<{ startY: number; startHeight: number } | null>(null);
-  const animationRef = useRef<number | null>(null);
+  useEffect(() => {
+    isDraggingRef.current = isDragging;
+  }, [isDragging]);
+
+  useEffect(() => {
+    isOpenRef.current = isOpen;
+  }, [isOpen]);
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    const handleResize = () => {
+    const onResize = () => {
       const maxHeight = computeMaxHeight();
-      setDrawerHeightPx((current) =>
-        maxHeight === 0 ? current : Math.min(Math.max(current, MIN_DRAWER_HEIGHT), maxHeight),
-      );
+      if (maxHeight === 0) return;
+      setDrawerHeightPx((current) => {
+        const clamped = Math.min(Math.max(current, MIN_DRAWER_HEIGHT), maxHeight);
+        heightRef.current = clamped;
+        return clamped;
+      });
     };
 
-    window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
-  }, [computeDefaultHeight, computeMaxHeight]);
+    const onPointerMove = (event: PointerEvent) => {
+      if (!isDraggingRef.current || !dragRef.current) return;
 
-  const handleDragStart = useCallback(
-    (event: React.PointerEvent<HTMLDivElement>) => {
-      if (event.pointerType === "mouse" && event.button !== 0) return;
-      event.preventDefault();
-      dragRef.current = {
-        startY: event.clientY,
-        startHeight: heightRef.current || computeDefaultHeight(),
-      };
-      setIsDragging(true);
-    },
-    [computeDefaultHeight],
-  );
-
-  useEffect(() => {
-    if (!isDragging) return;
-
-      const handlePointerMove = (event: PointerEvent) => {
-        if (!dragRef.current) return;
-
-        const maxHeight = computeMaxHeight();
-        const deltaY = dragRef.current.startY - event.clientY;
-        const nextHeight = dragRef.current.startHeight + deltaY;
+      const maxHeight = computeMaxHeight();
+      const deltaY = dragRef.current.startY - event.clientY;
+      const nextHeight = dragRef.current.startHeight + deltaY;
       const constrainedHeight =
-        maxHeight === 0
-          ? nextHeight
-          : Math.min(Math.max(nextHeight, MIN_DRAWER_HEIGHT), maxHeight);
+        maxHeight === 0 ? nextHeight : Math.min(Math.max(nextHeight, MIN_DRAWER_HEIGHT), maxHeight);
 
       if (animationRef.current != null) {
         window.cancelAnimationFrame(animationRef.current);
@@ -154,61 +120,62 @@ export const MobileResultsDrawer = memo(function MobileResultsDrawer({
       });
     };
 
-    const handlePointerUp = () => {
+    const clearDragState = () => {
       if (animationRef.current != null) {
         window.cancelAnimationFrame(animationRef.current);
         animationRef.current = null;
       }
       dragRef.current = null;
-      setIsDragging(false);
-    };
-
-    document.addEventListener("pointermove", handlePointerMove);
-    document.addEventListener("pointerup", handlePointerUp);
-    document.addEventListener("pointercancel", handlePointerUp);
-    return () => {
-      if (animationRef.current != null) {
-        window.cancelAnimationFrame(animationRef.current);
-        animationRef.current = null;
+      if (isDraggingRef.current) {
+        isDraggingRef.current = false;
+        setIsDragging(false);
       }
-      document.removeEventListener("pointermove", handlePointerMove);
-      document.removeEventListener("pointerup", handlePointerUp);
-      document.removeEventListener("pointercancel", handlePointerUp);
     };
-  }, [computeMaxHeight, isDragging]);
 
-  // Track dragging state in a ref to avoid setState in effect
-  const isDraggingRef = useRef(isDragging);
+    const onPointerUp = () => {
+      clearDragState();
+    };
 
-  useEffect(() => {
-    isDraggingRef.current = isDragging;
-  }, [isDragging]);
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!isOpenRef.current) return;
+      if (event.key === "Escape") onCloseRef.current();
+    };
 
-  useEffect(() => {
-    if (isOpen || !isDraggingRef.current) return;
-    if (animationRef.current != null) {
-      window.cancelAnimationFrame(animationRef.current);
-      animationRef.current = null;
-    }
-    dragRef.current = null;
-  }, [isOpen]);
+    window.addEventListener("resize", onResize);
+    window.addEventListener("keydown", onKeyDown);
+    document.addEventListener("pointermove", onPointerMove);
+    document.addEventListener("pointerup", onPointerUp);
+    document.addEventListener("pointercancel", onPointerUp);
+
+    return () => {
+      window.removeEventListener("resize", onResize);
+      window.removeEventListener("keydown", onKeyDown);
+      document.removeEventListener("pointermove", onPointerMove);
+      document.removeEventListener("pointerup", onPointerUp);
+      document.removeEventListener("pointercancel", onPointerUp);
+      clearDragState();
+    };
+  }, [computeMaxHeight]);
+
+  const handleDragStart = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      if (event.pointerType === "mouse" && event.button !== 0) return;
+      event.preventDefault();
+      dragRef.current = {
+        startY: event.clientY,
+        startHeight: heightRef.current || computeDefaultHeight(),
+      };
+      isDraggingRef.current = true;
+      setIsDragging(true);
+    },
+    [computeDefaultHeight],
+  );
 
   const drawerHeight = drawerHeightPx <= 0 ? computeDefaultHeight() : drawerHeightPx;
-
-  // Escape to close (handy for dev, external keyboards).
-  useEffect(() => {
-    if (!isOpen) return;
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [isOpen, onClose]);
 
   return (
     <>
       <div className="md:hidden">
-        {/* Backdrop */}
         <div
           className={`fixed inset-0 z-40 bg-black/55 transition-opacity duration-200 ${
             isOpen ? "opacity-100" : "opacity-0 pointer-events-none"
@@ -216,51 +183,51 @@ export const MobileResultsDrawer = memo(function MobileResultsDrawer({
           onClick={onClose}
         />
 
-        {/* Drawer */}
         <div
           className={`fixed left-0 right-0 bottom-0 z-50 transition-transform duration-250 ease-out ${
             isOpen ? "translate-y-0" : "translate-y-[calc(100%+16px)]"
           }`}
           style={{ paddingBottom: "env(safe-area-inset-bottom, 0)", height: `${drawerHeight}px` }}
         >
-          <div className="mx-2 mb-2 h-full rounded-2xl border border-(--border) bg-(--bg)/95 backdrop-blur-xl shadow-[0_-12px_40px_rgba(0,0,0,0.65)] overflow-hidden flex flex-col min-h-0">
-            {/* Grab handle + close */}
+          <div
+            className="mx-2 mb-2 h-full rounded-2xl bg-(--bg)/95 backdrop-blur-xl overflow-hidden flex flex-col min-h-0 border border-(--border)"
+            style={{ boxShadow: "0 -12px 40px rgba(0,0,0,0.5)" }}
+          >
             <div
-              className="px-3 pt-2 pb-2 border-b border-(--border) flex items-center gap-2 cursor-row-resize select-none touch-none"
+              className="px-3 pt-2 pb-2 flex items-center gap-2 cursor-row-resize select-none touch-none"
               onPointerDown={handleDragStart}
             >
-              <div className="mx-auto h-1 w-10 rounded-full bg-(--border)" />
+              <div className="mx-auto h-1 w-10 rounded-full bg-(--fg)/20" />
               <GripVertical className="h-3 w-3 text-(--dim) shrink-0" />
               <button
                 onClick={onClose}
                 onPointerDown={(event) => event.stopPropagation()}
                 onMouseDown={(event) => event.stopPropagation()}
-                className="ml-auto -mr-1 p-2 rounded-lg hover:bg-(--border) text-(--dim)"
+                className="ml-auto -mr-1 p-2 rounded-lg hover:bg-(--fg)/[0.06] text-(--dim) transition-colors"
                 title="Close"
               >
-                  <PanelRightClose className="h-4 w-4" />
-                </button>
+                <PanelRightClose className="h-4 w-4" />
+              </button>
             </div>
 
-            {/* Tabs */}
-            <div className="px-2 py-1.5 border-b border-(--border) flex items-center gap-1 overflow-x-auto">
-              {tabs.map((t) => {
-                const enabled = t.enabled;
-                const isActive = activeTab === t.id && enabled;
+            <div className="px-2 flex items-center gap-0 overflow-x-auto border-b border-(--border)">
+              {panels.map((panel) => {
+                const isActive = resolvedActiveTab === panel.id;
                 return (
                   <button
-                    key={t.id}
-                    onClick={() => handleSelect(t.id, enabled)}
-                    disabled={!enabled}
-                    className={`px-2.5 py-1.5 rounded-md text-[11px] font-medium transition-colors whitespace-nowrap ${
+                    key={panel.id}
+                    onClick={() => handleSelect(panel.id)}
+                    className={`px-2.5 py-2 border-b-2 text-[11px] font-medium transition-colors whitespace-nowrap ${
                       isActive
-                        ? "bg-(--hl2)/15 text-(--hl2)"
-                        : enabled
-                          ? "text-(--fg) hover:text-(--fg) hover:bg-(--surface)"
-                          : "text-(--dim) cursor-not-allowed"
+                        ? panel.accent
+                          ? "text-(--hl2) border-(--hl2)"
+                          : "text-(--fg) border-(--fg)/70"
+                        : panel.accent
+                          ? "text-(--hl2)/60 border-transparent hover:text-(--hl2)"
+                          : "text-(--dim) border-transparent hover:text-(--fg)"
                     }`}
                   >
-                    {TAB_LABELS[t.id]}
+                    {panel.label}
                   </button>
                 );
               })}

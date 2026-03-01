@@ -94,16 +94,20 @@ export class MessageParsingService implements IMessageParsingService {
       }
     }
 
-    // Step 4: Parse markdown segments
-    const segments = markdownParser.parse(thinking.mainContent);
+    // Step 4: Normalize + parse markdown segments
+    const normalizedMainContent = markdownParser.normalizeForRender(thinking.mainContent);
+    const segments = markdownParser.parse(normalizedMainContent);
 
     // Build result
     const result: ParsedMessage = {
       raw: content,
       hash,
-      thinking,
+      thinking: {
+        ...thinking,
+        mainContent: normalizedMainContent,
+      },
       artifacts,
-      contentWithoutArtifacts,
+      contentWithoutArtifacts: normalizedMainContent,
       segments,
       isStreaming: options.isStreaming ?? false,
       parsedAt: Date.now(),
@@ -173,7 +177,8 @@ export class MessageParsingService implements IMessageParsingService {
    */
   getSegments(content: string): MarkdownSegment[] {
     if (!content) return [];
-    return markdownParser.parse(content);
+    const normalized = markdownParser.normalizeForRender(content);
+    return markdownParser.parse(normalized);
   }
 
   /**
@@ -181,7 +186,8 @@ export class MessageParsingService implements IMessageParsingService {
    */
   renderMarkdown(content: string): string {
     if (!content) return "";
-    return markdownParser.renderToHtml(content);
+    const normalized = markdownParser.normalizeForRender(content);
+    return markdownParser.renderToHtml(normalized);
   }
 
   /**

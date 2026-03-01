@@ -11,14 +11,15 @@
   --hl3: hsl(38, 90%, 45%);
   --err: hsl(0, 65%, 45%);
   --app-height: 100vh;
+  --app-font-size: 16px;
 }
 
 .dark {
-  --bg: hsl(30, 5%, 10.5%);
+  --bg: hsl(30, 5%, 9%);
   --fg: hsl(40, 20%, 92%);
-  --dim: hsl(35, 12%, 60%);
-  --border: hsl(30, 5%, 20%);
-  --surface: hsl(30, 5%, 13%);
+  --dim: hsl(35, 12%, 58%);
+  --border: hsl(30, 6%, 22%);
+  --surface: hsl(30, 5%, 14%);
   --accent: hsl(32, 94%, 44%);
   --hl1: hsl(270, 50%, 55%);
   --hl2: hsl(142, 45%, 45%);

@@ -1,6 +1,7 @@
 // CRITICAL
 "use client";
 
+import { ChevronRight } from "lucide-react";
 import { memo, useCallback, useMemo, useState } from "react";
 import type { ActivityItem } from "@/app/chat/types";
 import { safeJsonStringify } from "@/lib/safe-json";
@@ -8,6 +9,8 @@ import { safeJsonStringify } from "@/lib/safe-json";
 interface ToolItemProps {
   item: ActivityItem;
 }
+
+const OUTPUT_PREVIEW_LIMIT = 500;
 
 function getToolDisplayName(name?: string) {
   if (!name) return "Tool";
@@ -20,80 +23,89 @@ function getToolDisplayName(name?: string) {
     .join(" ");
 }
 
-function getMainArg(input?: unknown): string | undefined {
-  if (input == null) return undefined;
-  if (typeof input === "string") return input;
-  if (typeof input === "object") {
-    const record = input as Record<string, unknown>;
-    const candidate =
-      record.query ?? record.url ?? record.text ?? record.input ?? record.path ?? record.command;
-    return candidate != null ? String(candidate) : undefined;
-  }
-  return undefined;
-}
-
 function formatToolOutput(output?: unknown): string {
-  if (!output) return "";
+  if (output == null) return "";
   if (typeof output === "string") return output;
   return safeJsonStringify(output, "");
 }
 
-function getStateLabel(item: ActivityItem): string {
-  if (item.state === "running") return "Running";
-  if (item.state === "error") return "Error";
-  if (item.state === "complete") return "Done";
-  return "Queued";
+function getChipToneClasses(state?: ActivityItem["state"]) {
+  if (state === "error") {
+    return {
+      chip: "border-(--err)/40 bg-(--err)/10 text-(--err)",
+      dot: "bg-(--err)",
+      detail: "border-(--err)/25 text-(--err)/80",
+    };
+  }
+  if (state === "running") {
+    return {
+      chip: "border-(--accent)/45 bg-(--accent)/10 text-(--accent)",
+      dot: "bg-(--accent) animate-pulse",
+      detail: "border-(--accent)/25 text-(--fg)/75",
+    };
+  }
+  if (state === "complete") {
+    return {
+      chip: "border-(--fg)/20 bg-(--fg)/[0.05] text-(--fg)",
+      dot: "bg-(--fg)/70",
+      detail: "border-(--border)/60 text-(--fg)/75",
+    };
+  }
+  return {
+    chip: "border-(--border) bg-(--surface)/70 text-(--dim)",
+    dot: "bg-(--dim)/60",
+    detail: "border-(--border)/60 text-(--fg)/70",
+  };
 }
 
 export const ToolItem = memo(
   function ToolItem({ item }: ToolItemProps) {
     const [expanded, setExpanded] = useState(false);
     const hasDetails = item.input != null || item.output != null;
-    const isError = item.state === "error";
 
     const toggleExpanded = useCallback(() => {
       if (!hasDetails) return;
       setExpanded((prev) => !prev);
     }, [hasDetails]);
 
-    const mainArg = useMemo(() => getMainArg(item.input), [item.input]);
     const toolName = useMemo(() => getToolDisplayName(item.toolName), [item.toolName]);
-    const outputText = useMemo(() => {
-      if (!expanded) return "";
-      return formatToolOutput(item.output);
-    }, [expanded, item.output]);
+    const outputText = useMemo(() => (expanded ? formatToolOutput(item.output) : ""), [expanded, item.output]);
+    const tone = useMemo(() => getChipToneClasses(item.state), [item.state]);
 
     return (
-      <div className="relative pl-7 pr-1 py-2">
-        <span className="absolute left-3.5 top-3.5 h-1.25 w-1.25 rounded-full bg-(--fg)/35" />
-        <button onClick={toggleExpanded} className="flex items-baseline gap-2 w-full text-left">
-          <span className="text-base leading-tight text-(--fg) truncate">{toolName}</span>
-          <span className="text-sm text-(--fg)/60">{getStateLabel(item)}</span>
+      <div className="flex flex-col items-start gap-1.5 pl-1">
+        <button
+          onClick={toggleExpanded}
+          disabled={!hasDetails}
+          className={`inline-flex max-w-full items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] leading-5 transition-colors ${tone.chip} ${
+            hasDetails ? "cursor-pointer hover:brightness-110" : "cursor-default"
+          }`}
+        >
+          <span className={`inline-flex h-1.5 w-1.5 shrink-0 rounded-full ${tone.dot}`} />
+          <span className="truncate max-w-[220px]">{toolName}</span>
           {hasDetails && (
-            <span className="ml-auto text-sm text-(--fg)/60">{expanded ? "Less" : "More"}</span>
+            <ChevronRight className={`h-3 w-3 shrink-0 opacity-70 transition-transform ${expanded ? "rotate-90" : ""}`} />
           )}
         </button>
 
-        {mainArg && (
-          <p className="mt-1 text-sm leading-relaxed text-(--fg)/70 line-clamp-2">{mainArg.slice(0, 200)}</p>
-        )}
-
-        {expanded && (
-          <div className="mt-2 space-y-2">
+        {expanded && hasDetails && (
+          <div className={`ml-2 w-[calc(100%-0.5rem)] border-l pl-3 space-y-2 ${tone.detail}`}>
             {item.input != null && (
               <div>
-                <span className="text-sm text-(--fg)/70">Input</span>
-                <pre className="mt-1 max-h-24 overflow-x-auto overflow-y-auto text-sm leading-relaxed text-(--fg)/80 font-mono whitespace-pre-wrap break-words">
+                <span className="text-[10px] uppercase tracking-wide text-(--dim)">Input</span>
+                <pre className="mt-1 max-h-28 overflow-x-auto overflow-y-auto whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed">
                   {String(safeJsonStringify(item.input, ""))}
                 </pre>
               </div>
             )}
             {outputText && (
               <div>
-                <span className="text-sm text-(--fg)/70">{isError ? "Output (error)" : "Output"}</span>
-                <pre className="mt-1 max-h-40 overflow-x-auto overflow-y-auto text-sm leading-relaxed text-(--fg)/80 font-mono whitespace-pre-wrap break-words">
-                  {outputText.slice(0, 500)}
-                  {outputText.length > 500 ? "..." : ""}
+                <span className="text-[10px] uppercase tracking-wide text-(--dim)">
+                  {item.state === "error" ? "Error" : "Output"}
+                </span>
+                <pre className="mt-1 max-h-44 overflow-x-auto overflow-y-auto whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed">
+                  {outputText.slice(0, OUTPUT_PREVIEW_LIMIT)}
+                  {outputText.length > OUTPUT_PREVIEW_LIMIT ? "..." : ""}
                 </pre>
               </div>
             )}

@@ -156,6 +156,18 @@
   border-top: 1px solid var(--border);
 }
 
+.chat-markdown tbody tr {
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+}
+
+.chat-markdown tbody tr:last-child {
+  border-bottom: none;
+}
+
+.chat-markdown tbody tr:nth-child(even) {
+  background: color-mix(in srgb, var(--surface) 40%, transparent);
+}
+
 .chat-markdown th {
   text-align: left;
   font-size: 0.75rem;
@@ -163,6 +175,7 @@
   letter-spacing: 0.04em;
   padding: 0.625rem 1rem;
   color: var(--dim);
+  font-weight: 600;
 }
 
 .chat-markdown td {

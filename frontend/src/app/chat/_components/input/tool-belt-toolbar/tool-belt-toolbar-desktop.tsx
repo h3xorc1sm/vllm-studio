@@ -13,7 +13,7 @@ import {
   SlidersHorizontal,
   Clock,
   Loader2,
-  Wrench,
+  Plus,
   ArrowUp,
   Volume2,
   VolumeX,
@@ -85,26 +85,26 @@ export function ToolBeltToolbarDesktop({
   callModeEnabled,
   onCallModeToggle,
 }: Props) {
-  const hasActiveTools = Boolean(toolsEnabled || artifactsEnabled || deepResearchEnabled);
-  const activeSendButtonClass =
-    "bg-white text-black border border-white hover:bg-white/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--accent) focus-visible:ring-offset-2 focus-visible:ring-offset-(--bg)";
+  const hasActiveFeatures = Boolean(toolsEnabled || artifactsEnabled || deepResearchEnabled || hasSystemPrompt);
 
   return (
     <div className="hidden md:flex items-center justify-between">
       <div className="flex items-center gap-1 min-w-0">
+        {/* Timer during loading */}
         {isLoading && elapsedSeconds !== undefined && (
-          <div className="flex items-center gap-2 px-2 py-1 rounded-lg border border-blue-500/30 min-w-0">
-            <Clock className="h-3 w-3 text-blue-400 animate-pulse shrink-0" />
-            <span className="text-xs font-mono font-medium text-blue-400 shrink-0">
+          <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg min-w-0">
+            <Clock className="h-3 w-3 text-(--fg)/40 animate-pulse shrink-0" />
+            <span className="text-xs font-mono text-(--fg)/40 shrink-0">
               {Math.floor(elapsedSeconds / 60)}:{(elapsedSeconds % 60).toString().padStart(2, "0")}
             </span>
           </div>
         )}
 
+        {/* Unified + dropdown: attachments, voice, tools, settings */}
         <ToolDropdown
-          icon={Paperclip}
-          label="Attach media"
-          isActive={attachmentsCount > 0}
+          icon={Plus}
+          label="Add"
+          isActive={hasActiveFeatures || attachmentsCount > 0}
           disabled={disabled}
         >
           <DropdownItem
@@ -112,75 +112,18 @@ export function ToolBeltToolbarDesktop({
             label="Attach file"
             onClick={onAttachFile}
             disabled={disabled}
+            closeOnClick
           />
           <DropdownItem
             icon={ImageIcon}
             label="Attach image"
             onClick={onAttachImage}
             disabled={disabled}
+            closeOnClick
           />
-        </ToolDropdown>
 
-        <button
-          onClick={isRecording ? onStopRecording : onStartRecording}
-          disabled={disabled || isTranscribing}
-          className={`flex items-center justify-center p-2 rounded-lg transition-all:ease-in:200ms disabled:opacity-50 ${
-            isRecording
-              ? "bg-(--err) text-(--err)"
-              : isTranscribing
-                ? "bg-(--hl1) text-(--hl1)"
-                : "hover:bg-(--accent) text-(--dim)"
-          }`}
-          title={
-            isTranscribing ? "Transcribing..." : isRecording ? "Stop recording" : "Voice input"
-          }
-        >
-          {isTranscribing ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          ) : isRecording ? (
-            <MicOff className="h-3.5 w-3.5" />
-          ) : (
-            <Mic className="h-3.5 w-3.5" />
-          )}
-        </button>
+          <div className="my-1 mx-2 h-px bg-(--border)" />
 
-        {onTTSToggle && (
-          <button
-            onClick={onTTSToggle}
-            disabled={disabled}
-            className={`flex items-center justify-center p-2 rounded-lg transition-all:ease-in:200ms disabled:opacity-50 ${
-              isTTSEnabled ? "bg-(--hl2) text-(--hl2)" : "hover:bg-(--accent) text-(--dim)"
-            }`}
-            title={isTTSEnabled ? "Disable TTS" : "Enable TTS"}
-          >
-            {isTTSEnabled ? (
-              <Volume2 className="h-3.5 w-3.5" />
-            ) : (
-              <VolumeX className="h-3.5 w-3.5" />
-            )}
-          </button>
-        )}
-
-        {onCallModeToggle && (
-          <button
-            onClick={onCallModeToggle}
-            disabled={disabled || isTranscribing}
-            className={`flex items-center justify-center p-2 rounded-lg transition-all:ease-in:200ms disabled:opacity-50 ${
-              callModeEnabled
-                ? "bg-green-500/20 text-green-400 ring-1 ring-green-500/40"
-                : "hover:bg-(--accent) text-(--dim)"
-            }`}
-            title={callModeEnabled ? "End call mode" : "Start call mode (hands-free)"}
-          >
-            {callModeEnabled ? (
-              <PhoneOff className="h-3.5 w-3.5" />
-            ) : (
-              <Phone className="h-3.5 w-3.5" />
-            )}
-          </button>
-        )}
-
-        <ToolDropdown icon={Wrench} label="Tools" isActive={hasActiveTools} disabled={disabled}>
           <DropdownItem
             icon={Globe}
             label="Web search & tools"
@@ -206,22 +149,61 @@ export function ToolBeltToolbarDesktop({
               disabled={disabled}
             />
           )}
+
+          <div className="my-1 mx-2 h-px bg-(--border)" />
+
+          {onOpenChatSettings && (
+            <DropdownItem
+              icon={SlidersHorizontal}
+              label={hasSystemPrompt ? "System prompt (active)" : "System prompt"}
+              isActive={hasSystemPrompt}
+              onClick={onOpenChatSettings}
+              disabled={disabled}
+            />
+          )}
+          {onTTSToggle && (
+            <DropdownItem
+              icon={isTTSEnabled ? Volume2 : VolumeX}
+              label={isTTSEnabled ? "TTS enabled" : "Text-to-speech"}
+              isActive={isTTSEnabled}
+              onClick={onTTSToggle}
+              disabled={disabled}
+            />
+          )}
+          {onCallModeToggle && (
+            <DropdownItem
+              icon={callModeEnabled ? PhoneOff : Phone}
+              label={callModeEnabled ? "End call mode" : "Call mode"}
+              isActive={callModeEnabled}
+              onClick={onCallModeToggle}
+              disabled={disabled || isTranscribing}
+            />
+          )}
         </ToolDropdown>
 
-        {onOpenChatSettings && (
-          <button
-            onClick={onOpenChatSettings}
-            disabled={disabled}
-            className={`flex items-center gap-1 px-2 py-1.5 rounded-lg transition-all:ease-in:200ms disabled:opacity-50 ${
-              hasSystemPrompt
-                ? "bg-(--surface) text-(--fg) border border-(--border)"
-                : "hover:bg-(--accent) text-(--dim)"
-            }`}
-            title={hasSystemPrompt ? "System prompt (active)" : "System prompt"}
-          >
-            <SlidersHorizontal className="h-3.5 w-3.5" />
-          </button>
-        )}
+        {/* Mic button stays visible — it's a frequently used action */}
+        <button
+          onClick={isRecording ? onStopRecording : onStartRecording}
+          disabled={disabled || isTranscribing}
+          className={`flex items-center justify-center p-2 rounded-lg transition-all:ease-in:200ms disabled:opacity-50 ${
+            isRecording
+              ? "bg-(--err)/15 text-(--err)"
+              : isTranscribing
+                ? "bg-(--hl1)/15 text-(--hl1)"
+                : "hover:bg-(--fg)/5 text-(--dim)"
+          }`}
+          title={
+            isTranscribing ? "Transcribing..." : isRecording ? "Stop recording" : "Voice input"
+          }
+        >
+          {isTranscribing ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : isRecording ? (
+            <MicOff className="h-3.5 w-3.5" />
+          ) : (
+            <Mic className="h-3.5 w-3.5" />
+          )}
+        </button>
       </div>
 
       <div className="flex items-center gap-2">
@@ -230,7 +212,7 @@ export function ToolBeltToolbarDesktop({
             value={selectedModel || ""}
             onChange={(e) => onModelChange(e.target.value)}
             disabled={disabled || isLoading}
-            className="max-w-[180px] px-2 py-1 font-sans font-medium text-xs bg-transparent border border-(--border) rounded-lg text-(--dim) focus:outline-none disabled:opacity-50 truncate appearance-none cursor-pointer hover:border-(--border) transition-colors:ease-in:200ms"
+            className="max-w-[180px] px-2 py-1 font-sans text-xs bg-transparent border border-(--border) rounded-lg text-(--dim) focus:outline-none focus:border-(--accent)/40 disabled:opacity-50 truncate appearance-none cursor-pointer hover:text-(--fg) hover:border-(--fg)/20 transition-colors:ease-in:200ms"
             title={selectedModel || "Select model"}
           >
             {availableModels.map((model, idx) => (
@@ -244,7 +226,7 @@ export function ToolBeltToolbarDesktop({
         {isLoading ? (
           <button
             onClick={onStop}
-            className="h-8 w-8 flex items-center justify-center rounded-full bg-(--err) text-white transition-colors:ease-in:200ms shrink-0"
+            className="h-8 w-8 flex items-center justify-center rounded-full bg-(--err)/15 text-(--err) hover:bg-(--err)/25 transition-colors:ease-in:200ms shrink-0"
             title="Stop"
           >
             <Square className="h-3 w-3 fill-current" />
@@ -255,8 +237,8 @@ export function ToolBeltToolbarDesktop({
             disabled={!canSend}
             className={`h-8 w-8 flex items-center justify-center rounded-full transition-colors:ease-in:200ms shrink-0 ${
               canSend
-                ? activeSendButtonClass
-                : "bg-(--border) border border-(--border) text-(--dim)/40 cursor-not-allowed"
+                ? "bg-(--fg) text-(--bg) hover:bg-(--fg)/85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--accent) focus-visible:ring-offset-2 focus-visible:ring-offset-(--bg)"
+                : "bg-(--fg)/10 text-(--dim)/40 cursor-not-allowed"
             }`}
             title="Send"
           >

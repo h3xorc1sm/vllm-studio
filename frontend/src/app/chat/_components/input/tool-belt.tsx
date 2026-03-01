@@ -194,11 +194,13 @@ export function ToolBelt({
         />
 
         <div
-          className={`relative flex flex-col bg-(--surface) rounded-3xl border transition-colors ${
-            isDragOver ? "border-(--accent) ring-2 ring-(--accent)/30" : "border-(--border)"
+          className={`relative flex flex-col bg-(--surface) rounded-3xl transition-colors border border-(--border) ${
+            isDragOver ? "ring-2 ring-(--accent)/30" : ""
           } ${isLoading ? "ring-1 ring-blue-500/30" : ""}`}
           style={{
-            boxShadow: "0 0 0 1px rgba(255,255,255,0.03), 0 8px 40px rgba(0,0,0,0.35)",
+            boxShadow: isDragOver
+              ? "0 0 0 1px var(--accent), 0 8px 32px rgba(0,0,0,0.3)"
+              : "0 4px 24px rgba(0,0,0,0.2)",
           }}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}

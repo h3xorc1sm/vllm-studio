@@ -1,7 +1,6 @@
 // CRITICAL
 "use client";
 
-import { useEffect } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { useAppStore } from "@/store";
 
@@ -59,11 +58,6 @@ export function useChatPageStore() {
       updateSessions: state.updateSessions,
     })),
   );
-
-  // Ensure agent mode is enabled (agent-first UX).
-  useEffect(() => {
-    if (!store.agentMode) store.setAgentMode(true);
-  }, [store.agentMode, store.setAgentMode]);
 
   return store;
 }

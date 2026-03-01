@@ -12,7 +12,7 @@ import { ConfigsTabBar, type ConfigTabId } from "./configs-tab-bar";
 import { ConnectionFlow } from "./connection-flow";
 import { NoBackendState } from "./no-backend-state";
 import { ServiceTopology } from "./service-topology";
-import { ThemeSelector } from "./theme-selector";
+import { AppearanceSettings } from "./appearance-settings";
 
 interface ConfigsViewProps {
   data: ConfigData | null;
@@ -121,8 +121,8 @@ export function ConfigsView({
           )}
 
           {activeTab === "appearance" && (
-            <section className="max-w-2xl">
-              <ThemeSelector />
+            <section>
+              <AppearanceSettings />
             </section>
           )}
         </div>
