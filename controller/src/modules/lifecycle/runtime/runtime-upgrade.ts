@@ -115,7 +115,7 @@ export const upgradeLlamacppRuntime = async (
       version: null,
       output: null,
       error:
-        "No llama.cpp upgrade command configured. Set VLLM_STUDIO_LLAMACPP_UPGRADE_CMD or provide command in request body.",
+        "No llama.cpp upgrade command configured. Set VLLM_STUDIO_LLAMACPP_UPGRADE_CMD.",
       used_command: null,
     };
   }
@@ -142,7 +142,7 @@ export const runPlatformUpgrade = (
       success: false,
       version: null,
       output: null,
-      error: `No ${platform.toUpperCase()} upgrade command configured. Set ${envKey} or provide command in request body.`,
+      error: `No ${platform.toUpperCase()} upgrade command configured. Set ${envKey}.`,
       used_command: null,
     };
   }

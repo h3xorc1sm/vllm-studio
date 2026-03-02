@@ -10,8 +10,7 @@ export function useDashboardActions(reload: () => Promise<void>) {
     try {
       await api.launch(recipeId, true);
     } catch (e) {
-      alert("Failed to launch: " + (e as Error).message);
-    } finally {
+      alert("Failed to start launch: " + (e as Error).message);
       setLaunching(false);
     }
   };

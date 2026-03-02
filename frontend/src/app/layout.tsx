@@ -3,6 +3,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AppSidebar } from "@/components/app-sidebar";
+import { getThemeBootstrapScript } from "@/lib/theme/runtime";
 import { Providers } from "./providers";
 
 const geistSans = Geist({
@@ -43,6 +44,21 @@ export const metadata: Metadata = {
   },
 };
 
+const bootScript = `${getThemeBootstrapScript()}
+  const isProd = ${process.env.NODE_ENV === "production" ? "true" : "false"};
+  if (isProd && 'serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/sw.js').catch(() => {});
+    });
+  }
+  const setAppHeight = () => {
+    document.documentElement.style.setProperty('--app-height', String(window.innerHeight) + 'px');
+  };
+  window.addEventListener('resize', setAppHeight);
+  window.addEventListener('orientationchange', setAppHeight);
+  setAppHeight();
+`;
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -56,56 +72,7 @@ export default function RootLayout({
         <meta name="mobile-web-app-capable" content="yes" />
         <script
           dangerouslySetInnerHTML={{
-            __html: `
-              try {
-                var s = JSON.parse(localStorage.getItem('vllm-studio-chat-state') || '{}');
-                var state = (s.state || s);
-                var t = state.themeId;
-                if (t) document.documentElement.setAttribute('data-theme', t);
-
-                var fontFamilyId = state.fontFamilyId;
-                var fontSizeId = state.fontSizeId;
-
-                var fontFamilyMap = {
-                  geist: "var(--font-geist-sans), system-ui, sans-serif",
-                  system: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-                  serif: "ui-serif, Georgia, Cambria, 'Times New Roman', Times, serif",
-                  mono: "var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
-                  rounded: "ui-rounded, 'SF Pro Rounded', 'Hiragino Maru Gothic ProN', 'Avenir Next Rounded', system-ui, sans-serif"
-                };
-
-                var fontSizeMap = {
-                  sm: "14px",
-                  md: "16px",
-                  lg: "17px",
-                  xl: "18px",
-                  '2xl': "20px"
-                };
-
-                if (fontFamilyId && fontFamilyMap[fontFamilyId]) {
-                  document.documentElement.style.setProperty('--font-sans', fontFamilyMap[fontFamilyId]);
-                } else {
-                  document.documentElement.style.setProperty('--font-sans', fontFamilyMap.geist);
-                }
-                if (fontSizeId && fontSizeMap[fontSizeId]) {
-                  document.documentElement.style.setProperty('--app-font-size', fontSizeMap[fontSizeId]);
-                } else {
-                  document.documentElement.style.setProperty('--app-font-size', fontSizeMap.md);
-                }
-              } catch(e) {}
-              const isProd = ${process.env.NODE_ENV === "production" ? "true" : "false"};
-              if (isProd && 'serviceWorker' in navigator) {
-                window.addEventListener('load', () => {
-                  navigator.serviceWorker.register('/sw.js').catch(() => {});
-                });
-              }
-              const setAppHeight = () => {
-                document.documentElement.style.setProperty('--app-height', \`\${window.innerHeight}px\`);
-              };
-              window.addEventListener('resize', setAppHeight);
-              window.addEventListener('orientationchange', setAppHeight);
-              setAppHeight();
-            `,
+            __html: bootScript,
           }}
         />
       </head>

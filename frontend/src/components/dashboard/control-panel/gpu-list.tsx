@@ -21,13 +21,13 @@ export function GpuList({ gpus: staticGpus }: GpuListProps) {
   }
 
   return (
-    <div className="min-w-0 overflow-x-hidden">
+    <div className="min-w-0 overflow-x-hidden flex flex-col flex-1">
       <div className="flex items-center justify-between mb-4">
         <div className="text-xs uppercase tracking-widest text-foreground/40">GPU</div>
         <div className="text-xs text-foreground/30 font-mono">{gpus.length} units</div>
       </div>
 
-      <div className="border border-foreground/10">
+      <div className="border border-foreground/10 flex-1">
         {/* Header */}
         <div className="grid grid-cols-12 gap-4 p-3 border-b border-foreground/10 bg-foreground/[0.02] text-[10px] uppercase tracking-wider text-foreground/30">
           <div className="col-span-2">Unit</div>

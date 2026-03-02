@@ -15,6 +15,7 @@ import { registerAudioRoutes } from "../modules/audio/routes";
 import { registerJobsRoutes } from "../modules/jobs/routes";
 import { registerDistributedRoutes } from "../modules/distributed/routes";
 import { createOpenApiSpec } from "./openapi-spec";
+import { createMutatingAuthMiddleware, createMutatingRateLimitMiddleware } from "./security-middleware";
 
 /**
  * Create the Hono application.
@@ -40,6 +41,9 @@ export const createApp = (context: AppContext): Hono => {
     }
     await next();
   });
+
+  app.use("*", createMutatingRateLimitMiddleware(context));
+  app.use("*", createMutatingAuthMiddleware(context));
 
   // Register all routes
   registerAllLifecycleRoutes(app, context);

@@ -1,6 +1,6 @@
 // CRITICAL
 import { AsyncLock, delay } from "../../../core/async";
-import { serviceUnavailable } from "../../../core/errors";
+
 import { primaryLogPathFor, readFileTailBytes, sanitizeLogSessionId } from "../../../core/log-files";
 import { fetchLocal } from "../../../http/local-fetch";
 import { Event, type EventManager } from "../../monitoring/event-manager";
@@ -247,8 +247,117 @@ export const createLifecycleCoordinator = (args: {
     }
   };
 
-  const launchRecipe = async (recipe: Recipe): Promise<LaunchResult> => {
+  const runLaunchInBackground = async (recipe: Recipe, logFilePath: string | null, cancelController: AbortController): Promise<void> => {
     const startTs = Date.now();
+    const release = await switchLock.acquire();
+    try {
+      await deps.eventManager.publishLaunchProgress(recipe.id, "evicting", "Clearing VRAM...", 0);
+      await deps.processManager.evictModel(true);
+      await delay(1000);
+
+      if (cancelController.signal.aborted) {
+        await deps.eventManager.publishLaunchProgress(
+          recipe.id,
+          "cancelled",
+          "Preempted by another launch",
+          0
+        );
+        return;
+      }
+
+      await deps.eventManager.publishLaunchProgress(
+        recipe.id,
+        "launching",
+        `Starting ${recipe.name}...`,
+        0.25
+      );
+      const launch = await deps.processManager.launchModel(recipe);
+      if (!launch.success) {
+        await deps.eventManager.publishLaunchProgress(recipe.id, "error", launch.message, 0);
+        return;
+      }
+
+      await deps.eventManager.publishLaunchProgress(
+        recipe.id,
+        "waiting",
+        "Waiting for model to load...",
+        0.5
+      );
+
+      const fatalPatterns = [
+        "raise ValueError",
+        "raise RuntimeError",
+        "CUDA out of memory",
+        "OutOfMemoryError",
+        "torch.OutOfMemoryError",
+        "not enough memory",
+        "Cannot allocate",
+        "larger than the available KV cache memory",
+        "EngineCore failed to start",
+      ];
+
+      if (!logFilePath) {
+        await deps.eventManager.publishLaunchProgress(recipe.id, "error", "Invalid recipe id", 0);
+        return;
+      }
+
+      const ready = await waitForReady({
+        recipe,
+        pid: launch.pid,
+        logFilePath,
+        cancel: cancelController.signal,
+        timeoutMs: LIFECYCLE_READY_TIMEOUT_MS,
+        fatalPatterns,
+        onProgress: async (elapsedSeconds) => {
+          await deps.eventManager.publishLaunchProgress(
+            recipe.id,
+            "waiting",
+            `Loading model... (${elapsedSeconds}s)`,
+            0.5 + (elapsedSeconds / (LIFECYCLE_READY_TIMEOUT_MS / 1000)) * 0.5
+          );
+        },
+      });
+
+      if (ready.ready) {
+        await deps.eventManager.publishLaunchProgress(recipe.id, "ready", "Model is ready!", 1.0);
+        deps.metrics.recordModelSwitch(
+          recipe.id,
+          recipe.backend,
+          (Date.now() - startTs) / 1000,
+          true
+        );
+        return;
+      }
+
+      if (launch.pid) {
+        await deps.processManager.killProcess(launch.pid, true);
+      }
+      await deps.eventManager.publishLaunchProgress(recipe.id, "error", ready.message, 0);
+      const errorTail = readLogTail(logFilePath, 1000);
+      deps.metrics.recordModelSwitch(
+        recipe.id,
+        recipe.backend,
+        (Date.now() - startTs) / 1000,
+        false
+      );
+      deps.logger.error(`Launch failed for ${recipe.id}: ${ready.message}: ${errorTail.slice(-200)}`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      await deps.eventManager.publishLaunchProgress(recipe.id, "error", msg, 0);
+      deps.logger.error(`Launch background error for ${recipe.id}: ${msg}`);
+    } finally {
+      release();
+      if (deps.launchState.getLaunchingRecipeId() === recipe.id) {
+        deps.launchState.setLaunchingRecipeId(null);
+      }
+      const controller = launchCancelControllers.get(recipe.id);
+      if (controller === cancelController) {
+        launchCancelControllers.delete(recipe.id);
+      }
+    }
+  };
+
+  const launchRecipe = async (recipe: Recipe): Promise<LaunchResult> => {
     const current = await deps.processManager.findInferenceProcess(deps.config.inference_port);
     const logFilePath = buildLogFilePath(deps.config.data_dir, recipe.id);
     if (current && isRecipeRunning(recipe, current)) {
@@ -286,127 +395,18 @@ export const createLifecycleCoordinator = (args: {
     launchCancelControllers.set(recipe.id, cancelController);
     deps.launchState.setLaunchingRecipeId(recipe.id);
 
-    const release = await switchLock.acquire();
-    try {
-      await deps.eventManager.publishLaunchProgress(recipe.id, "evicting", "Clearing VRAM...", 0);
-      await deps.processManager.evictModel(true);
-      await delay(1000);
+    // Fire-and-forget: run the long launch process in the background.
+    // Progress is reported via WebSocket launch_progress events.
+    runLaunchInBackground(recipe, logFilePath, cancelController).catch((err) => {
+      deps.logger.error(`Unhandled launch error for ${recipe.id}: ${err}`);
+    });
 
-      if (cancelController.signal.aborted) {
-        await deps.eventManager.publishLaunchProgress(
-          recipe.id,
-          "cancelled",
-          "Preempted by another launch",
-          0
-        );
-        return {
-          success: false,
-          pid: null,
-          message: "Launch cancelled",
-          log_file: null,
-        };
-      }
-
-      await deps.eventManager.publishLaunchProgress(
-        recipe.id,
-        "launching",
-        `Starting ${recipe.name}...`,
-        0.25
-      );
-      const launch = await deps.processManager.launchModel(recipe);
-      if (!launch.success) {
-        await deps.eventManager.publishLaunchProgress(recipe.id, "error", launch.message, 0);
-        return {
-          success: false,
-          pid: null,
-          message: launch.message,
-          log_file: null,
-        };
-      }
-
-      await deps.eventManager.publishLaunchProgress(
-        recipe.id,
-        "waiting",
-        "Waiting for model to load...",
-        0.5
-      );
-
-      const fatalPatterns = [
-        "raise ValueError",
-        "raise RuntimeError",
-        "CUDA out of memory",
-        "OutOfMemoryError",
-        "torch.OutOfMemoryError",
-        "not enough memory",
-        "Cannot allocate",
-        "larger than the available KV cache memory",
-        "EngineCore failed to start",
-      ];
-
-      if (!logFilePath) {
-        throw serviceUnavailable("Invalid recipe id");
-      }
-
-      const ready = await waitForReady({
-        recipe,
-        pid: launch.pid,
-        logFilePath,
-        cancel: cancelController.signal,
-        timeoutMs: LIFECYCLE_READY_TIMEOUT_MS,
-        fatalPatterns,
-        onProgress: async (elapsedSeconds) => {
-          await deps.eventManager.publishLaunchProgress(
-            recipe.id,
-            "waiting",
-            `Loading model... (${elapsedSeconds}s)`,
-            0.5 + (elapsedSeconds / (LIFECYCLE_READY_TIMEOUT_MS / 1000)) * 0.5
-          );
-        },
-      });
-
-      if (ready.ready) {
-        await deps.eventManager.publishLaunchProgress(recipe.id, "ready", "Model is ready!", 1.0);
-        deps.metrics.recordModelSwitch(
-          recipe.id,
-          recipe.backend,
-          (Date.now() - startTs) / 1000,
-          true
-        );
-        return {
-          success: true,
-          pid: launch.pid ?? null,
-          message: "Model is ready",
-          log_file: logFilePath,
-        };
-      }
-
-      if (launch.pid) {
-        await deps.processManager.killProcess(launch.pid, true);
-      }
-      await deps.eventManager.publishLaunchProgress(recipe.id, "error", ready.message, 0);
-      const errorTail = readLogTail(logFilePath, 1000);
-      deps.metrics.recordModelSwitch(
-        recipe.id,
-        recipe.backend,
-        (Date.now() - startTs) / 1000,
-        false
-      );
-      return {
-        success: false,
-        pid: null,
-        message: `${ready.message}: ${errorTail.slice(-200)}`,
-        log_file: logFilePath,
-      };
-    } finally {
-      release();
-      if (deps.launchState.getLaunchingRecipeId() === recipe.id) {
-        deps.launchState.setLaunchingRecipeId(null);
-      }
-      const controller = launchCancelControllers.get(recipe.id);
-      if (controller === cancelController) {
-        launchCancelControllers.delete(recipe.id);
-      }
-    }
+    return {
+      success: true,
+      pid: null,
+      message: "Launch started",
+      log_file: logFilePath,
+    };
   };
 
   const cancelLaunch = async (

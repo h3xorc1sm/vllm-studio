@@ -178,7 +178,7 @@ REMOTE
 restart_frontend() {
   step "Building frontend"
   remote bash <<'REMOTE'
-set -e
+set -euo pipefail
 cd /home/ser/workspace/projects/lmvllm/frontend
 export BACKEND_URL=http://localhost:8080
 export LITELLM_URL=http://localhost:4100
@@ -189,7 +189,7 @@ REMOTE
 
   step "Restarting frontend on :3000"
   remote bash <<'REMOTE'
-set -e
+set -euo pipefail
 cd /home/ser/workspace/projects/lmvllm/frontend
 docker compose -f ../docker-compose.yml stop frontend 2>/dev/null || true
 pkill -f "next start" 2>/dev/null || true

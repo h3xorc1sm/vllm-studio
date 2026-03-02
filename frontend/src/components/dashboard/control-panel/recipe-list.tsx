@@ -33,7 +33,7 @@ export function RecipeList({
   }, [recipes, filter]);
 
   return (
-    <div className="min-w-0 overflow-x-hidden">
+    <div className="min-w-0 overflow-x-hidden flex flex-col flex-1">
       <div className="flex items-center justify-between mb-4">
         <div className="text-xs uppercase tracking-widest text-foreground/40">Recipes</div>
         <button 
@@ -54,7 +54,7 @@ export function RecipeList({
       />
 
       {/* List */}
-      <div className="border border-foreground/10 max-h-[320px] overflow-y-auto">
+      <div className="border border-foreground/10 flex-1 overflow-y-auto">
         {visibleRecipes.map((recipe) => (
           <RecipeItem
             key={recipe.id}
