@@ -58,6 +58,27 @@ function normalizeBackendUrl(value: string | null): string | null {
   }
 }
 
+function isPrivateUrl(urlString: string): boolean {
+  try {
+    const url = new URL(urlString);
+    const hostname = url.hostname.toLowerCase();
+    if (hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1" || hostname === "0.0.0.0") return true;
+    if (hostname.endsWith(".local") || hostname.endsWith(".internal")) return true;
+    // Check private IP ranges
+    const parts = hostname.split(".");
+    if (parts.length === 4 && parts.every(p => /^\d+$/.test(p))) {
+      const [a, b] = parts.map(Number);
+      if (a === 10) return true;
+      if (a === 172 && b !== undefined && b >= 16 && b <= 31) return true;
+      if (a === 192 && b === 168) return true;
+      if (a === 169 && b === 254) return true;
+    }
+    return false;
+  } catch {
+    return true;
+  }
+}
+
 function buildTargetUrl(backendUrl: string, path: string[], searchParams: string): string {
   return `${backendUrl}/${path.join("/")}${searchParams ? `?${searchParams}` : ""}`;
 }
@@ -113,6 +134,15 @@ async function handleRequest(request: NextRequest, method: string, path: string[
     );
     const defaultBackendUrl = normalizeBackendUrl(settings.backendUrl) ?? settings.backendUrl;
     const overrideUrl = overrideHeaderUrl ?? overrideCookieUrl;
+    if (overrideUrl && isPrivateUrl(overrideUrl)) {
+      console.warn(
+        `[PROXY BLOCKED] ip=${client.ip} | override=${overrideUrl} | reason=private-address`,
+      );
+      return NextResponse.json(
+        { error: "Backend override blocked: private/local addresses not allowed" },
+        { status: 403 },
+      );
+    }
     const backendUrl = overrideUrl ?? defaultBackendUrl;
     const API_KEY = settings.apiKey;
 
@@ -199,7 +229,7 @@ async function handleRequest(request: NextRequest, method: string, path: string[
       `[PROXY ERROR] ip=${client.ip} | country=${client.country} | method=${method} | path=/${path.join("/")} | duration=${duration}ms | error=${String(error)}`,
     );
     return NextResponse.json(
-      { error: "Internal server error", details: String(error) },
+      { error: "Internal server error" },
       { status: 500 },
     );
   }

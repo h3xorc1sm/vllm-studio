@@ -54,6 +54,7 @@ function generateTitleFromMessage(content: string): string {
  */
 export const registerChatsRoutes = (app: Hono, context: AppContext): void => {
   app.get("/chats", async (ctx) => {
+    ctx.header("Cache-Control", "private, max-age=5, stale-while-revalidate=10");
     return ctx.json(context.stores.chatStore.listSessions());
   });
 

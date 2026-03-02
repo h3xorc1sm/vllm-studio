@@ -41,7 +41,7 @@ describe("GET /api/proxy/[...path]", () => {
     const request = new NextRequest("http://localhost/api/proxy/status", {
       method: "GET",
       headers: {
-        Cookie: "vllmstudio_backend_url=http%3A%2F%2Flocalhost%3A8080",
+        Cookie: "vllmstudio_backend_url=https%3A%2F%2Foverride.example.com%3A8080",
       },
     });
 
@@ -54,7 +54,7 @@ describe("GET /api/proxy/[...path]", () => {
     expect(payload.running).toBe(false);
 
     expect(upstreamFetch).toHaveBeenCalledTimes(2);
-    expect(upstreamFetch.mock.calls[0]?.[0]).toBe("http://localhost:8080/status");
+    expect(upstreamFetch.mock.calls[0]?.[0]).toBe("https://override.example.com:8080/status");
     expect(upstreamFetch.mock.calls[1]?.[0]).toBe("https://api.homelabai.org/status");
   });
 
@@ -73,7 +73,7 @@ describe("GET /api/proxy/[...path]", () => {
     const request = new NextRequest("http://localhost/api/proxy/health", {
       method: "GET",
       headers: {
-        Cookie: "vllmstudio_backend_url=http%3A%2F%2Flocalhost%3A8080",
+        Cookie: "vllmstudio_backend_url=https%3A%2F%2Foverride.example.com%3A8080",
       },
     });
 
@@ -86,8 +86,25 @@ describe("GET /api/proxy/[...path]", () => {
     expect(payload.status).toBe("ok");
 
     expect(upstreamFetch).toHaveBeenCalledTimes(2);
-    expect(upstreamFetch.mock.calls[0]?.[0]).toBe("http://localhost:8080/health");
+    expect(upstreamFetch.mock.calls[0]?.[0]).toBe("https://override.example.com:8080/health");
     expect(upstreamFetch.mock.calls[1]?.[0]).toBe("https://api.homelabai.org/health");
+  });
+
+  it("blocks private network override URLs", async () => {
+    const upstreamFetch = vi.fn();
+    vi.stubGlobal("fetch", upstreamFetch);
+
+    const request = new NextRequest("http://localhost/api/proxy/status", {
+      method: "GET",
+      headers: {
+        "X-Backend-Url": "http://192.168.1.70:8080",
+      },
+    });
+
+    const response = await GET(request, { params: Promise.resolve({ path: ["status"] }) });
+
+    expect(response.status).toBe(403);
+    expect(upstreamFetch).not.toHaveBeenCalled();
   });
 
   it("uses override when it succeeds and does not fallback", async () => {

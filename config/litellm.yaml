@@ -143,6 +143,12 @@ litellm_settings:
   modify_params: false
   enable_message_redaction: false
   force_ipv4: true
+  cache: true
+  cache_params:
+    type: "local"
+    supported_call_types:
+      - "completion"
+      - "acompletion"
 
   # Custom callback: extract <think> blocks into reasoning_content
   callbacks: think_parser.think_parser

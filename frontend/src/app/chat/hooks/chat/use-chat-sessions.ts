@@ -55,23 +55,30 @@ export function useChatSessions() {
       if (activeSessionRef.current === sessionId && currentSessionId === sessionId) return;
       activeSessionRef.current = sessionId;
 
+      // Optimistically set session id and title from the cached session list
+      // so the UI updates instantly while the full session loads.
+      setCurrentSessionId(sessionId);
+      const cached = sessions.find((s) => s.id === sessionId);
+      if (cached?.title) {
+        setCurrentSessionTitle(cached.title);
+      }
+
       try {
         const data = await api.getChatSession(sessionId);
-        setCurrentSessionId(sessionId);
+        // Bail if the user navigated away while we were loading
+        if (activeSessionRef.current !== sessionId) return data.session ?? null;
         setCurrentSessionTitle(data.session?.title || "Chat");
-        // Messages are managed by ChatPage state; we just load metadata here.
         return data.session ?? null;
       } catch (err) {
         console.error("Failed to load session:", err);
-        // Remove stale IDs from the local list so navigation doesn't appear "stuck".
         updateSessions((prev) => prev.filter((s) => s.id !== sessionId));
-        if (currentSessionId === sessionId) {
+        if (activeSessionRef.current === sessionId) {
           startNewSession();
         }
         return null;
       }
     },
-    [currentSessionId, setCurrentSessionId, setCurrentSessionTitle, startNewSession, updateSessions],
+    [currentSessionId, sessions, setCurrentSessionId, setCurrentSessionTitle, startNewSession, updateSessions],
   );
 
   const createSession = useCallback(

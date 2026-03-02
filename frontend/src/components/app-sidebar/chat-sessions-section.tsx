@@ -2,12 +2,13 @@
 "use client";
 
 import { type MouseEvent, useMemo, useState } from "react";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ChevronDown, Plus, Trash2 } from "lucide-react";
 import type { ChatSession } from "@/lib/types";
 
 export function ChatSessionsSection({
   sessions,
+  currentSessionId,
   open: defaultOpen,
   isMobile,
   onCloseMobile,
@@ -15,6 +16,7 @@ export function ChatSessionsSection({
   onDeleteSession,
 }: {
   sessions: ChatSession[];
+  currentSessionId: string | null;
   open: boolean;
   isMobile: boolean;
   onCloseMobile: () => void;
@@ -24,6 +26,7 @@ export function ChatSessionsSection({
   const [query, setQuery] = useState("");
   const [localOpen, setLocalOpen] = useState(defaultOpen);
   const open = defaultOpen || localOpen;
+  const router = useRouter();
 
   const sessionRows = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -99,27 +102,36 @@ export function ChatSessionsSection({
             {sessionRows.length === 0 && (
               <div className="px-3 py-2 text-[11px] text-(--dim)">No matching chats</div>
             )}
-            {sessionRows.map(({ session, displayTitle }) => (
-              <div key={session.id} className="group flex items-center gap-1">
-                <Link
-                  href={`/chat?session=${session.id}`}
-                  onClick={() => {
-                    if (isMobile) onCloseMobile();
-                  }}
-                  className="flex-1 min-w-0 px-3 py-1.5 text-xs text-(--dim) hover:text-(--fg) hover:bg-(--surface) rounded transition-colors truncate"
-                  title={displayTitle}
-                >
-                  {displayTitle}
-                </Link>
-                <button
-                  onClick={(event) => handleDelete(event, session.id, displayTitle)}
-                  className="opacity-60 md:opacity-0 md:group-hover:opacity-100 p-1.5 rounded-full hover:bg-(--accent) transition-all shrink-0"
-                  title={`Delete ${displayTitle}`}
-                >
-                  <Trash2 className="h-3.5 w-3.5 text-(--dim)" />
-                </button>
-              </div>
-            ))}
+            {sessionRows.map(({ session, displayTitle }) => {
+              const isActive = session.id === currentSessionId;
+              return (
+                <div key={session.id} className="group flex items-center gap-1">
+                  <button
+                    onClick={() => {
+                      if (!isActive) {
+                        router.replace(`/chat?session=${session.id}`);
+                      }
+                      if (isMobile) onCloseMobile();
+                    }}
+                    className={`flex-1 min-w-0 px-3 py-1.5 text-xs rounded transition-colors truncate text-left ${
+                      isActive
+                        ? "text-(--fg) bg-(--surface) font-medium"
+                        : "text-(--dim) hover:text-(--fg) hover:bg-(--surface)"
+                    }`}
+                    title={displayTitle}
+                  >
+                    {displayTitle}
+                  </button>
+                  <button
+                    onClick={(event) => handleDelete(event, session.id, displayTitle)}
+                    className="opacity-60 md:opacity-0 md:group-hover:opacity-100 p-1.5 rounded-full hover:bg-(--accent) transition-all shrink-0"
+                    title={`Delete ${displayTitle}`}
+                  >
+                    <Trash2 className="h-3.5 w-3.5 text-(--dim)" />
+                  </button>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}

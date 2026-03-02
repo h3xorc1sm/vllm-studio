@@ -165,7 +165,12 @@ export function useChatSessionBootstrap({
     // Avoid re-loading the same session repeatedly
     if (targetSessionId === currentSessionId) return;
 
-    resetActiveSession();
+    // Only abort active runs and clear transient tool state; defer clearing messages
+    // until the new session has loaded to avoid a flash of empty content.
+    clearActiveRun();
+    setExecutingTools(new Set());
+    setToolResultsMap(new Map());
+    resetCompaction();
 
     // If the URL is missing session but we have a remembered one, reflect it in the URL
     if (!sessionFromUrl) {
@@ -193,9 +198,11 @@ export function useChatSessionBootstrap({
       const stored = session.messages ?? [];
       setMessages(mapStoredMessages(stored));
       hydrateAgentState(session);
+      clearAgentFiles();
       void loadAgentFiles({ sessionId: session.id });
     })();
   }, [
+    clearActiveRun,
     clearAgentFiles,
     clearPlan,
     currentSessionId,
@@ -206,10 +213,14 @@ export function useChatSessionBootstrap({
     mapStoredMessages,
     newChatFromUrl,
     resetActiveSession,
+    resetCompaction,
     router,
     selectedModel,
     sessionFromUrl,
+    setExecutingTools,
+    setLastSessionId,
     setMessages,
     setSelectedModel,
+    setToolResultsMap,
   ]);
 }

@@ -224,6 +224,9 @@ export const registerStudioRoutes = (app: Hono, context: AppContext): void => {
     if (!resolvedSource.startsWith(rootPrefix)) {
       throw badRequest("source_path must be inside models_dir");
     }
+    if (!resolvedTargetRoot.startsWith(rootPrefix) && resolvedTargetRoot !== modelsRoot) {
+      throw badRequest("target_root must be inside models_dir");
+    }
     if (!existsSync(resolvedSource)) {
       throw notFound("source_path not found");
     }

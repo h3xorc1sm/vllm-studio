@@ -61,14 +61,13 @@ export const registerRuntimeRoutes = (app: Hono, context: AppContext): void => {
 
   app.post("/runtime/sglang/upgrade", async (ctx) => {
     const body = await ctx.req.json().catch(() => ({}));
-    const command = typeof body?.command === "string" ? body.command : undefined;
+    // Security: user-supplied commands are ignored; only env-configured or built-in commands are used.
     const parsedArguments = Array.isArray(body?.args) ? body.args : [];
     if (parsedArguments.some((value: unknown) => typeof value !== "string")) {
       throw badRequest("args must be an array of strings");
     }
 
     const finalResult = await upgradeSglangRuntime(context.config, {
-      command,
       ...(parsedArguments.length > 0 ? { args: parsedArguments as string[] } : {}),
     });
     await context.eventManager.publish(
@@ -83,14 +82,13 @@ export const registerRuntimeRoutes = (app: Hono, context: AppContext): void => {
 
   app.post("/runtime/llamacpp/upgrade", async (ctx) => {
     const body = await ctx.req.json().catch(() => ({}));
-    const command = typeof body?.command === "string" ? body.command : undefined;
+    // Security: user-supplied commands are ignored; only env-configured or built-in commands are used.
     const parsedArguments = Array.isArray(body?.args) ? body.args : [];
     if (parsedArguments.some((value: unknown) => typeof value !== "string")) {
       throw badRequest("args must be an array of strings");
     }
 
     const result = await upgradeLlamacppRuntime(context.config, {
-      command,
       ...(parsedArguments.length > 0 ? { args: parsedArguments as string[] } : {}),
     });
     await context.eventManager.publish(
@@ -105,13 +103,12 @@ export const registerRuntimeRoutes = (app: Hono, context: AppContext): void => {
 
   app.post("/runtime/cuda/upgrade", async (ctx) => {
     const body = await ctx.req.json().catch(() => ({}));
-    const command = typeof body?.command === "string" ? body.command : undefined;
+    // Security: user-supplied commands are ignored; only env-configured or built-in commands are used.
     const parsedArguments = Array.isArray(body?.args) ? body.args : [];
     if (parsedArguments.some((value: unknown) => typeof value !== "string")) {
       throw badRequest("args must be an array of strings");
     }
     const result = runPlatformUpgrade("cuda", {
-      command,
       ...(parsedArguments.length > 0 ? { args: parsedArguments as string[] } : {}),
     });
     await context.eventManager.publish(
@@ -126,13 +123,12 @@ export const registerRuntimeRoutes = (app: Hono, context: AppContext): void => {
 
   app.post("/runtime/rocm/upgrade", async (ctx) => {
     const body = await ctx.req.json().catch(() => ({}));
-    const command = typeof body?.command === "string" ? body.command : undefined;
+    // Security: user-supplied commands are ignored; only env-configured or built-in commands are used.
     const parsedArguments = Array.isArray(body?.args) ? body.args : [];
     if (parsedArguments.some((value: unknown) => typeof value !== "string")) {
       throw badRequest("args must be an array of strings");
     }
     const result = runPlatformUpgrade("rocm", {
-      command,
       ...(parsedArguments.length > 0 ? { args: parsedArguments as string[] } : {}),
     });
     await context.eventManager.publish(
@@ -151,14 +147,13 @@ export const registerRuntimeRoutes = (app: Hono, context: AppContext): void => {
       throw badRequest("Invalid payload");
     }
     const preferBundled = body?.prefer_bundled !== false;
-    const command = typeof body?.command === "string" ? body.command : undefined;
+    // Security: user-supplied commands are ignored; only env-configured or built-in commands are used.
     const parsedArguments = Array.isArray(body?.args) ? body.args : [];
     const requestedVersion = typeof body?.version === "string" ? body.version.trim() : undefined;
     if (parsedArguments.some((value: unknown) => typeof value !== "string")) {
       throw badRequest("args must be an array of strings");
     }
     const result = await upgradeVllmRuntime({
-      command,
       preferBundled,
       ...(parsedArguments.length > 0 ? { args: parsedArguments as string[] } : {}),
       ...(requestedVersion ? { version: requestedVersion } : {}),

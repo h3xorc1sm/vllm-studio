@@ -155,6 +155,7 @@ export function AppSidebar({ children }: AppSidebarProps) {
             <div className="mt-3 pt-2">
               <ChatSessionsSection
                 sessions={chatSessions}
+                currentSessionId={currentSessionId}
                 open={chatHistoryOpen}
                 isMobile={isMobile}
                 onCloseMobile={() => setSidebarMobileOpen(false)}
