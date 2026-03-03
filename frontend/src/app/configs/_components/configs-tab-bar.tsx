@@ -2,12 +2,13 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { Cable, Network, Paintbrush, ServerCog } from "lucide-react";
+import { Cable, Blocks, Network, Paintbrush, ServerCog } from "lucide-react";
 
-type ConfigTabId = "connection" | "services" | "system" | "appearance";
+type ConfigTabId = "connection" | "providers" | "services" | "system" | "appearance";
 
 const configTabs: Array<{ id: ConfigTabId; label: string; icon: ReactNode }> = [
   { id: "connection", label: "Connection", icon: <Cable className="h-4 w-4" /> },
+  { id: "providers", label: "Providers", icon: <Blocks className="h-4 w-4" /> },
   { id: "services", label: "Services", icon: <Network className="h-4 w-4" /> },
   { id: "system", label: "System", icon: <ServerCog className="h-4 w-4" /> },
   { id: "appearance", label: "Appearance", icon: <Paintbrush className="h-4 w-4" /> },

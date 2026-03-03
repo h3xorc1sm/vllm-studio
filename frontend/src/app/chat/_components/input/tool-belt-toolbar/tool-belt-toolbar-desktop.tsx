@@ -215,11 +215,30 @@ export function ToolBeltToolbarDesktop({
             className="max-w-[180px] px-2 py-1 font-sans text-xs bg-transparent border border-(--border) rounded-lg text-(--dim) focus:outline-none focus:border-(--accent)/40 disabled:opacity-50 truncate appearance-none cursor-pointer hover:text-(--fg) hover:border-(--fg)/20 transition-colors:ease-in:200ms"
             title={selectedModel || "Select model"}
           >
-            {availableModels.map((model, idx) => (
-              <option key={`${model.id}-${idx}`} value={model.id}>
-                {buildDisplayModelLabel(model.id, model.provider)}
-              </option>
-            ))}
+            {(() => {
+              const grouped = new Map<string, typeof availableModels>();
+              for (const model of availableModels) {
+                const group = model.provider || "local";
+                if (!grouped.has(group)) grouped.set(group, []);
+                grouped.get(group)!.push(model);
+              }
+              if (grouped.size <= 1) {
+                return availableModels.map((model, idx) => (
+                  <option key={`${model.id}-${idx}`} value={model.id}>
+                    {buildDisplayModelLabel(model.id, model.provider)}
+                  </option>
+                ));
+              }
+              return Array.from(grouped.entries()).map(([group, models]) => (
+                <optgroup key={group} label={group}>
+                  {models.map((model, idx) => (
+                    <option key={`${model.id}-${idx}`} value={model.id}>
+                      {buildDisplayModelLabel(model.id, model.provider)}
+                    </option>
+                  ))}
+                </optgroup>
+              ));
+            })()}
           </select>
         )}
 

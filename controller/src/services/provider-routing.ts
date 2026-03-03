@@ -1,7 +1,14 @@
 // CRITICAL
+import type { ProviderConfig } from "../config/persisted-config";
+
 export const DAYTONA_PROVIDER = "daytona";
 export const DEFAULT_CHAT_PROVIDER = "openai";
 const DEFAULT_DAYTONA_API_URL = "https://app.daytona.io/api";
+
+export const WELL_KNOWN_PROVIDERS: Record<string, { name: string; baseUrl: string }> = {
+  openai: { name: "OpenAI", baseUrl: "https://api.openai.com" },
+  anthropic: { name: "Anthropic", baseUrl: "https://api.anthropic.com" },
+};
 
 export interface ParsedProviderModel {
   provider: string;
@@ -16,6 +23,7 @@ export interface ProviderRouteConfig {
 export interface ControllerProviderRoutingConfig {
   daytonaApiUrl?: string | undefined;
   daytonaApiKey?: string | undefined;
+  providers?: ProviderConfig[];
 }
 
 const resolveEnvValue = (value: string | undefined): string | undefined => {
@@ -64,12 +72,23 @@ export const resolveDaytonaProviderConfig = (
   return { baseUrl, apiKey };
 };
 
+export const resolveConfiguredProviderConfig = (
+  providerId: string,
+  providers: ProviderConfig[] = []
+): ProviderRouteConfig | null => {
+  const match = providers.find(
+    (p) => p.id.toLowerCase() === providerId.toLowerCase() && p.enabled
+  );
+  if (!match || !match.api_key) return null;
+  return { baseUrl: match.base_url, apiKey: match.api_key };
+};
+
 export const resolveProviderConfig = (
   provider: string,
   config: ControllerProviderRoutingConfig = {}
 ): ProviderRouteConfig | null => {
-  if (provider !== DAYTONA_PROVIDER) {
-    return null;
+  if (provider === DAYTONA_PROVIDER) {
+    return resolveDaytonaProviderConfig(config);
   }
-  return resolveDaytonaProviderConfig(config);
+  return resolveConfiguredProviderConfig(provider, config.providers);
 };

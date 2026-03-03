@@ -1,4 +1,4 @@
-import type { Dispatch, MutableRefObject, RefObject, SetStateAction } from "react";
+import type { MutableRefObject, RefObject } from "react";
 import type { ChatRunStreamEvent } from "@/lib/api";
 import type { ChatMessage, ChatSession, ToolResult } from "@/lib/types";
 import type {
@@ -19,10 +19,8 @@ export type AgentFilesService = ReturnType<typeof useAgentFiles>;
 export type AgentStateService = ReturnType<typeof useAgentState>;
 export type MessageMappingService = ReturnType<typeof useChatMessageMapping>;
 
-export type SetMessages = Dispatch<SetStateAction<ChatMessage[]>>;
+export type SetMessages = (next: ChatMessage[] | ((prev: ChatMessage[]) => ChatMessage[])) => void;
 
-export type MessagesRef = MutableRefObject<ChatMessage[]>;
-export type MessagesLengthRef = MutableRefObject<number>;
 export type SessionIdRef = MutableRefObject<string | null>;
 
 export type ToolResultsMap = Map<string, ToolResult>;

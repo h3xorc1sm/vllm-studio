@@ -30,7 +30,6 @@ const SIDEBAR_PANEL_DEFINITIONS: readonly SidebarPanelDefinition[] = [
       desktop: 1,
       mobile: 1,
     },
-    accent: true,
   },
   {
     id: "computer",
@@ -39,7 +38,6 @@ const SIDEBAR_PANEL_DEFINITIONS: readonly SidebarPanelDefinition[] = [
       desktop: 2,
       mobile: 2,
     },
-    accent: true,
   },
   {
     id: "artifacts",
@@ -57,7 +55,6 @@ const SIDEBAR_PANEL_DEFINITIONS: readonly SidebarPanelDefinition[] = [
       desktop: 5,
       mobile: 3,
     },
-    accent: true,
   },
 ] as const;
 

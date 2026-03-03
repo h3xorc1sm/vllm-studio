@@ -15,7 +15,7 @@ export interface UseChatSessionBootstrapArgs {
   loadSession: (sessionId: string) => Promise<ChatSessionDetail | null | undefined>;
   startNewSession: () => void;
   router: { replace: (href: string) => void };
-  setMessages: (messages: ChatMessage[]) => void;
+  setMessages: (messages: ChatMessage[] | ((prev: ChatMessage[]) => ChatMessage[])) => void;
   mapStoredMessages: (messages: StoredMessage[]) => ChatMessage[];
   hydrateAgentState: (session: ChatSessionDetail) => void;
   loadAgentFiles: (args: { sessionId: string }) => void;
@@ -24,7 +24,7 @@ export interface UseChatSessionBootstrapArgs {
   setExecutingTools: (value: Set<string>) => void;
   setToolResultsMap: (value: Map<string, ToolResult>) => void;
   resetCompaction: () => void;
-  messagesLengthRef: MutableRefObject<number>;
+  getMessagesLength: () => number;
   sessionIdRef: MutableRefObject<string | null>;
   activeRunIdRef: MutableRefObject<string | null>;
   runAbortControllerRef: MutableRefObject<AbortController | null>;
@@ -67,30 +67,22 @@ export function useChatSessionBootstrap({
   setExecutingTools,
   setToolResultsMap,
   resetCompaction,
-  messagesLengthRef,
+  getMessagesLength,
   sessionIdRef,
   activeRunIdRef,
   runAbortControllerRef,
   getLastSessionId,
   setLastSessionId,
 }: UseChatSessionBootstrapArgs) {
-  const clearActiveRun = useCallback(() => {
-    if (runAbortControllerRef.current) {
-      runAbortControllerRef.current.abort();
+  const clearActiveRun = useCallback((snapshotController?: AbortController | null) => {
+    const controller = snapshotController !== undefined ? snapshotController : runAbortControllerRef.current;
+    if (controller && controller === runAbortControllerRef.current) {
+      controller.abort();
       runAbortControllerRef.current = null;
     }
     activeRunIdRef.current = null;
   }, [activeRunIdRef, runAbortControllerRef]);
 
-  const resetActiveSession = useCallback(() => {
-    startNewSession();
-    clearActiveRun();
-    setExecutingTools(new Set());
-    setToolResultsMap(new Map());
-    clearPlan();
-    clearAgentFiles();
-    resetCompaction();
-  }, [startNewSession, clearActiveRun, setExecutingTools, setToolResultsMap, clearPlan, clearAgentFiles, resetCompaction]);
   const handledNewChatResetRef = useRef(false);
 
   // Load sessions on mount
@@ -119,7 +111,7 @@ export function useChatSessionBootstrap({
           if (!session) return;
           const storedMessages = session.messages ?? [];
           // Only restore if we lost messages (PWA was killed)
-          if (messagesLengthRef.current === 0 && storedMessages.length > 0) {
+          if (getMessagesLength() === 0 && storedMessages.length > 0) {
             setMessages(mapStoredMessages(storedMessages));
           }
           hydrateAgentState(session);
@@ -137,13 +129,18 @@ export function useChatSessionBootstrap({
     loadAgentFiles,
     loadSession,
     mapStoredMessages,
-    messagesLengthRef,
+    getMessagesLength,
     sessionIdRef,
     setMessages,
   ]);
 
   // Handle URL session/new params and restore last session if needed
   useEffect(() => {
+    // Snapshot the abort controller at the start of this effect so we only
+    // abort the run that was active when the effect was scheduled, not a
+    // new run that may have started between render and effect execution.
+    const controllerSnapshot = runAbortControllerRef.current;
+
     const gate = resolveNewChatResetGate({
       newChatFromUrl,
       hasHandledNewChatReset: handledNewChatResetRef.current,
@@ -151,10 +148,13 @@ export function useChatSessionBootstrap({
     handledNewChatResetRef.current = gate.hasHandledNewChatReset;
 
     if (gate.shouldReset) {
-      resetActiveSession();
-      setMessages([]);
+      startNewSession();
+      clearActiveRun(controllerSnapshot);
+      setExecutingTools(new Set());
+      setToolResultsMap(new Map());
       clearPlan();
       clearAgentFiles();
+      resetCompaction();
       return;
     }
     if (newChatFromUrl) return;
@@ -167,7 +167,7 @@ export function useChatSessionBootstrap({
 
     // Only abort active runs and clear transient tool state; defer clearing messages
     // until the new session has loaded to avoid a flash of empty content.
-    clearActiveRun();
+    clearActiveRun(controllerSnapshot);
     setExecutingTools(new Set());
     setToolResultsMap(new Map());
     resetCompaction();
@@ -180,12 +180,12 @@ export function useChatSessionBootstrap({
     void (async () => {
       const session = await loadSession(targetSessionId);
       if (!session) {
-        // Stale session ID in URL or localStorage: reset to a new chat so navigation doesn't feel "stuck".
+        // Stale session ID in URL or localStorage: reset to new chat.
         setLastSessionId("");
-        resetActiveSession();
-        setMessages([]);
+        startNewSession();
         clearPlan();
         clearAgentFiles();
+        resetCompaction();
         if (sessionFromUrl) {
           router.replace("/chat?new=1");
         }
@@ -212,9 +212,9 @@ export function useChatSessionBootstrap({
     loadSession,
     mapStoredMessages,
     newChatFromUrl,
-    resetActiveSession,
     resetCompaction,
     router,
+    runAbortControllerRef,
     selectedModel,
     sessionFromUrl,
     setExecutingTools,
@@ -222,5 +222,6 @@ export function useChatSessionBootstrap({
     setMessages,
     setSelectedModel,
     setToolResultsMap,
+    startNewSession,
   ]);
 }

@@ -12,6 +12,7 @@ export const initialChatState: ChatState = {
   // Input
   input: "",
   error: null,
+  messages: [],
 
   // Streaming
   streamingStartTime: null,

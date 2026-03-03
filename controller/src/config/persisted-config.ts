@@ -2,6 +2,14 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 
+export interface ProviderConfig {
+  id: string;
+  name: string;
+  base_url: string;
+  api_key: string;
+  enabled: boolean;
+}
+
 export interface PersistedConfig {
   models_dir?: string;
   daytona_api_url?: string;
@@ -10,6 +18,7 @@ export interface PersistedConfig {
   daytona_sandbox_id?: string;
   daytona_agent_mode?: boolean;
   agent_fs_local_fallback?: boolean;
+  providers?: ProviderConfig[];
 }
 
 export const getPersistedConfigPath = (dataDirectory: string): string => {

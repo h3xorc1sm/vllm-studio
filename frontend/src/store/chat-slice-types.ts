@@ -2,6 +2,7 @@
 import type {
   AgentFileEntry,
   AgentFileVersion,
+  ChatMessage,
   ChatSession,
   DeepResearchConfig,
   SessionUsage,
@@ -19,6 +20,7 @@ export interface ChatState {
 
   input: string;
   error: string | null;
+  messages: ChatMessage[];
 
   streamingStartTime: number | null;
   elapsedSeconds: number;
@@ -120,6 +122,8 @@ export interface ChatActions {
 
   setInput: (input: string) => void;
   setError: (error: string | null) => void;
+  setMessages: (messages: ChatMessage[]) => void;
+  updateMessages: (updater: (messages: ChatMessage[]) => ChatMessage[]) => void;
 
   setStreamingStartTime: (streamingStartTime: number | null) => void;
   setElapsedSeconds: (elapsedSeconds: number) => void;

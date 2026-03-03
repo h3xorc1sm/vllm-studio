@@ -10,6 +10,7 @@ export { useChatDerived } from "./chat/use-chat-derived";
 export { useChatSessions } from "./chat/use-chat-sessions";
 export { useChatCompaction } from "./chat/use-chat-compaction";
 export { useChatMessageMapping } from "./chat/use-chat-message-mapping";
+export { useChatMessages, useSetChatMessages } from "./chat/use-chat-messages";
 export { useChatScroll } from "./chat/use-chat-scroll";
 export { useChatToolResults } from "./chat/use-chat-tool-results";
 export { useChatTools } from "./chat/use-chat-tools";

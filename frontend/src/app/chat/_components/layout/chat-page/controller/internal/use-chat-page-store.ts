@@ -8,6 +8,7 @@ export function useChatPageStore() {
   const store = useAppStore(
     useShallow((state) => ({
       setInput: state.setInput,
+      updateMessages: state.updateMessages,
       selectedModel: state.selectedModel,
       setSelectedModel: state.setSelectedModel,
       systemPrompt: state.systemPrompt,

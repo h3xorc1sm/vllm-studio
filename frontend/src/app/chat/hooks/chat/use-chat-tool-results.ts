@@ -2,12 +2,15 @@
 "use client";
 
 import { useCallback } from "react";
-import type { Dispatch, SetStateAction } from "react";
-import { safeJsonStringify } from "@/lib/safe-json";
+import {
+  extractToolResultText,
+  withToolExecutionEnd,
+  withToolExecutionStart,
+} from "@/lib/systems/tools/tool-tracker";
 import type { ChatMessage, ChatMessagePart, ToolResult } from "@/lib/types";
 
 type UseChatToolResultsArgs = {
-  setMessages: Dispatch<SetStateAction<ChatMessage[]>>;
+  setMessages: (next: ChatMessage[] | ((prev: ChatMessage[]) => ChatMessage[])) => void;
   isToolPart: (part: ChatMessagePart) => part is Extract<ChatMessagePart, { toolCallId: string }>;
   updateToolResultsMap: (
     updater: (prev: Map<string, ToolResult>) => Map<string, ToolResult>,
@@ -19,33 +22,6 @@ export function useChatToolResults({
   isToolPart,
   updateToolResultsMap,
 }: UseChatToolResultsArgs) {
-  const extractToolResultText = useCallback((result: unknown): string => {
-    if (result == null) return "";
-    if (typeof result === "string") return result;
-    if (Array.isArray(result)) {
-      return result
-        .filter(
-          (item) =>
-            item &&
-            typeof item === "object" &&
-            (item as Record<string, unknown>)["type"] === "text",
-        )
-        .map((item) => String((item as Record<string, unknown>)["text"] ?? ""))
-        .join("\n");
-    }
-    if (typeof result === "object") {
-      const record = result as Record<string, unknown>;
-      if (Array.isArray(record["content"])) {
-        return extractToolResultText(record["content"]);
-      }
-      if (typeof record["text"] === "string") {
-        return record["text"];
-      }
-      return safeJsonStringify(record, "");
-    }
-    return String(result);
-  }, []);
-
   const applyToolResultToMessages = useCallback(
     (toolCallId: string, resultText: string, isError: boolean) => {
       setMessages((prev) =>
@@ -71,19 +47,7 @@ export function useChatToolResults({
 
   const recordToolResult = useCallback(
     (toolCallId: string, resultText: string, isError: boolean) => {
-      updateToolResultsMap((prev) => {
-        const next = new Map(prev);
-        const existing = next.get(toolCallId);
-        const payload: ToolResult = {
-          tool_call_id: toolCallId,
-          content: resultText,
-          ...(existing?.name ? { name: existing.name } : {}),
-          ...(existing?.input !== undefined ? { input: existing.input } : {}),
-          isError,
-        };
-        next.set(toolCallId, payload);
-        return next;
-      });
+      updateToolResultsMap((prev) => withToolExecutionEnd(prev, toolCallId, resultText, isError));
       applyToolResultToMessages(toolCallId, resultText, isError);
     },
     [applyToolResultToMessages, updateToolResultsMap],
@@ -91,18 +55,7 @@ export function useChatToolResults({
 
   const recordToolExecutionMetadata = useCallback(
     (toolCallId: string, toolName: string, input: unknown) => {
-      updateToolResultsMap((prev) => {
-        const next = new Map(prev);
-        const existing = next.get(toolCallId);
-        next.set(toolCallId, {
-          tool_call_id: toolCallId,
-          content: existing?.content ?? "",
-          name: toolName,
-          input,
-          ...(existing?.isError !== undefined ? { isError: existing.isError } : {}),
-        });
-        return next;
-      });
+      updateToolResultsMap((prev) => withToolExecutionStart(prev, toolCallId, toolName, input));
     },
     [updateToolResultsMap],
   );

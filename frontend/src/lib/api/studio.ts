@@ -88,6 +88,60 @@ export function createStudioApi(core: ApiCore) {
         body: JSON.stringify({ source_path: sourcePath, target_root: targetRoot }),
       }),
 
+    getProviders: (): Promise<{
+      providers: Array<{
+        id: string;
+        name: string;
+        base_url: string;
+        enabled: boolean;
+        has_api_key: boolean;
+      }>;
+    }> => core.request("/studio/providers"),
+
+    createProvider: (payload: {
+      id: string;
+      name: string;
+      base_url: string;
+      api_key: string;
+      enabled?: boolean;
+    }): Promise<{
+      success: boolean;
+      provider: { id: string; name: string; base_url: string; enabled: boolean; has_api_key: boolean };
+    }> =>
+      core.request("/studio/providers", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      }),
+
+    updateProvider: (
+      id: string,
+      payload: {
+        name?: string;
+        base_url?: string;
+        api_key?: string;
+        enabled?: boolean;
+      },
+    ): Promise<{
+      success: boolean;
+      provider: { id: string; name: string; base_url: string; enabled: boolean; has_api_key: boolean };
+    }> =>
+      core.request(`/studio/providers/${encodePathSegments(id)}`, {
+        method: "PUT",
+        body: JSON.stringify(payload),
+      }),
+
+    deleteProvider: (id: string): Promise<{ success: boolean }> =>
+      core.request(`/studio/providers/${encodePathSegments(id)}`, {
+        method: "DELETE",
+      }),
+
+    getProviderModels: (): Promise<{
+      providers: Array<{
+        provider: string;
+        models: Array<{ id: string; name?: string }>;
+      }>;
+    }> => core.request("/studio/provider-models"),
+
     getVllmRuntime: (): Promise<VllmRuntimeInfo> => core.request("/runtime/vllm"),
 
     getVllmRuntimeConfig: (): Promise<VllmRuntimeConfig> => core.request("/runtime/vllm/config"),

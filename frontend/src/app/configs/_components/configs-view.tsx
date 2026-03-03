@@ -13,6 +13,7 @@ import { ConnectionFlow } from "./connection-flow";
 import { NoBackendState } from "./no-backend-state";
 import { ServiceTopology } from "./service-topology";
 import { AppearanceSettings } from "./appearance-settings";
+import { ProvidersSection } from "./providers-section";
 
 interface ConfigsViewProps {
   data: ConfigData | null;
@@ -97,6 +98,12 @@ export function ConfigsView({
                 onSave={onSaveSettings}
               />
               {showBackendUnavailable && buildNoBackendState()}
+            </section>
+          )}
+
+          {activeTab === "providers" && (
+            <section>
+              <ProvidersSection />
             </section>
           )}
 

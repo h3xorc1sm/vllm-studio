@@ -24,6 +24,17 @@ export const createChatSlice: StateCreator<ChatSlice, [], [], ChatSlice> = (set)
   // Input
   setInput: (input) => set({ input }),
   setError: (error) => set({ error }),
+  setMessages: (messages) =>
+    set((state) => {
+      if (state.messages === messages) return state;
+      return { messages };
+    }),
+  updateMessages: (updater) =>
+    set((state) => {
+      const next = updater(state.messages);
+      if (next === state.messages) return state;
+      return { messages: next };
+    }),
 
   // Streaming
   setStreamingStartTime: (streamingStartTime) => set({ streamingStartTime }),

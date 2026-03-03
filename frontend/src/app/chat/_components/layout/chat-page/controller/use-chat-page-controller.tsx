@@ -3,7 +3,6 @@
 
 import { useRef, useCallback, useMemo, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
-import type { ChatMessage } from "@/lib/types";
 import * as Hooks from "../../../../hooks";
 import type { SidebarTab } from "../../sidebar/unified-sidebar";
 import { buildAgentModeSystemPrompt } from "../../../../utils/agent-system-prompt";
@@ -33,9 +32,8 @@ export function useChatPageController(): ChatPageViewProps {
   }, [store.systemPrompt, store.agentMode, store.agentPlan]);
 
   // Refs
-  const messagesLengthRef = useRef(0);
-  const messagesRef = useRef<ChatMessage[]>([]);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const messages = Hooks.useChatMessages();
+  const setMessages = Hooks.useSetChatMessages();
   const [isLoading, setIsLoading] = useState(false);
   const [streamError, setStreamError] = useState<string | null>(null);
   const [streamStalled, setStreamStalled] = useState(false);
@@ -88,8 +86,7 @@ export function useChatPageController(): ChatPageViewProps {
     hydrateAgentState,
     mapStoredMessages: messageMapping.mapStoredMessages,
     startNewSession: sessions.startNewSession,
-    messagesRef,
-    setMessages,
+    updateMessages: store.updateMessages,
   });
 
   // Derived state from messages
@@ -157,10 +154,7 @@ export function useChatPageController(): ChatPageViewProps {
     agentFiles: agentFilesService,
     agentState,
     messageMapping,
-    messages,
     setMessages,
-    messagesRef,
-    messagesLengthRef,
     sessionIdRef,
     newChatFromUrl,
     sessionFromUrl,

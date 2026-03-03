@@ -2,7 +2,7 @@
 "use client";
 
 import { useEffect, type MutableRefObject } from "react";
-import type { ChatMessage } from "@/lib/types";
+import { useAppStore } from "@/store";
 import { useChatSessionBootstrap } from "../../chat-session-bootstrap";
 import { useChatPageTimers } from "../use-chat-page-timers";
 import type {
@@ -11,8 +11,6 @@ import type {
   ChatPageStore,
   ChatSessionsService,
   MessageMappingService,
-  MessagesLengthRef,
-  MessagesRef,
   RouterLike,
   SessionIdRef,
   SetMessages,
@@ -25,10 +23,7 @@ export interface UseChatPageLifecycleArgs {
   agentState: AgentStateService;
   messageMapping: MessageMappingService;
 
-  messages: ChatMessage[];
   setMessages: SetMessages;
-  messagesRef: MessagesRef;
-  messagesLengthRef: MessagesLengthRef;
   sessionIdRef: SessionIdRef;
 
   newChatFromUrl: boolean;
@@ -55,10 +50,7 @@ export function useChatPageLifecycle({
   agentFiles,
   agentState,
   messageMapping,
-  messages,
   setMessages,
-  messagesRef,
-  messagesLengthRef,
   sessionIdRef,
   newChatFromUrl,
   sessionFromUrl,
@@ -75,14 +67,7 @@ export function useChatPageLifecycle({
   setLastSessionId,
 }: UseChatPageLifecycleArgs) {
   const { clearAgentFiles, loadAgentFiles } = agentFiles;
-
-  useEffect(() => {
-    messagesRef.current = messages;
-  }, [messages, messagesRef]);
-
-  useEffect(() => {
-    messagesLengthRef.current = messages.length;
-  }, [messages.length, messagesLengthRef]);
+  const messagesLength = useAppStore((state) => state.messages.length);
 
   useChatPageTimers({
     isLoading,
@@ -114,7 +99,7 @@ export function useChatPageLifecycle({
     setExecutingTools: store.setExecutingTools,
     setToolResultsMap: store.setToolResultsMap,
     resetCompaction,
-    messagesLengthRef,
+    getMessagesLength: () => messagesLength,
     sessionIdRef,
     activeRunIdRef,
     runAbortControllerRef,

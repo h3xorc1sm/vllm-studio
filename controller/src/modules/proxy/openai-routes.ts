@@ -138,6 +138,7 @@ export const registerOpenAIRoutes = (app: Hono, context: AppContext): void => {
         ? resolveProviderConfig(requestProvider, {
             daytonaApiUrl: context.config.daytona_api_url,
             daytonaApiKey: context.config.daytona_api_key,
+            providers: context.config.providers,
           })
         : null;
 

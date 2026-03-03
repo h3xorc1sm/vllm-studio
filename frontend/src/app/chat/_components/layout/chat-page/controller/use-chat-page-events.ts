@@ -1,7 +1,7 @@
 // CRITICAL
 "use client";
 
-import { useEffect, type MutableRefObject } from "react";
+import { useEffect } from "react";
 import type { ChatMessage, ChatSessionDetail, StoredMessage } from "@/lib/types";
 
 export interface UseChatPageEventsArgs {
@@ -9,8 +9,7 @@ export interface UseChatPageEventsArgs {
   hydrateAgentState: (session: ChatSessionDetail) => void;
   mapStoredMessages: (messages: StoredMessage[]) => ChatMessage[];
   startNewSession: () => void;
-  messagesRef: MutableRefObject<ChatMessage[]>;
-  setMessages: (messages: ChatMessage[]) => void;
+  updateMessages: (updater: (messages: ChatMessage[]) => ChatMessage[]) => void;
 }
 
 export function useChatPageEvents({
@@ -18,8 +17,7 @@ export function useChatPageEvents({
   hydrateAgentState,
   mapStoredMessages,
   startNewSession,
-  messagesRef,
-  setMessages,
+  updateMessages,
 }: UseChatPageEventsArgs) {
   useEffect(() => {
     const handler = (event: Event) => {
@@ -36,19 +34,17 @@ export function useChatPageEvents({
           if (!message) return;
           const mapped = mapStoredMessages([message])[0];
           if (!mapped) return;
-          const current = messagesRef.current;
-          const index = current.findIndex((entry) => entry.id === mapped.id);
-          const next =
-            index >= 0
+          updateMessages((current) => {
+            const index = current.findIndex((entry) => entry.id === mapped.id);
+            return index >= 0
               ? [...current.slice(0, index), mapped, ...current.slice(index + 1)]
               : [...current, mapped];
-          setMessages(next);
+          });
           break;
         }
         case "chat_session_deleted": {
           const sessionId = String(data["session_id"] ?? "");
           if (currentSessionId && sessionId === currentSessionId) {
-            setMessages([]);
             startNewSession();
           }
           break;
@@ -76,8 +72,7 @@ export function useChatPageEvents({
     currentSessionId,
     hydrateAgentState,
     mapStoredMessages,
-    messagesRef,
-    setMessages,
+    updateMessages,
     startNewSession,
   ]);
 }

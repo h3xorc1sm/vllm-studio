@@ -40,7 +40,7 @@ export type UseChatCompactionArgs = {
   updateSessions: (updater: (sessions: ChatSessionDetail[]) => ChatSessionDetail[]) => void;
   setCurrentSessionId: (value: string | null) => void;
   setCurrentSessionTitle: (value: string) => void;
-  setMessages: (messages: ChatMessage[]) => void;
+  setMessages: (messages: ChatMessage[] | ((prev: ChatMessage[]) => ChatMessage[])) => void;
 
   hydrateAgentState: (session: ChatSessionDetail) => void;
   loadAgentFiles: (options: { sessionId: string }) => Promise<unknown>;

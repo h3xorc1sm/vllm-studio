@@ -106,9 +106,10 @@ export function useAvailableModels({
 
     const loadModels = async () => {
       try {
-        const [data, recipesResult] = await Promise.all([
+        const [data, recipesResult, providerModelsResult] = await Promise.all([
           api.getOpenAIModels(),
           api.getRecipes().catch(() => ({ recipes: [] })),
+          api.getProviderModels().catch(() => ({ providers: [] })),
         ]);
 
         const dataModels = (data as { data?: unknown[] }).data;
@@ -147,6 +148,22 @@ export function useAvailableModels({
             ];
           })
           .sort((a, b) => a.id.localeCompare(b.id));
+
+        // Merge models from configured external providers
+        const existingIds = new Set(mappedModels.map((m) => m.id));
+        for (const providerGroup of providerModelsResult.providers ?? []) {
+          for (const model of providerGroup.models) {
+            const fullId = `${providerGroup.provider}/${model.id}`;
+            if (!existingIds.has(fullId)) {
+              mappedModels.push({
+                id: fullId,
+                max_model_len: getContextLength(model.id),
+                active: false,
+              });
+              existingIds.add(fullId);
+            }
+          }
+        }
 
         setCatalogModels(mappedModels);
 

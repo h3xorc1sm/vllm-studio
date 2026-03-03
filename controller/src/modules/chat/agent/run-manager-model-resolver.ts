@@ -88,5 +88,13 @@ export function resolveApiKey(context: AppContext, provider = DEFAULT_CHAT_PROVI
     });
     return providerConfig?.apiKey ?? "none";
   }
+
+  const configuredProvider = resolveProviderConfig(provider, {
+    providers: context.config.providers,
+  });
+  if (configuredProvider) {
+    return configuredProvider.apiKey;
+  }
+
   return context.config.api_key ?? process.env["OPENAI_API_KEY"] ?? "none";
 }

@@ -28,7 +28,6 @@ export type UseRunEventHandlerArgs = {
     assistantContent: string,
   ) => Promise<string | null>;
 
-  extractToolResultText: (input: unknown) => string;
   recordToolExecutionMetadata: (toolCallId: string, toolName: string, input: unknown) => void;
   recordToolResult: (toolCallId: string, resultText: string, isError: boolean) => void;
   updateExecutingTools: (updater: (executingTools: Set<string>) => Set<string>) => void;

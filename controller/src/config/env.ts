@@ -3,7 +3,7 @@ import { config as loadEnvironment } from "dotenv";
 import { z } from "zod";
 import { existsSync } from "node:fs";
 import { basename, resolve } from "node:path";
-import { loadPersistedConfig } from "./persisted-config";
+import { loadPersistedConfig, type ProviderConfig } from "./persisted-config";
 
 /**
  * Runtime configuration for the controller.
@@ -32,6 +32,7 @@ export interface Config {
   exllamav3_command?: string;
   strict_openai_models: boolean;
   openai_model_activation_policy?: OpenAIModelActivationPolicy;
+  providers: ProviderConfig[];
 }
 
 /**
@@ -126,6 +127,7 @@ export const createConfig = (): Config => {
     daytona_agent_mode: daytonaAgentMode,
     agent_fs_local_fallback: localAgentFsFallback,
     openai_model_activation_policy: openaiModelActivationPolicy,
+    providers: [],
   };
 
   const litellmDatabaseUrl =
@@ -215,6 +217,10 @@ export const createConfig = (): Config => {
     } else {
       delete config.daytona_sandbox_id;
     }
+  }
+
+  if (Array.isArray(persisted.providers)) {
+    config.providers = persisted.providers;
   }
 
   return config;

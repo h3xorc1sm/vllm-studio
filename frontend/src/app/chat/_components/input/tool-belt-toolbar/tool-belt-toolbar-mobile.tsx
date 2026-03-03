@@ -122,11 +122,30 @@ export function ToolBeltToolbarMobile({
             className="h-10 w-full px-3 font-mono text-[12px] bg-(--border) border border-(--border) rounded-full text-(--dim) focus:outline-none disabled:opacity-50 truncate appearance-none cursor-pointer hover:bg-(--border) transition-colors"
             title={selectedModel || "Select model"}
           >
-            {availableModels.map((model, idx) => (
-              <option key={`${model.id}-${idx}`} value={model.id}>
-                {buildDisplayModelLabel(model.id, model.provider)}
-              </option>
-            ))}
+            {(() => {
+              const grouped = new Map<string, typeof availableModels>();
+              for (const model of availableModels) {
+                const group = model.provider || "local";
+                if (!grouped.has(group)) grouped.set(group, []);
+                grouped.get(group)!.push(model);
+              }
+              if (grouped.size <= 1) {
+                return availableModels.map((model, idx) => (
+                  <option key={`${model.id}-${idx}`} value={model.id}>
+                    {buildDisplayModelLabel(model.id, model.provider)}
+                  </option>
+                ));
+              }
+              return Array.from(grouped.entries()).map(([group, models]) => (
+                <optgroup key={group} label={group}>
+                  {models.map((model, idx) => (
+                    <option key={`${model.id}-${idx}`} value={model.id}>
+                      {buildDisplayModelLabel(model.id, model.provider)}
+                    </option>
+                  ))}
+                </optgroup>
+              ));
+            })()}
           </select>
         </div>
       )}

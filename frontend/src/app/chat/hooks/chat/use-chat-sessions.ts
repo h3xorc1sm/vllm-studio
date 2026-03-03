@@ -17,6 +17,9 @@ export function useChatSessions() {
     setCurrentSessionId,
     setCurrentSessionTitle,
     setSessionsLoading,
+    setMessages,
+    setAgentPlan,
+    setAgentFiles,
   } = useAppStore(
     useShallow((state) => ({
       sessions: state.sessions,
@@ -28,6 +31,9 @@ export function useChatSessions() {
       setCurrentSessionId: state.setCurrentSessionId,
       setCurrentSessionTitle: state.setCurrentSessionTitle,
       setSessionsLoading: state.setSessionsLoading,
+      setMessages: state.setMessages,
+      setAgentPlan: state.setAgentPlan,
+      setAgentFiles: state.setAgentFiles,
     })),
   );
   const activeSessionRef = useRef<string | null>(null);
@@ -48,7 +54,10 @@ export function useChatSessions() {
     activeSessionRef.current = null;
     setCurrentSessionId(null);
     setCurrentSessionTitle("New Chat");
-  }, [setCurrentSessionId, setCurrentSessionTitle]);
+    setMessages([]);
+    setAgentPlan(null);
+    setAgentFiles([]);
+  }, [setCurrentSessionId, setCurrentSessionTitle, setMessages, setAgentPlan, setAgentFiles]);
 
   const loadSession = useCallback(
     async (sessionId: string) => {

@@ -102,11 +102,30 @@ export function ChatSettingsModal({
             className="w-full px-3 py-2 bg-background border border-(--border) rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-(--hl1)/50"
           >
             <option value="">Select a model</option>
-            {availableModels.map((model) => (
-              <option key={model.id} value={model.id}>
-                {model.name ?? model.id}
-              </option>
-            ))}
+            {(() => {
+              const grouped = new Map<string, ModelOption[]>();
+              for (const model of availableModels) {
+                const group = model.provider || "local";
+                if (!grouped.has(group)) grouped.set(group, []);
+                grouped.get(group)!.push(model);
+              }
+              if (grouped.size <= 1) {
+                return availableModels.map((model) => (
+                  <option key={model.id} value={model.id}>
+                    {model.name ?? model.id}
+                  </option>
+                ));
+              }
+              return Array.from(grouped.entries()).map(([group, models]) => (
+                <optgroup key={group} label={group}>
+                  {models.map((model) => (
+                    <option key={model.id} value={model.id}>
+                      {model.name ?? model.id}
+                    </option>
+                  ))}
+                </optgroup>
+              ));
+            })()}
           </select>
         </div>
 
