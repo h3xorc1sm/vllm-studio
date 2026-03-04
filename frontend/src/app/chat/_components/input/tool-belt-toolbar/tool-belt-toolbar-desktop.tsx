@@ -91,7 +91,7 @@ export function ToolBeltToolbarDesktop({
     <div className="hidden md:flex items-center justify-between">
       <div className="flex items-center gap-1 min-w-0">
         {/* Timer during loading */}
-        {isLoading && elapsedSeconds !== undefined && (
+        {isLoading && elapsedSeconds !== undefined && elapsedSeconds >= 0 && (
           <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg min-w-0">
             <Clock className="h-3 w-3 text-(--fg)/40 animate-pulse shrink-0" />
             <span className="text-xs font-mono text-(--fg)/40 shrink-0">
