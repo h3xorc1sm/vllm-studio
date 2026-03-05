@@ -116,7 +116,7 @@ const buildBrowserProbeCommand = (url: string): string =>
     "tmp=$(mktemp)",
     "cleanup(){ rm -f \"$tmp\"; }",
     "trap cleanup EXIT",
-    "curl -L --max-time 25 -A 'vllm-studio-agent-browser/1.0' -sS \"$URL\" > \"$tmp\"",
+    "curl -L --max-time 25 -A 'vllm-studio-agent-browser/1.0' -sL \"$URL\" > \"$tmp\"",
     "title=$(tr '\\n' ' ' < \"$tmp\" | sed -n \"s:.*<title[^>]*>\\(.*\\)</title>.*:\\1:Ip\" | head -n 1 | sed 's/[[:space:]]\\+/ /g; s/^ //; s/ $//')",
     "if [ -z \"$title\" ]; then title='(no title found)'; fi",
     "preview=$(head -c 1400 \"$tmp\" | tr '\\n' ' ' | tr '\\r' ' ' | sed 's/[[:space:]]\\+/ /g; s/^ //; s/ $//')",

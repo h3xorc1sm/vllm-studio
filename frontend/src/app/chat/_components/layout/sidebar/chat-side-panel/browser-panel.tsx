@@ -40,7 +40,20 @@ const shortUrl = (url: string): string => {
 
 export function BrowserPanel({ activityGroups, machine, machineLoading, machineError }: BrowserPanelProps) {
   const entries = useMemo(
-    () => extractBrowserActivityEntries(activityGroups),
+    () => {
+      const allEntries = extractBrowserActivityEntries(activityGroups);
+      // Filter out duplicate URLs to only keep the latest entry for each URL
+      const uniqueEntries = [];
+      const seenUrls = new Set<string>();
+      
+      for (const entry of allEntries) {
+        if (!seenUrls.has(entry.url)) {
+          seenUrls.add(entry.url);
+          uniqueEntries.push(entry);
+        }
+      }
+      return uniqueEntries;
+    },
     [activityGroups],
   );
   const [selectedUrlOverride, setSelectedUrlOverride] = useState<string | null>(null);

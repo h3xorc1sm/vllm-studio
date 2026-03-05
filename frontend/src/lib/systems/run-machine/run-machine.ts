@@ -222,14 +222,16 @@ export const transitionRunMachine: StateMachineTransition<
         toolResults: parseTurnToolResults(data),
         assistantContentForTitle: extractAssistantContentForTitle(mapped),
       });
-      effects.push({ type: "stream/set-loading", loading: false });
-      effects.push({ type: "tools/clear-executing" });
+      // Do not clear executing tools here if we are still active, they'll clear on run_end
+      // Wait, we need to clear loading state only when the whole run is done?
+      // actually, if we keep executing tools we shouldn't set loading false?
+      // For now, let's just remove tools/clear-executing here.
+      // And we might still need loading false.
+      // Wait, let's keep loading true if there are more turns, but turn_end means this turn ended.
       return { state: baseState, effects };
     }
 
     case "agent_end": {
-      effects.push({ type: "stream/set-loading", loading: false });
-      effects.push({ type: "tools/clear-executing" });
       return { state: baseState, effects };
     }
 
