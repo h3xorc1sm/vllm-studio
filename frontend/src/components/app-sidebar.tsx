@@ -4,8 +4,8 @@
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
-import { ChevronLeft, ChevronRight } from "lucide-react";
-import { useCallback } from "react";
+import { ChevronLeft, ChevronRight, Plus, Command } from "lucide-react";
+import { useCallback, useEffect } from "react";
 import { useShallow } from "zustand/react/shallow";
 import api from "@/lib/api";
 import { useAppStore } from "@/store";
@@ -45,6 +45,18 @@ export function AppSidebar({ children }: AppSidebarProps) {
     setSidebarMobileOpen(false);
     router.push("/chat?new=1");
   }, [setSidebarMobileOpen, router]);
+
+  // Keyboard shortcut: Cmd/Ctrl + K for new chat
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        createNewChat();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [createNewChat]);
 
   const handleDeleteSession = useCallback(
     async (sessionId: string, displayTitle: string) => {
@@ -119,6 +131,28 @@ export function AppSidebar({ children }: AppSidebarProps) {
 
         {/* Navigation */}
         <nav className="flex-1 overflow-y-auto py-2 px-2">
+          {/* New Chat Button - Prominent at top */}
+          <button
+            onClick={createNewChat}
+            className={`
+              w-full flex items-center gap-3 px-3 py-2.5 rounded-lg mb-2 transition-colors
+              bg-(--fg) text-(--bg) hover:opacity-90
+              ${collapsed && !isMobile ? "justify-center" : ""}
+            `}
+            title={collapsed && !isMobile ? "New Chat" : undefined}
+          >
+            <Plus className="h-5 w-5 shrink-0" strokeWidth={1.5} />
+            {(!collapsed || isMobile) && (
+              <>
+                <span className="text-sm font-medium flex-1 text-left">New Chat</span>
+                <kbd className="hidden lg:flex items-center gap-0.5 text-[10px] font-sans opacity-70">
+                  <Command className="w-3 h-3" />
+                  <span>K</span>
+                </kbd>
+              </>
+            )}
+          </button>
+
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = pathname === item.href;
@@ -150,16 +184,15 @@ export function AppSidebar({ children }: AppSidebarProps) {
             );
           })}
 
-          {/* Chat sessions section (after nav items) */}
-          {(!collapsed || isMobile) && (
-            <div className="mt-3 pt-2">
+          {/* Chat sessions section - Flattened, no indentation */}
+          {(!collapsed || isMobile) && chatHistoryOpen && (
+            <div className="mt-4 pt-3 border-t border-(--border)">
               <ChatSessionsSection
                 sessions={chatSessions}
                 currentSessionId={currentSessionId}
                 open={chatHistoryOpen}
                 isMobile={isMobile}
                 onCloseMobile={() => setSidebarMobileOpen(false)}
-                onNewChat={createNewChat}
                 onDeleteSession={handleDeleteSession}
               />
             </div>

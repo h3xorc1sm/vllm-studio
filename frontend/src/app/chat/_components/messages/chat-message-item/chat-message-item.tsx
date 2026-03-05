@@ -8,9 +8,6 @@ import { MessageRenderer } from "../message-renderer";
 import { MiniArtifactCard } from "../../artifacts/mini-artifact-card";
 import { PerfProfiler } from "../../perf/perf-profiler";
 import type { Artifact, ChatMessage, ChatMessageMetadata } from "@/lib/types";
-import { TOOL_PENDING_STATES } from "./constants";
-import { InlineThinking } from "./inline-thinking";
-import { InlineToolIndicator } from "./inline-tool-indicator";
 import { useMessageDerived } from "./use-message-derived";
 import { UserMessage } from "./user-message";
 
@@ -65,7 +62,7 @@ function ChatMessageItemBase({
   const setCopiedMessageId = useAppStore((state) => state.setCopiedMessageId);
   const setActiveArtifactId = useAppStore((state) => state.setActiveArtifactId);
 
-  const { textContent, thinkingContent, toolParts } = useMessageDerived({
+  const { textContent } = useMessageDerived({
     role: messageRole,
     parts: message.parts,
   });
@@ -94,12 +91,6 @@ function ChatMessageItemBase({
   const fullModelId = useMemo(() => {
     return (messageMetadata?.model ?? selectedModel ?? "Assistant").trim();
   }, [messageMetadata?.model, selectedModel]);
-
-  const isThinkingActive = isStreaming && !textContent && !!thinkingContent;
-  const activeToolCount = useMemo(() => {
-    if (toolParts.length === 0) return 0;
-    return toolParts.filter((t) => t.state && TOOL_PENDING_STATES.has(t.state)).length;
-  }, [toolParts]);
 
   const durationLabel = useMemo(() => {
     if (typeof runDurationSeconds !== "number" || runDurationSeconds <= 0) return null;
@@ -175,16 +166,6 @@ function ChatMessageItemBase({
           >
             {durationLabel ?? ""}
           </span>
-          <span className="inline-flex items-center gap-1 text-[10px] text-(--dim) min-w-[2.75rem]">
-            {activeToolCount > 0 ? (
-              <>
-                <Icons.Loader2 className="h-3 w-3 text-amber-400 animate-spin" />
-                <span className="hidden md:inline">tools</span>
-              </>
-            ) : (
-              <span className="h-3 w-3" aria-hidden="true" />
-            )}
-          </span>
           {totalTokens != null && totalTokens > 0 && (
             <span className="hidden md:inline text-[10px] text-(--dim) font-mono">
               {totalTokens.toLocaleString()} tok
@@ -257,22 +238,10 @@ function ChatMessageItemBase({
           </div>
         </div>
 
-        <InlineThinking
-          messageId={messageId}
-          content={thinkingContent}
-          isActive={isThinkingActive}
-        />
-        <InlineToolIndicator toolParts={toolParts} />
-
         {textContent ? (
           <PerfProfiler id={`message-renderer:${message.id}`}>
             <MessageRenderer content={textContent} isStreaming={isStreaming} />
           </PerfProfiler>
-        ) : isStreaming && !thinkingContent ? (
-          <div className="flex items-center gap-2 text-(--dim)">
-            <Icons.Loader2 className="h-4 w-4 animate-spin" />
-            <span className="text-sm">Thinking...</span>
-          </div>
         ) : null}
 
         {artifactsEnabled && artifacts && artifacts.length > 0 && (

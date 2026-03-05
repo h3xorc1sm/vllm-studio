@@ -2,9 +2,9 @@
 "use client";
 
 import { memo, useEffect, useRef, useId, useMemo } from "react";
+import { motion } from "framer-motion";
 import { AlertCircle } from "lucide-react";
 import { EnhancedCodeBlock } from "../code/enhanced-code-block";
-import { TypingIndicator, StreamingCursor } from "./typing-indicator";
 import {
   useMessageParsing,
   thinkingParser,
@@ -30,6 +30,23 @@ const EMPTY_MERMAID_STATE = { svg: "", error: null } as const;
 interface MessageRendererProps {
   content: string;
   isStreaming?: boolean;
+}
+
+function StreamingCursor({ color = "var(--fg)" }: { color?: string }) {
+  return (
+    <motion.span
+      className="inline-block w-0.5 h-4 ml-0.5 rounded-sm"
+      style={{ backgroundColor: color }}
+      animate={{
+        opacity: [1, 0],
+      }}
+      transition={{
+        duration: 0.8,
+        repeat: Infinity,
+        ease: "easeInOut",
+      }}
+    />
+  );
 }
 
 const MermaidDiagram = memo(function MermaidDiagram({ code }: { code: string }) {
@@ -195,13 +212,6 @@ function MessageRendererBase({ content, isStreaming }: MessageRendererProps) {
               return <MarkdownBlock key={`md-${index}`} html={html} />;
             })
           )}
-        </div>
-      )}
-
-      {/* Streaming indicators */}
-      {!mainContent && !thinkingContent && isStreaming && (
-        <div className="flex items-center gap-2">
-          <TypingIndicator size="md" />
         </div>
       )}
 

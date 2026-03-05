@@ -32,7 +32,7 @@ function isToolOnlyMessage(message: ChatMessage): boolean {
   return hasToolParts;
 }
 
-function hasNonEmptyText(message: ChatMessage): boolean {
+export function hasNonEmptyText(message: ChatMessage): boolean {
   for (const part of message.parts ?? []) {
     if (!part || typeof part !== "object") continue;
     const type = (part as { type?: unknown }).type;

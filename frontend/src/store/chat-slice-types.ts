@@ -64,9 +64,6 @@ export interface ChatState {
   callModeSpeakingMessageId: string | null;
 
   copiedMessageId: string | null;
-  messageInlineThinkingExpanded: Record<string, boolean>;
-  messageInlineToolsExpanded: Record<string, boolean>;
-  toolCallGroupsExpanded: Record<string, boolean>;
 
   activeArtifactId: string | null;
   artifactViewerState: Record<
@@ -175,9 +172,6 @@ export interface ChatActions {
   setCallModeSpeakingMessageId: (id: string | null) => void;
 
   setCopiedMessageId: (copiedMessageId: string | null) => void;
-  setMessageInlineThinkingExpanded: (messageId: string, expanded: boolean) => void;
-  setMessageInlineToolsExpanded: (messageId: string, expanded: boolean) => void;
-  setToolCallGroupExpanded: (groupId: string, expanded: boolean) => void;
 
   updateArtifactViewerState: (
     artifactId: string,

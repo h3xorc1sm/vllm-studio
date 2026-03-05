@@ -36,14 +36,14 @@ export function ControlPanel(props: DashboardLayoutProps) {
       )}
 
       {/* Two Column Layout */}
-      <div className="grid lg:grid-cols-2 gap-8 min-w-0 items-stretch">
+      <div className="grid lg:grid-cols-2 gap-8 min-w-0 items-start">
         {/* Left - GPU List */}
         <div className="min-w-0 flex flex-col">
           <GpuList gpus={gpus} />
         </div>
 
         {/* Right - Recipes + Runtimes */}
-        <div className="min-w-0 flex flex-col gap-8">
+        <div className="min-w-0 flex flex-col gap-8 overflow-hidden">
           <RecipeList
             recipes={recipes}
             launching={props.launching}

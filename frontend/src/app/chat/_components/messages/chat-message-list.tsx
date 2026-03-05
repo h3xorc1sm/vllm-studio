@@ -13,9 +13,8 @@ import { Virtuoso } from "react-virtuoso";
 import { Loader2 } from "lucide-react";
 import { ChatMessageItem } from "./chat-message-item";
 import { PerfProfiler } from "../perf/perf-profiler";
-import { ChatRunStatusLine } from "./chat-run-status-line";
 import type { AgentFileEntry, Artifact, ChatMessage } from "@/lib/types";
-import { filterVisibleMessages } from "./chat-message-list/visible-messages";
+import { filterVisibleMessages, hasNonEmptyText } from "./chat-message-list/visible-messages";
 
 type MessageGroup = { type: "single"; message: ChatMessage; messageIndex: number };
 
@@ -177,8 +176,10 @@ export function ChatMessageList({
     ],
   );
 
-  const lastVisibleRole = visibleMessages[visibleMessages.length - 1]?.role;
-  const showThinkingBubble = isLoading && lastVisibleRole !== "assistant";
+  const lastVisibleMsg = visibleMessages[visibleMessages.length - 1];
+  const lastAssistantHasText =
+    lastVisibleMsg?.role === "assistant" && hasNonEmptyText(lastVisibleMsg);
+  const showThinkingBubble = isLoading && !lastAssistantHasText;
 
   const Footer = useCallback(() => {
     return (
@@ -200,7 +201,6 @@ export function ChatMessageList({
             </div>
           </div>
         )}
-        {!isLoading && runStatusLine?.trim() && <ChatRunStatusLine line={runStatusLine} />}
         <div ref={messagesEndRef} />
       </div>
     );

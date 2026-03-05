@@ -35,10 +35,10 @@ export function RuntimesPanel({ runtimeSummary, services = [], lease }: Runtimes
             return (
               <div
                 key={key}
-                className="px-2 py-1.5 border border-foreground/10 rounded text-xs font-mono"
+                className="px-2 py-1.5 border border-foreground/10 rounded text-xs font-mono overflow-hidden"
               >
                 <div className="text-foreground/60">{key}</div>
-                <div className={b.installed ? "text-(--hl2)" : "text-foreground/30"}>
+                <div className={`${b.installed ? "text-(--hl2)" : "text-foreground/30"} truncate`}>
                   {b.installed ? b.version ?? "installed" : "—"}
                 </div>
               </div>

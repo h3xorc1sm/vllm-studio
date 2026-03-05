@@ -176,39 +176,6 @@ export const createChatSlice: StateCreator<ChatSlice, [], [], ChatSlice> = (set)
   // Message UI state
   setCopiedMessageId: (copiedMessageId) =>
     set((state) => (state.copiedMessageId === copiedMessageId ? state : { copiedMessageId })),
-  setMessageInlineThinkingExpanded: (messageId, expanded) =>
-    set((state) => {
-      const prev = state.messageInlineThinkingExpanded[messageId] ?? false;
-      if (prev === expanded) return state;
-      return {
-        messageInlineThinkingExpanded: {
-          ...state.messageInlineThinkingExpanded,
-          [messageId]: expanded,
-        },
-      };
-    }),
-  setMessageInlineToolsExpanded: (messageId, expanded) =>
-    set((state) => {
-      const prev = state.messageInlineToolsExpanded[messageId] ?? false;
-      if (prev === expanded) return state;
-      return {
-        messageInlineToolsExpanded: {
-          ...state.messageInlineToolsExpanded,
-          [messageId]: expanded,
-        },
-      };
-    }),
-  setToolCallGroupExpanded: (groupId, expanded) =>
-    set((state) => {
-      const prev = state.toolCallGroupsExpanded[groupId] ?? false;
-      if (prev === expanded) return state;
-      return {
-        toolCallGroupsExpanded: {
-          ...state.toolCallGroupsExpanded,
-          [groupId]: expanded,
-        },
-      };
-    }),
 
   // Splash
   setSplashIsMobile: (splashIsMobile) =>

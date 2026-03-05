@@ -60,9 +60,6 @@ export const initialChatState: ChatState = {
 
   // Message UI state
   copiedMessageId: null,
-  messageInlineThinkingExpanded: {},
-  messageInlineToolsExpanded: {},
-  toolCallGroupsExpanded: {},
 
   // Artifacts
   activeArtifactId: null,
