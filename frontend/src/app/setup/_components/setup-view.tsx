@@ -2,12 +2,27 @@
 "use client";
 
 import { AlertTriangle, Loader2 } from "lucide-react";
-import type { ModelDownload, ModelRecommendation, StudioDiagnostics, StudioSettings, VllmUpgradeResult } from "@/lib/types";
+import type {
+  ModelDownload,
+  ModelRecommendation,
+  StudioDiagnostics,
+  StudioSettings,
+  VllmUpgradeResult,
+} from "@/lib/types";
 import { SetupStepper } from "./setup-view/setup-stepper";
+import { StepBenchmark } from "./setup-view/step-benchmark";
 import { StepDownload } from "./setup-view/step-download";
 import { StepHardware } from "./setup-view/step-hardware";
+import { StepLaunch } from "./setup-view/step-launch";
 import { StepModel } from "./setup-view/step-model";
 import { StepWelcome } from "./setup-view/step-welcome";
+
+interface SetupBenchmarkResult {
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_time_s: number;
+  generation_tps: number;
+}
 
 interface SetupViewProps {
   step: number;
@@ -26,6 +41,8 @@ interface SetupViewProps {
   savingSettings: boolean;
   upgrading: boolean;
   upgradeResult: VllmUpgradeResult | null;
+  hardwareConfirmed: boolean;
+  setHardwareConfirmed: (value: boolean) => void;
   downloads: ModelDownload[];
   activeDownload: ModelDownload | null;
   pauseDownload: (id: string) => void;
@@ -35,7 +52,17 @@ interface SetupViewProps {
   upgradeRuntime: () => void;
   beginDownload: (modelId: string) => void;
   submitManualModel: () => void;
-  createRecipeAndFinish: () => void;
+  continueFromHardware: () => void;
+  configuringRecipe: boolean;
+  launchError: string | null;
+  createdRecipeId: string | null;
+  configureAndLaunch: () => void;
+  benchmarking: boolean;
+  benchmarkResult: SetupBenchmarkResult | null;
+  benchmarkError: string | null;
+  runSetupBenchmark: () => void;
+  openChat: () => void;
+  openDashboard: () => void;
   skipSetup: () => void;
 }
 
@@ -56,6 +83,8 @@ export function SetupView({
   savingSettings,
   upgrading,
   upgradeResult,
+  hardwareConfirmed,
+  setHardwareConfirmed,
   downloads,
   activeDownload,
   pauseDownload,
@@ -65,7 +94,17 @@ export function SetupView({
   upgradeRuntime,
   beginDownload,
   submitManualModel,
-  createRecipeAndFinish,
+  continueFromHardware,
+  configuringRecipe,
+  launchError,
+  createdRecipeId,
+  configureAndLaunch,
+  benchmarking,
+  benchmarkResult,
+  benchmarkError,
+  runSetupBenchmark,
+  openChat,
+  openDashboard,
   skipSetup,
 }: SetupViewProps) {
   return (
@@ -118,7 +157,9 @@ export function SetupView({
             upgradeRuntime={upgradeRuntime}
             upgrading={upgrading}
             upgradeResult={upgradeResult}
-            setStep={setStep}
+            hardwareConfirmed={hardwareConfirmed}
+            setHardwareConfirmed={setHardwareConfirmed}
+            continueFromHardware={continueFromHardware}
           />
         )}
 
@@ -143,7 +184,28 @@ export function SetupView({
             pauseDownload={pauseDownload}
             resumeDownload={resumeDownload}
             cancelDownload={cancelDownload}
-            createRecipeAndFinish={createRecipeAndFinish}
+            continueToLaunch={() => setStep(4)}
+          />
+        )}
+
+        {!loading && step === 4 && (
+          <StepLaunch
+            selectedModel={selectedModel}
+            createdRecipeId={createdRecipeId}
+            configuringRecipe={configuringRecipe}
+            launchError={launchError}
+            configureAndLaunch={configureAndLaunch}
+          />
+        )}
+
+        {!loading && step === 5 && (
+          <StepBenchmark
+            benchmarking={benchmarking}
+            benchmarkResult={benchmarkResult}
+            benchmarkError={benchmarkError}
+            runSetupBenchmark={runSetupBenchmark}
+            openChat={openChat}
+            openDashboard={openDashboard}
           />
         )}
       </div>

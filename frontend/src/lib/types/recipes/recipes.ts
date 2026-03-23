@@ -3,7 +3,14 @@
  * Recipe types (model launch configuration).
  */
 
-export type Backend = "vllm" | "sglang" | "llamacpp" | "transformers" | "tabbyapi";
+export type Backend =
+  | "vllm"
+  | "mlx"
+  | "sglang"
+  | "llamacpp"
+  | "transformers"
+  | "tabbyapi"
+  | "exllamav3";
 
 /**
  * Canonical recipe shape as returned by the controller API (stored/normalized).
@@ -32,6 +39,7 @@ export interface RecipeStored {
   host: string;
   port: number;
   served_model_name: string | null;
+  target_node_id: string | null;
   python_path: string | null;
   extra_args: Record<string, unknown>;
   max_thinking_tokens: number | null;
@@ -42,9 +50,8 @@ export interface RecipeStored {
  * Recipe payload shape accepted by the controller for create/update.
  * Only `id`, `name`, and `model_path` are required; everything else can be omitted.
  */
-export type Recipe =
-  & Pick<RecipeStored, "id" | "name" | "model_path">
-  & Partial<Omit<RecipeStored, "id" | "name" | "model_path">>;
+export type Recipe = Pick<RecipeStored, "id" | "name" | "model_path"> &
+  Partial<Omit<RecipeStored, "id" | "name" | "model_path">>;
 
 /**
  * Recipe shape used by the UI/editor. This intentionally supports top-level convenience fields
@@ -61,6 +68,7 @@ export interface RecipeEditor {
   host?: string;
   port?: number;
   served_model_name?: string | null;
+  target_node_id?: string | null;
   api_key?: string;
 
   // Model loading

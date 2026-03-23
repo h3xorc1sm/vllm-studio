@@ -6,11 +6,13 @@ import {
   Home,
   MessageCircle,
   Network,
+  Rocket,
   Settings,
 } from "lucide-react";
 
 export const navItems = [
   { href: "/", label: "Dashboard", icon: Home },
+  { href: "/get-started", label: "Get Started", icon: Rocket },
   { href: "/chat", label: "Chat", icon: MessageCircle },
   { href: "/recipes", label: "Recipes", icon: BookOpen },
   { href: "/distributed", label: "Distributed", icon: Network },

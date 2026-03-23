@@ -13,7 +13,7 @@ export function StepDownload({
   pauseDownload,
   resumeDownload,
   cancelDownload,
-  createRecipeAndFinish,
+  continueToLaunch,
 }: {
   selectedModel: string;
   modelsDir: string;
@@ -22,7 +22,7 @@ export function StepDownload({
   pauseDownload: (id: string) => void;
   resumeDownload: (id: string) => void;
   cancelDownload: (id: string) => void;
-  createRecipeAndFinish: () => void;
+  continueToLaunch: () => void;
 }) {
   return (
     <div className="space-y-5">
@@ -44,11 +44,14 @@ export function StepDownload({
             </div>
             <div className="flex items-center justify-between text-xs text-(--dim)">
               <span>
-                {formatBytes(activeDownload.downloaded_bytes)} / {formatBytes(activeDownload.total_bytes)}
+                {formatBytes(activeDownload.downloaded_bytes)} /{" "}
+                {formatBytes(activeDownload.total_bytes)}
               </span>
               <span>{progressPercent(activeDownload)}%</span>
             </div>
-            {activeDownload.error && <div className="text-xs text-(--err)">{activeDownload.error}</div>}
+            {activeDownload.error && (
+              <div className="text-xs text-(--err)">{activeDownload.error}</div>
+            )}
             <div className="flex items-center gap-3">
               {activeDownload.status === "downloading" && (
                 <button
@@ -89,7 +92,7 @@ export function StepDownload({
           {activeDownload?.status === "completed" ? (
             <>
               <CheckCircle2 className="h-4 w-4 text-(--hl2)" />
-              Model ready. Create a recipe and open chat.
+              Model ready. Continue to configure the starter recipe and launch it.
             </>
           ) : (
             <>
@@ -99,19 +102,20 @@ export function StepDownload({
           )}
         </div>
         <button
-          onClick={createRecipeAndFinish}
+          onClick={continueToLaunch}
           disabled={activeDownload?.status !== "completed"}
           className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-(--hl1) text-white text-sm font-medium disabled:opacity-50"
         >
-          Finish Setup
+          Continue to Launch
           <ChevronRight className="h-4 w-4" />
         </button>
       </div>
 
       {downloads.length > 1 && (
-        <div className="text-xs text-(--dim)">Additional downloads in queue: {downloads.length - 1}</div>
+        <div className="text-xs text-(--dim)">
+          Additional downloads in queue: {downloads.length - 1}
+        </div>
       )}
     </div>
   );
 }
-

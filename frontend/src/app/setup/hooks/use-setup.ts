@@ -6,19 +6,19 @@ import { useRouter } from "next/navigation";
 import api from "@/lib/api";
 import type {
   ModelRecommendation,
-  Recipe,
   StudioDiagnostics,
   StudioSettings,
   VllmUpgradeResult,
 } from "@/lib/types";
 import { useDownloads } from "@/hooks/use-downloads";
+import { buildStarterRecipe } from "./setup-helpers";
 
-const normalizeId = (value: string): string =>
-  value
-    .toLowerCase()
-    .replace(/[^a-z0-9-_]+/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "");
+interface SetupBenchmarkResult {
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_time_s: number;
+  generation_tps: number;
+}
 
 export function useSetup() {
   const router = useRouter();
@@ -35,6 +35,13 @@ export function useSetup() {
   const [savingSettings, setSavingSettings] = useState(false);
   const [upgrading, setUpgrading] = useState(false);
   const [upgradeResult, setUpgradeResult] = useState<VllmUpgradeResult | null>(null);
+  const [hardwareConfirmed, setHardwareConfirmed] = useState(false);
+  const [configuringRecipe, setConfiguringRecipe] = useState(false);
+  const [launchError, setLaunchError] = useState<string | null>(null);
+  const [createdRecipeId, setCreatedRecipeId] = useState<string | null>(null);
+  const [benchmarking, setBenchmarking] = useState(false);
+  const [benchmarkResult, setBenchmarkResult] = useState<SetupBenchmarkResult | null>(null);
+  const [benchmarkError, setBenchmarkError] = useState<string | null>(null);
 
   const downloadsState = useDownloads(2000);
 
@@ -65,7 +72,7 @@ export function useSetup() {
   }, []);
 
   useEffect(() => {
-    loadSetupData();
+    void loadSetupData();
   }, [loadSetupData]);
 
   const saveSettings = useCallback(async () => {
@@ -78,6 +85,7 @@ export function useSetup() {
       const result = await api.updateStudioSettings({ models_dir: modelsDir.trim() });
       setSettings(result);
       setModelsDir(result.effective.models_dir);
+      setHardwareConfirmed(false);
       setStep(1);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update settings");
@@ -112,6 +120,10 @@ export function useSetup() {
     async (modelId: string) => {
       if (!modelId) return;
       setSelectedModel(modelId);
+      setLaunchError(null);
+      setCreatedRecipeId(null);
+      setBenchmarkResult(null);
+      setBenchmarkError(null);
       try {
         await downloadsState.startDownload({ model_id: modelId });
         setStep(3);
@@ -119,7 +131,7 @@ export function useSetup() {
         setError(err instanceof Error ? err.message : "Failed to start download");
       }
     },
-    [downloadsState, setError],
+    [downloadsState],
   );
 
   const submitManualModel = useCallback(async () => {
@@ -128,40 +140,81 @@ export function useSetup() {
     await beginDownload(trimmed);
   }, [manualModelId, beginDownload]);
 
-  const createRecipeAndFinish = useCallback(async () => {
+  const continueFromHardware = useCallback(() => {
+    if (!hardwareConfirmed) return;
+    setStep(2);
+  }, [hardwareConfirmed]);
+
+  const configureAndLaunch = useCallback(async () => {
     if (!activeDownload || activeDownload.status !== "completed") {
       return;
     }
-    const recipeBase = normalizeId(
-      activeDownload.model_id.split("/").pop() ?? activeDownload.model_id,
-    );
-    const existing = await api.getRecipes().catch(() => ({ recipes: [] }));
-    const existingIds = new Set(existing.recipes.map((recipe) => recipe.id));
-    let recipeId = recipeBase || `model-${Date.now()}`;
-    let suffix = 1;
-    while (existingIds.has(recipeId)) {
-      recipeId = `${recipeBase}-${suffix}`;
-      suffix += 1;
+
+    setConfiguringRecipe(true);
+    setLaunchError(null);
+    setBenchmarkResult(null);
+    setBenchmarkError(null);
+
+    try {
+      let recipeId = createdRecipeId;
+      if (!recipeId) {
+        const existing = await api.getRecipes().catch(() => ({ recipes: [] }));
+        const recipe = buildStarterRecipe(activeDownload, existing.recipes);
+        await api.createRecipe(recipe);
+        recipeId = recipe.id;
+        setCreatedRecipeId(recipe.id);
+      }
+
+      await api.launch(recipeId, true);
+      const ready = await api.waitReady(300);
+      if (!ready.ready) {
+        throw new Error(ready.error || "The model did not become ready in time.");
+      }
+
+      localStorage.setItem("vllm-studio-setup-complete", "true");
+      setStep(5);
+    } catch (err) {
+      setLaunchError(err instanceof Error ? err.message : "Failed to configure and launch");
+    } finally {
+      setConfiguringRecipe(false);
     }
-    const recipe: Recipe = {
-      id: recipeId,
-      name: activeDownload.model_id,
-      model_path: activeDownload.target_dir,
-      backend: "vllm",
-      served_model_name: activeDownload.model_id,
-      trust_remote_code: true,
-      max_model_len: 32768,
-      gpu_memory_utilization: 0.9,
-      tensor_parallel_size: 1,
-      pipeline_parallel_size: 1,
-      max_num_seqs: 256,
-      kv_cache_dtype: "auto",
-      extra_args: {},
-    };
-    await api.createRecipe(recipe);
+  }, [activeDownload, createdRecipeId]);
+
+  const runSetupBenchmark = useCallback(async () => {
+    setBenchmarking(true);
+    setBenchmarkError(null);
+    setBenchmarkResult(null);
+    try {
+      const result = await api.runBenchmark(1000, 100);
+      if (result.error) {
+        throw new Error(result.error);
+      }
+      if (!result.benchmark) {
+        throw new Error("Benchmark returned no metrics.");
+      }
+
+      setBenchmarkResult({
+        prompt_tokens: result.benchmark.prompt_tokens,
+        completion_tokens: result.benchmark.completion_tokens,
+        total_time_s: result.benchmark.total_time_s,
+        generation_tps: result.benchmark.generation_tps,
+      });
+    } catch (err) {
+      setBenchmarkError(err instanceof Error ? err.message : "Benchmark failed");
+    } finally {
+      setBenchmarking(false);
+    }
+  }, []);
+
+  const openChat = useCallback(() => {
     localStorage.setItem("vllm-studio-setup-complete", "true");
     router.push("/chat?new=1");
-  }, [activeDownload, router]);
+  }, [router]);
+
+  const openDashboard = useCallback(() => {
+    localStorage.setItem("vllm-studio-setup-complete", "true");
+    router.push("/");
+  }, [router]);
 
   const skipSetup = useCallback(() => {
     localStorage.setItem("vllm-studio-setup-complete", "true");
@@ -185,6 +238,8 @@ export function useSetup() {
     savingSettings,
     upgrading,
     upgradeResult,
+    hardwareConfirmed,
+    setHardwareConfirmed,
     downloads: downloadsState.downloads,
     activeDownload,
     pauseDownload: downloadsState.pauseDownload,
@@ -194,7 +249,17 @@ export function useSetup() {
     upgradeRuntime,
     beginDownload,
     submitManualModel,
-    createRecipeAndFinish,
+    continueFromHardware,
+    configuringRecipe,
+    launchError,
+    createdRecipeId,
+    configureAndLaunch,
+    benchmarking,
+    benchmarkResult,
+    benchmarkError,
+    runSetupBenchmark,
+    openChat,
+    openDashboard,
     skipSetup,
   };
 }

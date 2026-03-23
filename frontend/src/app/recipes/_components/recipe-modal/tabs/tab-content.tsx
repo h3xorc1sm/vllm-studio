@@ -1,7 +1,7 @@
 // CRITICAL
 "use client";
 
-import type { ModelInfo, RecipeEditor } from "@/lib/types";
+import type { DistributedNode, ModelInfo, RecipeEditor } from "@/lib/types";
 import type { RecipeModalTabId } from "./tab-id";
 import { RecipeModalTabCommand } from "./tab-command";
 import { RecipeModalTabEnvironment } from "./tab-environment";
@@ -16,6 +16,7 @@ export function RecipeModalTabContent({
   recipe,
   onChange,
   availableModels,
+  availableNodes,
   modelServedNames,
   isLlamacpp,
   getExtraArgValueForKey,
@@ -36,6 +37,7 @@ export function RecipeModalTabContent({
   recipe: RecipeEditor;
   onChange: (next: RecipeEditor) => void;
   availableModels: ModelInfo[];
+  availableNodes: DistributedNode[];
   modelServedNames: Record<string, string>;
   isLlamacpp: boolean;
   getExtraArgValueForKey: (key: string) => unknown;
@@ -59,6 +61,7 @@ export function RecipeModalTabContent({
           recipe={recipe}
           onChange={onChange}
           availableModels={availableModels}
+          availableNodes={availableNodes}
           modelServedNames={modelServedNames}
         />
       );

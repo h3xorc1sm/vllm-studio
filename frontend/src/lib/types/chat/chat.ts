@@ -103,6 +103,7 @@ export interface ChatSession {
   id: string;
   title: string;
   model?: string;
+  pinned?: boolean;
   parent_id?: string;
   agent_state?: AgentState | null;
   first_user_message?: string;

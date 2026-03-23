@@ -1,13 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { createElement } from "react";
+import type { ReactNode } from "react";
 import { UiInsetSurface, UiModal, UiModalHeader, UiPanelSurface } from "./index";
 
 describe("ui-kit primitives", () => {
   it("renders inset surface with shared frame style", () => {
     const html = renderToStaticMarkup(
       createElement(
-        UiInsetSurface,
+        UiInsetSurface as (props: { className?: string; children?: ReactNode }) => ReactNode,
         { className: "test-surface" },
         createElement("span", null, "surface content"),
       ),
@@ -21,7 +22,11 @@ describe("ui-kit primitives", () => {
   it("does not render modal markup when closed", () => {
     const html = renderToStaticMarkup(
       createElement(
-        UiModal,
+        UiModal as (props: {
+          isOpen: boolean;
+          onClose: () => void;
+          children?: ReactNode;
+        }) => ReactNode,
         { isOpen: false, onClose: () => {} },
         createElement("div", null, "hidden"),
       ),
@@ -37,14 +42,14 @@ describe("ui-kit primitives", () => {
       }),
     );
     expect(html).toContain("Working");
-    expect(html).toContain("aria-label=\"Close\"");
+    expect(html).toContain('aria-label="Close"');
     expect(html).toContain("×");
   });
 
   it("renders panel surface with consistent framing class", () => {
     const html = renderToStaticMarkup(
       createElement(
-        UiPanelSurface,
+        UiPanelSurface as (props: { className?: string; children?: ReactNode }) => ReactNode,
         { className: "panel" },
         createElement("span", null, "content"),
       ),

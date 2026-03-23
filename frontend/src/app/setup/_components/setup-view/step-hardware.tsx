@@ -10,13 +10,17 @@ export function StepHardware({
   upgradeRuntime,
   upgrading,
   upgradeResult,
-  setStep,
+  hardwareConfirmed,
+  setHardwareConfirmed,
+  continueFromHardware,
 }: {
   diagnostics: StudioDiagnostics | null;
   upgradeRuntime: () => void;
   upgrading: boolean;
   upgradeResult: VllmUpgradeResult | null;
-  setStep: (step: number) => void;
+  hardwareConfirmed: boolean;
+  setHardwareConfirmed: (value: boolean) => void;
+  continueFromHardware: () => void;
 }) {
   return (
     <div className="grid gap-6">
@@ -39,7 +43,9 @@ export function StepHardware({
           <div>
             <div className="text-xs text-(--dim) mb-1">GPU</div>
             <div>
-              {diagnostics?.gpus?.length ? diagnostics.gpus.map((gpu) => gpu.name).join(", ") : "No CUDA GPU detected"}
+              {diagnostics?.gpus?.length
+                ? diagnostics.gpus.map((gpu) => gpu.name).join(", ")
+                : "No CUDA GPU detected"}
             </div>
           </div>
           <div>
@@ -65,21 +71,40 @@ export function StepHardware({
         </div>
         {upgradeResult && (
           <div className={`text-xs ${upgradeResult.success ? "text-(--hl2)" : "text-(--err)"}`}>
-            {upgradeResult.success ? `Updated to vLLM ${upgradeResult.version}` : upgradeResult.error}
+            {upgradeResult.success
+              ? `Updated to vLLM ${upgradeResult.version}`
+              : upgradeResult.error}
           </div>
         )}
+        <label className="flex items-start gap-3 rounded-lg border border-(--surface) bg-(--surface)/40 px-4 py-3 text-sm text-(--dim)">
+          <input
+            type="checkbox"
+            checked={hardwareConfirmed}
+            onChange={(event) => setHardwareConfirmed(event.target.checked)}
+            className="mt-0.5 h-4 w-4 rounded border-(--border) bg-(--bg)"
+          />
+          <span>
+            I confirmed this hardware summary matches the device I am onboarding, and I want vLLM
+            Studio to continue using these detected capabilities.
+          </span>
+        </label>
         <div className="flex items-center gap-3">
           <button
             onClick={upgradeRuntime}
             disabled={upgrading}
             className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-(--surface) text-sm hover:bg-(--surface) disabled:opacity-60"
           >
-            {upgrading ? <Loader2 className="h-4 w-4 animate-spin" /> : <DownloadCloud className="h-4 w-4" />}
+            {upgrading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <DownloadCloud className="h-4 w-4" />
+            )}
             Install / Upgrade vLLM
           </button>
           <button
-            onClick={() => setStep(2)}
-            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-(--hl1) text-white text-sm hover:opacity-90"
+            onClick={continueFromHardware}
+            disabled={!hardwareConfirmed}
+            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-(--hl1) text-white text-sm hover:opacity-90 disabled:opacity-50"
           >
             Continue
             <ChevronRight className="h-4 w-4" />
@@ -89,4 +114,3 @@ export function StepHardware({
     </div>
   );
 }
-
