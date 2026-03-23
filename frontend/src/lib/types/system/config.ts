@@ -92,6 +92,7 @@ export interface SystemRuntimeInfo {
   gpus: RuntimeGpuInfoSummary;
   backends: {
     vllm: RuntimeBackendInfo;
+    mlx: RuntimeBackendInfo;
     sglang: RuntimeBackendInfo;
     llamacpp: RuntimeBackendInfo;
     exllamav3?: RuntimeBackendInfo;

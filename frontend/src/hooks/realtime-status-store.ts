@@ -2,7 +2,13 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
-import type { GPU, LaunchProgressData, Metrics, ProcessInfo } from "@/lib/types";
+import type {
+  GPU,
+  LaunchProgressData,
+  Metrics,
+  ProcessInfo,
+  RuntimeBackendInfo,
+} from "@/lib/types";
 import api from "@/lib/api";
 import type { RealtimeStatusSnapshot } from "./realtime-status-store/types";
 import type {
@@ -22,6 +28,23 @@ import {
   areServicesEqual,
   areStatusEqual,
 } from "./realtime-status-store/equality";
+
+const unavailableBackend = (): RuntimeBackendInfo => ({
+  installed: false,
+  version: null,
+});
+
+function normalizeRuntimeBackends(
+  backends: Partial<RuntimeSummaryData["backends"]> | null | undefined,
+): RuntimeSummaryData["backends"] {
+  return {
+    vllm: backends?.vllm ?? unavailableBackend(),
+    mlx: backends?.mlx ?? unavailableBackend(),
+    sglang: backends?.sglang ?? unavailableBackend(),
+    llamacpp: backends?.llamacpp ?? unavailableBackend(),
+    ...(backends?.exllamav3 ? { exllamav3: backends.exllamav3 } : {}),
+  };
+}
 
 const initialSnapshot: RealtimeStatusSnapshot = {
   status: null,
@@ -103,7 +126,7 @@ async function fetchStatusNow() {
       runtimeSummary = {
         platform: { kind: compatibility.platform.kind, vendor: fallbackVendor },
         gpu_monitoring: compatibility.gpu_monitoring,
-        backends: compatibility.backends,
+        backends: normalizeRuntimeBackends(compatibility.backends),
       };
     }
 
@@ -216,13 +239,13 @@ function start() {
               : null;
 
       const gpuMon = data["gpu_monitoring"] as RuntimeSummaryData["gpu_monitoring"] | undefined;
-      const backends = data["backends"] as RuntimeSummaryData["backends"] | undefined;
+      const backends = data["backends"] as Partial<RuntimeSummaryData["backends"]> | undefined;
       const nextSummary: RuntimeSummaryData | null =
         platform && gpuMon && backends
           ? {
               platform: { kind: nextKind ?? "unknown", vendor: nextVendor },
               gpu_monitoring: gpuMon,
-              backends,
+              backends: normalizeRuntimeBackends(backends),
             }
           : snapshot.runtimeSummary;
 
