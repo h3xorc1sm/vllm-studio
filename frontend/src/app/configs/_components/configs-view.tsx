@@ -14,6 +14,7 @@ import { NoBackendState } from "./no-backend-state";
 import { ServiceTopology } from "./service-topology";
 import { AppearanceSettings } from "./appearance-settings";
 import { ProvidersSection } from "./providers-section";
+import { CostSettingsSection } from "./cost-settings-section";
 
 interface ConfigsViewProps {
   data: ConfigData | null;
@@ -124,6 +125,7 @@ export function ConfigsView({
 
           {activeTab === "system" && (
             <section className="space-y-6">
+              <CostSettingsSection />
               {data ? (
                 <>
                   <CompatibilityPanel report={compatibilityReport} />

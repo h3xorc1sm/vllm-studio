@@ -78,6 +78,9 @@ export function createSystemApi(core: ApiCore) {
 
     getMetrics: (): Promise<Metrics> => core.request("/v1/metrics/vllm"),
 
+    getLifetimeMetrics: (period?: string): Promise<Metrics> =>
+      core.request(`/lifetime-metrics${period ? `?period=${period}` : ""}`),
+
     runBenchmark: (
       promptTokens = 1000,
       maxTokens = 100,
@@ -120,7 +123,8 @@ export function createSystemApi(core: ApiCore) {
       return core.request(`/peak-metrics${query}`);
     },
 
-    getUsageStats: (): Promise<UsageStats> => core.request("/usage"),
+    getUsageStats: (period?: string): Promise<UsageStats> =>
+      core.request(`/usage${period ? `?period=${period}` : ""}`),
 
     getSystemConfig: (): Promise<ConfigData> => core.request("/config"),
 

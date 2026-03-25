@@ -37,6 +37,8 @@ export function createStudioApi(core: ApiCore) {
       daytona_sandbox_id?: string | null;
       daytona_agent_mode?: boolean | null;
       agent_fs_local_fallback?: boolean | null;
+      electricity_rate?: number | null;
+      electricity_currency?: string | null;
     }): Promise<StudioSettings & { success: boolean }> =>
       core.request("/studio/settings", {
         method: "POST",

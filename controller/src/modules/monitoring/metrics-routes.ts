@@ -4,6 +4,7 @@ import { performance } from "node:perf_hooks";
 import type { AppContext } from "../../types/context";
 import { getGpuInfo } from "../lifecycle/platform/gpu";
 import { fetchInference } from "../../services/inference/inference-client";
+import { loadPersistedConfig } from "../../config/persisted-config";
 
 /**
  * Register monitoring routes.
@@ -45,24 +46,104 @@ export const registerMonitoringRoutes = (app: Hono, context: AppContext): void =
   });
 
   app.get("/lifetime-metrics", async (ctx) => {
+    const period = ctx.req.query("period");
     const data = context.stores.lifetimeMetricsStore.getAll();
+    const persisted = loadPersistedConfig(context.config.data_dir);
+    const electricityRate = persisted.electricity_rate ?? 0.11;
+    const electricityCurrency = persisted.electricity_currency ?? "USD";
+
+    let energyKwh = (data["energy_wh"] ?? 0) / 1000;
+    let promptTokens = data["prompt_tokens_total"] ?? 0;
+    let completionTokens = data["completion_tokens_total"] ?? 0;
+    let requestCount = data["requests_total"] ?? 0;
+
+    // Period filtering using request_logs for tokens/requests and energy_snapshots for energy
+    if (period && period !== "all") {
+      const PERIOD_OFFSETS: Record<string, string> = {
+        d: "-24 hours",
+        w: "-7 days",
+        m: "-30 days",
+        y: "-365 days",
+      };
+      const offset = PERIOD_OFFSETS[period];
+      if (offset) {
+        const logs = context.stores.lifetimeMetricsStore.getRequestLogs(period);
+        promptTokens = logs.rows.reduce((sum, r) => sum + (r.prompt_tokens ?? 0), 0);
+        completionTokens = logs.rows.reduce((sum, r) => sum + (r.completion_tokens ?? 0), 0);
+        requestCount = logs.rows.length;
+
+        const currentEnergy = context.stores.lifetimeMetricsStore.getCurrentEnergy();
+        const snapshot = context.stores.lifetimeMetricsStore.getEnergyBefore(
+          new Date(Date.now() + new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 19).replace("T", " "),
+        );
+        const snapshotEnergy = snapshot?.energy_wh ?? 0;
+        energyKwh = Math.max(0, (currentEnergy - snapshotEnergy)) / 1000;
+      }
+    }
+
+    const tokens = promptTokens + completionTokens;
     const uptimeHours = (data["uptime_seconds"] ?? 0) / 3600;
-    const energyKwh = (data["energy_wh"] ?? 0) / 1000;
-    const tokens = data["tokens_total"] ?? 0;
     const kwhPerMillion = tokens > 0 ? energyKwh / (tokens / 1_000_000) : 0;
     const gpus = getGpuInfo();
     const currentPower = gpus.reduce((sum, gpu) => sum + gpu.power_draw, 0);
+    const totalCost = (energyKwh * electricityRate).toFixed(2);
 
     return ctx.json({
-      tokens_total: Math.floor(data["tokens_total"] ?? 0),
-      requests_total: Math.floor(data["requests_total"] ?? 0),
-      energy_wh: data["energy_wh"] ?? 0,
+      tokens_total: Math.floor(tokens),
+      requests_total: Math.floor(requestCount),
+      energy_wh: energyKwh * 1000,
       energy_kwh: energyKwh,
       uptime_seconds: data["uptime_seconds"] ?? 0,
       uptime_hours: uptimeHours,
       first_started_at: data["first_started_at"] ?? 0,
       kwh_per_million_tokens: kwhPerMillion,
       current_power_watts: currentPower,
+      electricity_rate: electricityRate,
+      electricity_currency: electricityCurrency,
+      total_cost: totalCost,
+    });
+  });
+
+  app.get("/usage/cost", async (ctx) => {
+    const period = ctx.req.query("period");
+    const data = context.stores.lifetimeMetricsStore.getAll();
+    const gpus = getGpuInfo();
+    const currentPower = gpus.reduce((sum, gpu) => sum + gpu.power_draw, 0);
+
+    const persisted = loadPersistedConfig(context.config.data_dir);
+    const electricityRate = persisted.electricity_rate ?? 0.11;
+    const electricityCurrency = persisted.electricity_currency ?? "USD";
+
+    let energyKwh = (data["energy_wh"] ?? 0) / 1000;
+
+    if (period && period !== "all") {
+      const PERIOD_OFFSETS: Record<string, string> = {
+        d: "-24 hours",
+        w: "-7 days",
+        m: "-30 days",
+        y: "-365 days",
+      };
+      const offset = PERIOD_OFFSETS[period];
+      if (offset) {
+        const currentEnergy = context.stores.lifetimeMetricsStore.getCurrentEnergy();
+        const snapshot = context.stores.lifetimeMetricsStore.getEnergyBefore(
+          new Date(Date.now() + new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 19).replace("T", " "),
+        );
+        const snapshotEnergy = snapshot?.energy_wh ?? 0;
+        energyKwh = Math.max(0, (currentEnergy - snapshotEnergy)) / 1000;
+      }
+    }
+
+    const totalCost = (energyKwh * electricityRate).toFixed(2);
+    const hourlyCost = ((currentPower / 1000) * electricityRate).toFixed(2);
+
+    return ctx.json({
+      total_cost: totalCost,
+      electricity_rate: electricityRate,
+      electricity_currency: electricityCurrency,
+      lifetime_energy_kwh: energyKwh,
+      current_power_watts: currentPower,
+      estimated_hourly_cost: hourlyCost,
     });
   });
 

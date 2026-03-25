@@ -1,0 +1,121 @@
+From ae23acaa532e65af55aa5dc21feaa02f20794577 Mon Sep 17 00:00:00 2001
+From: seroxdesign <sherifcherfa@gmail.com>
+Date: Sun, 22 Mar 2026 11:32:04 -0700
+Subject: [PATCH] fix: use configurable electricity rate/currency on dashboard
+
+The dashboard status-line had hardcoded rate (0.5) and currency (PLN).
+The metric-bar read from real-time metrics but the WebSocket payload
+was missing electricity_rate, electricity_currency, and total_cost.
+
+- Add electricity fields to metrics-collector baseMetrics
+- Replace hardcoded values in status-line with dynamic ones
+- Add currency symbol lookup to status-line
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+---
+ .../lifecycle/metrics/metrics-collector.ts    | 11 +++++-
+ .../dashboard/control-panel/status-line.tsx   | 39 ++++++++++++++++++-
+ 2 files changed, 47 insertions(+), 3 deletions(-)
+
+diff --git a/controller/src/modules/lifecycle/metrics/metrics-collector.ts b/controller/src/modules/lifecycle/metrics/metrics-collector.ts
+index cf00f88..69d0e98 100644
+--- a/controller/src/modules/lifecycle/metrics/metrics-collector.ts
++++ b/controller/src/modules/lifecycle/metrics/metrics-collector.ts
+@@ -7,6 +7,7 @@ import { listLogFiles, resolveExistingLogPath, tailFileLines } from "../../../co
+ import { fetchLocal } from "../../../http/local-fetch";
+ import { isRecipeRunning } from "../recipes/recipe-matching";
+ import type { ProcessInfo, Recipe } from "../types";
++import { loadPersistedConfig } from "../../../config/persisted-config";
+ import {
+   METRICS_COLLECT_INTERVAL_MS,
+   METRICS_HTTP_TIMEOUT_MS,
+@@ -205,13 +206,21 @@ export const startMetricsCollector = (context: AppContext): (() => void) => {
+ 
+       // Always publish basic metrics (lifetime, power) even when idle
+       const lifetimeData = lifetimeStore.getAll();
++      const energyKwh = (lifetimeData["energy_wh"] ?? 0) / 1000;
++      const persisted = loadPersistedConfig(context.config.data_dir);
++      const electricityRate = persisted.electricity_rate ?? 0.11;
++      const electricityCurrency = persisted.electricity_currency ?? "USD";
++      const totalCost = (energyKwh * electricityRate).toFixed(2);
+       const baseMetrics = {
+         lifetime_prompt_tokens: lifetimeData["prompt_tokens_total"] ?? 0,
+         lifetime_completion_tokens: lifetimeData["completion_tokens_total"] ?? 0,
+         lifetime_requests: lifetimeData["requests_total"] ?? 0,
+-        lifetime_energy_kwh: (lifetimeData["energy_wh"] ?? 0) / 1000,
++        lifetime_energy_kwh: energyKwh,
+         lifetime_uptime_hours: (lifetimeData["uptime_seconds"] ?? 0) / 3600,
+         current_power_watts: totalPowerWatts,
++        electricity_rate: electricityRate,
++        electricity_currency: electricityCurrency,
++        total_cost: totalCost,
+         kwh_per_million_input: lifetimeData["prompt_tokens_total"]
+           ? (lifetimeData["energy_wh"] ?? 0) /
+             1000 /
+diff --git a/frontend/src/components/dashboard/control-panel/status-line.tsx b/frontend/src/components/dashboard/control-panel/status-line.tsx
+index 7a6ff47..23dadc4 100644
+--- a/frontend/src/components/dashboard/control-panel/status-line.tsx
++++ b/frontend/src/components/dashboard/control-panel/status-line.tsx
+@@ -10,6 +10,34 @@ import type {
+ } from "@/lib/types";
+ import { toGB, toGBFromMB } from "@/lib/formatters";
+ 
++const CURRENCY_SYMBOLS: Record<string, string> = {
++  USD: "$",
++  EUR: "€",
++  GBP: "£",
++  PLN: "zł",
++  CAD: "C$",
++  AUD: "A$",
++  CHF: "CHF",
++  JPY: "¥",
++  CNY: "¥",
++  SEK: "kr",
++  NOK: "kr",
++  DKK: "kr",
++  CZK: "Kč",
++  KRW: "₩",
++  INR: "₹",
++  BRL: "R$",
++  MXN: "$",
++  ZAR: "R",
++  SGD: "S$",
++  HKD: "HK$",
++  NZD: "NZ$",
++  TWD: "NT$",
++  THB: "฿",
++};
++
++const getCurrencySymbol = (ticker: string): string => CURRENCY_SYMBOLS[ticker] ?? ticker;
++
+ interface StatusLineProps {
+   currentProcess: ProcessInfo | null;
+   currentRecipe: RecipeWithStatus | null;
+@@ -51,7 +79,14 @@ export function StatusLine({
+     return sum + toGB(g.memory_used ?? 0);
+   }, 0);
+   
+-  const totalCost = metrics?.lifetime_energy_kwh ? (metrics.lifetime_energy_kwh * 0.5).toFixed(2) : null;
++  const electricityRate = metrics?.electricity_rate ?? 0.11;
++  const electricityCurrency = metrics?.electricity_currency ?? "USD";
++  const totalCost = metrics?.total_cost
++    ? metrics.total_cost
++    : metrics?.lifetime_energy_kwh
++      ? (metrics.lifetime_energy_kwh * electricityRate).toFixed(2)
++      : null;
++  const currencySymbol = getCurrencySymbol(electricityCurrency);
+   const sessionInput = metrics?.prompt_tokens_total || 0;
+   const sessionOutput = metrics?.generation_tokens_total || 0;
+ 
+@@ -106,7 +141,7 @@ export function StatusLine({
+             </span>
+             {totalCost && (
+               <span className="text-(--hl2)">
+-                {totalCost} PLN
++                {totalCost} {currencySymbol}
+               </span>
+             )}
+             {inferencePort && (
+-- 
+2.43.0
+

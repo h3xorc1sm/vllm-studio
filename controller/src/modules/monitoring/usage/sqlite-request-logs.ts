@@ -1,21 +1,34 @@
 // CRITICAL
-import Database from "bun:sqlite";
+import type { Database } from "bun:sqlite";
+import { openSqliteDatabase } from "../../../stores/sqlite";
 
 import { calcChange, getPercentile } from "./usage-utilities";
 
-export const getUsageFromSqliteSpendLogs = (dbPath: string): Record<string, unknown> | null => {
+const PERIOD_SQL: Record<string, string> = {
+  d: "start_time >= datetime('now', '-24 hours')",
+  w: "start_time >= datetime('now', '-7 days')",
+  m: "start_time >= datetime('now', '-30 days')",
+  y: "start_time >= datetime('now', '-365 days')",
+};
+
+export const getUsageFromRequestLogs = (
+  dbPath: string,
+  period?: string,
+): Record<string, unknown> | null => {
   let db: Database | null = null;
   try {
-    db = new Database(dbPath, { readonly: true });
+    db = openSqliteDatabase(dbPath);
 
-    // Check if spend_logs table exists
     const tableCheck = db.query<{ name: string }, []>(
-      `SELECT name FROM sqlite_master WHERE type='table' AND name='spend_logs'`
+      `SELECT name FROM sqlite_master WHERE type='table' AND name='request_logs'`
     ).get();
 
-    if (!tableCheck) {
-      return null;
-    }
+    if (!tableCheck) return null;
+
+    const where = period && PERIOD_SQL[period] ? `WHERE ${PERIOD_SQL[period]}` : "";
+    const successWhere = period && PERIOD_SQL[period]
+      ? `WHERE status = 'success' AND ${PERIOD_SQL[period]}`
+      : "WHERE status = 'success'";
 
     // Totals
     const totals = db.query<{
@@ -35,57 +48,41 @@ export const getUsageFromSqliteSpendLogs = (dbPath: string): Record<string, unkn
         SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as successful_requests,
         SUM(CASE WHEN status != 'success' OR status IS NULL THEN 1 ELSE 0 END) as failed_requests,
         COUNT(DISTINCT session_id) as unique_sessions
-      FROM spend_logs
+      FROM request_logs ${where}
     `).get() ?? { total_tokens: 0, prompt_tokens: 0, completion_tokens: 0, total_requests: 0, successful_requests: 0, failed_requests: 0, unique_sessions: 0 };
 
-    // If no data at all, return empty response
-    if (totals.total_requests === 0) {
-      return null;
-    }
+    if (totals.total_requests === 0) return null;
 
-    // Latency stats (using julianday for time calculations)
+    // Latency stats
     const latency = db.query<{
       avg_ms: number;
       min_ms: number;
       max_ms: number;
     }, []>(`
       SELECT
-        AVG((julianday(end_time) - julianday(start_time)) * 86400000) as avg_ms,
-        MIN((julianday(end_time) - julianday(start_time)) * 86400000) as min_ms,
-        MAX((julianday(end_time) - julianday(start_time)) * 86400000) as max_ms
-      FROM spend_logs
-      WHERE status = 'success' AND end_time IS NOT NULL AND start_time IS NOT NULL
+        AVG(latency_ms) as avg_ms,
+        MIN(latency_ms) as min_ms,
+        MAX(latency_ms) as max_ms
+      FROM request_logs
+      ${successWhere} AND latency_ms IS NOT NULL
     `).get() ?? { avg_ms: 0, min_ms: 0, max_ms: 0 };
 
-    // Percentiles need to be calculated differently in SQLite
     const latencyPercentiles = db.query<{ latency_ms: number }, []>(`
-      SELECT (julianday(end_time) - julianday(start_time)) * 86400000 as latency_ms
-      FROM spend_logs
-      WHERE status = 'success' AND end_time IS NOT NULL AND start_time IS NOT NULL
+      SELECT latency_ms FROM request_logs
+      ${successWhere} AND latency_ms IS NOT NULL
       ORDER BY latency_ms
     `).all();
 
-
     // TTFT stats
-    const ttft = db.query<{
-      avg_ms: number;
-    }, []>(`
-      SELECT
-        AVG((julianday(completion_start_time) - julianday(start_time)) * 86400000) as avg_ms
-      FROM spend_logs
-      WHERE status = 'success'
-        AND completion_start_time IS NOT NULL
-        AND completion_start_time != ''
-        AND start_time IS NOT NULL
+    const ttft = db.query<{ avg_ms: number }, []>(`
+      SELECT AVG(ttft_ms) as avg_ms
+      FROM request_logs
+      ${successWhere} AND ttft_ms IS NOT NULL
     `).get() ?? { avg_ms: 0 };
 
     const ttftPercentiles = db.query<{ ttft_ms: number }, []>(`
-      SELECT (julianday(completion_start_time) - julianday(start_time)) * 86400000 as ttft_ms
-      FROM spend_logs
-      WHERE status = 'success'
-        AND completion_start_time IS NOT NULL
-        AND completion_start_time != ''
-        AND start_time IS NOT NULL
+      SELECT ttft_ms FROM request_logs
+      ${successWhere} AND ttft_ms IS NOT NULL
       ORDER BY ttft_ms
     `).all();
 
@@ -101,45 +98,15 @@ export const getUsageFromSqliteSpendLogs = (dbPath: string): Record<string, unkn
         AVG(prompt_tokens) as avg_prompt,
         AVG(completion_tokens) as avg_completion,
         MAX(total_tokens) as max_tokens
-      FROM spend_logs
-      WHERE status = 'success' AND total_tokens IS NOT NULL
+      FROM request_logs
+      ${successWhere} AND total_tokens IS NOT NULL
     `).get() ?? { avg_tokens: 0, avg_prompt: 0, avg_completion: 0, max_tokens: 0 };
 
     const tokenPercentiles = db.query<{ tokens: number }, []>(`
-      SELECT total_tokens as tokens
-      FROM spend_logs
-      WHERE status = 'success' AND total_tokens IS NOT NULL
+      SELECT total_tokens as tokens FROM request_logs
+      ${successWhere} AND total_tokens IS NOT NULL
       ORDER BY tokens
     `).all();
-
-    // Cache stats
-    const cacheRows = db.query<{
-      cache_hit: string | null;
-      count: number;
-      tokens: number;
-    }, []>(`
-      SELECT
-        cache_hit,
-        COUNT(*) as count,
-        COALESCE(SUM(total_tokens), 0) as tokens
-      FROM spend_logs
-      GROUP BY cache_hit
-    `).all();
-
-    const cache = { hits: 0, misses: 0, hit_tokens: 0, miss_tokens: 0, hit_rate: 0 };
-    for (const row of cacheRows) {
-      if (row.cache_hit === "True") {
-        cache.hits = row.count;
-        cache.hit_tokens = row.tokens;
-      } else if (row.cache_hit === "False" || row.cache_hit === null) {
-        cache.misses += row.count;
-        cache.miss_tokens += row.tokens;
-      }
-    }
-    const totalCache = cache.hits + cache.misses;
-    if (totalCache > 0) {
-      cache.hit_rate = Math.round((cache.hits / totalCache) * 10000) / 100;
-    }
 
     // By model
     const byModel = db.query<{
@@ -161,11 +128,10 @@ export const getUsageFromSqliteSpendLogs = (dbPath: string): Record<string, unkn
         COALESCE(SUM(prompt_tokens), 0) as prompt_tokens,
         COALESCE(SUM(completion_tokens), 0) as completion_tokens,
         AVG(CASE WHEN status = 'success' THEN total_tokens END) as avg_tokens,
-        AVG(CASE WHEN status = 'success' THEN (julianday(end_time) - julianday(start_time)) * 86400000 END) as avg_latency_ms,
-        AVG(CASE WHEN status = 'success' AND completion_start_time IS NOT NULL AND completion_start_time != ''
-            THEN (julianday(completion_start_time) - julianday(start_time)) * 86400000 END) as avg_ttft_ms
-      FROM spend_logs
-      WHERE model != '' AND model IS NOT NULL
+        AVG(CASE WHEN status = 'success' THEN latency_ms END) as avg_latency_ms,
+        AVG(CASE WHEN status = 'success' THEN ttft_ms END) as avg_ttft_ms
+      FROM request_logs
+      ${where} AND model IS NOT NULL AND model != ''
       GROUP BY model
       ORDER BY total_tokens DESC
       LIMIT 25
@@ -188,8 +154,8 @@ export const getUsageFromSqliteSpendLogs = (dbPath: string): Record<string, unkn
         COALESCE(SUM(total_tokens), 0) as total_tokens,
         COALESCE(SUM(prompt_tokens), 0) as prompt_tokens,
         COALESCE(SUM(completion_tokens), 0) as completion_tokens,
-        AVG(CASE WHEN status = 'success' THEN (julianday(end_time) - julianday(start_time)) * 86400000 END) as avg_latency_ms
-      FROM spend_logs
+        AVG(CASE WHEN status = 'success' THEN latency_ms END) as avg_latency_ms
+      FROM request_logs
       WHERE DATE(start_time) >= DATE('now', '-14 days')
       GROUP BY DATE(start_time)
       ORDER BY date DESC
@@ -212,10 +178,9 @@ export const getUsageFromSqliteSpendLogs = (dbPath: string): Record<string, unkn
         COALESCE(SUM(total_tokens), 0) as total_tokens,
         COALESCE(SUM(prompt_tokens), 0) as prompt_tokens,
         COALESCE(SUM(completion_tokens), 0) as completion_tokens
-      FROM spend_logs
+      FROM request_logs
       WHERE DATE(start_time) >= DATE('now', '-14 days')
-        AND model IS NOT NULL
-        AND model != ''
+        AND model IS NOT NULL AND model != ''
       GROUP BY DATE(start_time), model
       ORDER BY date DESC
     `).all();
@@ -232,13 +197,13 @@ export const getUsageFromSqliteSpendLogs = (dbPath: string): Record<string, unkn
         COUNT(*) as requests,
         SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as successful,
         COALESCE(SUM(total_tokens), 0) as tokens
-      FROM spend_logs
-      WHERE start_time IS NOT NULL
+      FROM request_logs
+      ${where} AND start_time IS NOT NULL
       GROUP BY strftime('%H', start_time)
       ORDER BY hour
     `).all();
 
-    // Week over week
+    // Week over week (always all-time for WoW comparison)
     const wow = db.query<{
       this_week_requests: number;
       last_week_requests: number;
@@ -248,13 +213,13 @@ export const getUsageFromSqliteSpendLogs = (dbPath: string): Record<string, unkn
       last_week_successful: number;
     }, []>(`
       SELECT
-        SUM(CASE WHEN DATE(start_time) >= DATE('now', '-7 days') THEN 1 ELSE 0 END) as this_week_requests,
-        SUM(CASE WHEN DATE(start_time) >= DATE('now', '-14 days') AND DATE(start_time) < DATE('now', '-7 days') THEN 1 ELSE 0 END) as last_week_requests,
-        SUM(CASE WHEN DATE(start_time) >= DATE('now', '-7 days') AND status = 'success' THEN total_tokens ELSE 0 END) as this_week_tokens,
-        SUM(CASE WHEN DATE(start_time) >= DATE('now', '-14 days') AND DATE(start_time) < DATE('now', '-7 days') AND status = 'success' THEN total_tokens ELSE 0 END) as last_week_tokens,
-        SUM(CASE WHEN DATE(start_time) >= DATE('now', '-7 days') AND status = 'success' THEN 1 ELSE 0 END) as this_week_successful,
-        SUM(CASE WHEN DATE(start_time) >= DATE('now', '-14 days') AND DATE(start_time) < DATE('now', '-7 days') AND status = 'success' THEN 1 ELSE 0 END) as last_week_successful
-      FROM spend_logs
+        SUM(CASE WHEN datetime(start_time) >= datetime('now', '-7 days') THEN 1 ELSE 0 END) as this_week_requests,
+        SUM(CASE WHEN datetime(start_time) >= datetime('now', '-14 days') AND datetime(start_time) < datetime('now', '-7 days') THEN 1 ELSE 0 END) as last_week_requests,
+        SUM(CASE WHEN datetime(start_time) >= datetime('now', '-7 days') AND status = 'success' THEN total_tokens ELSE 0 END) as this_week_tokens,
+        SUM(CASE WHEN datetime(start_time) >= datetime('now', '-14 days') AND datetime(start_time) < datetime('now', '-7 days') AND status = 'success' THEN total_tokens ELSE 0 END) as last_week_tokens,
+        SUM(CASE WHEN datetime(start_time) >= datetime('now', '-7 days') AND status = 'success' THEN 1 ELSE 0 END) as this_week_successful,
+        SUM(CASE WHEN datetime(start_time) >= datetime('now', '-14 days') AND datetime(start_time) < datetime('now', '-7 days') AND status = 'success' THEN 1 ELSE 0 END) as last_week_successful
+      FROM request_logs
     `).get() ?? { this_week_requests: 0, last_week_requests: 0, this_week_tokens: 0, last_week_tokens: 0, this_week_successful: 0, last_week_successful: 0 };
 
     // Peak days
@@ -267,8 +232,8 @@ export const getUsageFromSqliteSpendLogs = (dbPath: string): Record<string, unkn
         DATE(start_time) as date,
         COUNT(*) as requests,
         COALESCE(SUM(total_tokens), 0) as tokens
-      FROM spend_logs
-      WHERE status = 'success'
+      FROM request_logs
+      ${successWhere}
       GROUP BY DATE(start_time)
       ORDER BY requests DESC
       LIMIT 5
@@ -282,14 +247,14 @@ export const getUsageFromSqliteSpendLogs = (dbPath: string): Record<string, unkn
       SELECT
         CAST(strftime('%H', start_time) AS INTEGER) as hour,
         COUNT(*) as requests
-      FROM spend_logs
-      WHERE DATE(start_time) >= DATE('now', '-7 days')
+      FROM request_logs
+      WHERE datetime(start_time) >= datetime('now', '-7 days')
       GROUP BY strftime('%H', start_time)
       ORDER BY requests DESC
       LIMIT 5
     `).all();
 
-    // Recent activity
+    // Recent activity (always relative to now)
     const recent = db.query<{
       last_24h_requests: number;
       prev_24h_requests: number;
@@ -301,10 +266,10 @@ export const getUsageFromSqliteSpendLogs = (dbPath: string): Record<string, unkn
         SUM(CASE WHEN datetime(start_time) >= datetime('now', '-48 hours') AND datetime(start_time) < datetime('now', '-24 hours') THEN 1 ELSE 0 END) as prev_24h_requests,
         SUM(CASE WHEN datetime(start_time) >= datetime('now', '-24 hours') AND status = 'success' THEN total_tokens ELSE 0 END) as last_24h_tokens,
         SUM(CASE WHEN datetime(start_time) >= datetime('now', '-1 hour') THEN 1 ELSE 0 END) as last_hour_requests
-      FROM spend_logs
+      FROM request_logs
     `).get() ?? { last_24h_requests: 0, prev_24h_requests: 0, last_24h_tokens: 0, last_hour_requests: 0 };
 
-    // Format by_model with tokens_per_sec
+    // Format by_model
     const modelsFormatted = byModel.map((row) => {
       const avgLatencyMs = row.avg_latency_ms ?? 0;
       const completionTokens = row.completion_tokens;
@@ -323,7 +288,7 @@ export const getUsageFromSqliteSpendLogs = (dbPath: string): Record<string, unkn
         completion_tokens: completionTokens,
         avg_tokens: Math.round(row.avg_tokens ?? 0),
         avg_latency_ms: Math.round(avgLatencyMs),
-        p50_latency_ms: Math.round(avgLatencyMs), // Approximation
+        p50_latency_ms: Math.round(avgLatencyMs),
         avg_ttft_ms: Math.round(row.avg_ttft_ms ?? 0),
         tokens_per_sec: tokensPerSec,
         prefill_tps: null,
@@ -345,7 +310,7 @@ export const getUsageFromSqliteSpendLogs = (dbPath: string): Record<string, unkn
         failed_requests: totals.failed_requests,
         success_rate: successRate,
         unique_sessions: totals.unique_sessions,
-        unique_users: 2, // Hardcoded for now
+        unique_users: 2,
       },
       latency: {
         avg_ms: Math.round(latency.avg_ms ?? 0),
@@ -369,7 +334,7 @@ export const getUsageFromSqliteSpendLogs = (dbPath: string): Record<string, unkn
         p50: getPercentile(tokenPercentiles.map(r => ({ latency_ms: r.tokens })), 0.5),
         p95: getPercentile(tokenPercentiles.map(r => ({ latency_ms: r.tokens })), 0.95),
       },
-      cache,
+      cache: { hits: 0, misses: 0, hit_tokens: 0, miss_tokens: 0, hit_rate: 0 },
       week_over_week: {
         this_week: {
           requests: wow.this_week_requests,
@@ -393,15 +358,8 @@ export const getUsageFromSqliteSpendLogs = (dbPath: string): Record<string, unkn
         last_24h_tokens: recent.last_24h_tokens,
         change_24h_pct: calcChange(recent.last_24h_requests, recent.prev_24h_requests),
       },
-      peak_days: peakDays.map((row) => ({
-        date: row.date,
-        requests: row.requests,
-        tokens: row.tokens,
-      })),
-      peak_hours: peakHours.map((row) => ({
-        hour: row.hour,
-        requests: row.requests,
-      })),
+      peak_days: peakDays.map((row) => ({ date: row.date, requests: row.requests, tokens: row.tokens })),
+      peak_hours: peakHours.map((row) => ({ hour: row.hour, requests: row.requests })),
       by_model: modelsFormatted,
       daily: daily.map((row) => ({
         date: row.date,
@@ -431,7 +389,7 @@ export const getUsageFromSqliteSpendLogs = (dbPath: string): Record<string, unkn
       })),
     };
   } catch (error) {
-    console.error('[Usage] Error fetching usage stats from sqlite spend_logs:', error);
+    console.error("[Usage] Error fetching usage stats from request_logs:", error);
     return null;
   } finally {
     if (db) db.close();

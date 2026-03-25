@@ -177,33 +177,27 @@ export const registerOpenAIRoutes = (app: Hono, context: AppContext): void => {
       }
     }
 
-    const toolsPayload = Array.isArray(parsed["tools"]) ? parsed["tools"] : [];
-    const hasTools = toolsPayload.length > 0;
-    const useDirectInference = isStreaming && hasTools && !providerRouting;
     const upstreamUrl =
       providerRouting && requestedModel
         ? `${providerRouting.baseUrl.replace(/\/+$/, "")}/v1/chat/completions`
-        : useDirectInference
-          ? buildInferenceUrl(context, "/v1/chat/completions")
-          : "http://localhost:4100/v1/chat/completions";
-    const masterKey = process.env["LITELLM_MASTER_KEY"] ?? "sk-master";
+        : buildInferenceUrl(context, "/v1/chat/completions");
     const inferenceKey = process.env["INFERENCE_API_KEY"] ?? "";
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
       ...(providerRouting
         ? { Authorization: `Bearer ${providerRouting.apiKey}` }
-        : useDirectInference
-          ? inferenceKey
-            ? { Authorization: `Bearer ${inferenceKey}` }
-            : {}
-          : { Authorization: `Bearer ${masterKey}` }),
+        : inferenceKey
+          ? { Authorization: `Bearer ${inferenceKey}` }
+          : {}),
     };
     const finalBody = bodyChanged
       ? new TextEncoder().encode(JSON.stringify(parsed)).buffer
       : bodyBuffer;
 
     if (!isStreaming) {
+      const startTime = new Date();
       const response = await fetch(upstreamUrl, { method: "POST", headers, body: finalBody });
+      const endTime = new Date();
       const result = (await response.json()) as Record<string, unknown>;
 
       const usage = result["usage"] as Record<string, number> | undefined;
@@ -221,6 +215,19 @@ export const registerOpenAIRoutes = (app: Hono, context: AppContext): void => {
         if (promptTokens > 0 || completionTokens > 0) {
           context.stores.lifetimeMetricsStore.addRequests(1);
         }
+
+        context.stores.lifetimeMetricsStore.insertRequestLog({
+          start_time: startTime.toISOString(),
+          end_time: endTime.toISOString(),
+          model: requestedModel ?? "unknown",
+          status: response.ok ? "success" : "error",
+          prompt_tokens: promptTokens,
+          completion_tokens: completionTokens,
+          total_tokens: promptTokens + completionTokens,
+          latency_ms: endTime.getTime() - startTime.getTime(),
+          ttft_ms: null,
+          is_streaming: false,
+        });
       }
 
       const choices = result["choices"];
@@ -239,6 +246,8 @@ export const registerOpenAIRoutes = (app: Hono, context: AppContext): void => {
       return ctx.json(result, { status: response.status });
     }
 
+    const streamStartTime = new Date();
+
     const upstreamResponse = await fetch(upstreamUrl, { method: "POST", headers, body: finalBody });
     if (!upstreamResponse.ok) {
       const errorText = await upstreamResponse.text();
@@ -250,16 +259,31 @@ export const registerOpenAIRoutes = (app: Hono, context: AppContext): void => {
       });
     }
 
-    const reader = upstreamResponse.body?.getReader();
-    if (!reader) {
+    const rawReader = upstreamResponse.body?.getReader();
+    if (!rawReader) {
       throw serviceUnavailable(
         providerRouting
           ? `${requestProvider} backend unavailable`
-          : useDirectInference
-            ? "Inference backend unavailable"
-            : "LiteLLM backend unavailable"
+          : "Inference backend unavailable"
       );
     }
+
+    // Track TTFT via wrapped reader
+    let firstDataTime: Date | null = null;
+    const wrappedReader = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        while (true) {
+          const { done, value } = await rawReader.read();
+          if (done) {
+            controller.close();
+            break;
+          }
+          if (!firstDataTime) firstDataTime = new Date();
+          controller.enqueue(value);
+        }
+      },
+    });
+    const reader = wrappedReader.getReader();
 
     const stream = createToolCallStream(reader, (usage) => {
       if (usage.prompt_tokens > 0) {
@@ -273,6 +297,19 @@ export const registerOpenAIRoutes = (app: Hono, context: AppContext): void => {
       if (usage.prompt_tokens > 0 || usage.completion_tokens > 0) {
         context.stores.lifetimeMetricsStore.addRequests(1);
       }
+
+      context.stores.lifetimeMetricsStore.insertRequestLog({
+        start_time: streamStartTime.toISOString(),
+        end_time: new Date().toISOString(),
+        model: requestedModel ?? "unknown",
+        status: "success",
+        prompt_tokens: usage.prompt_tokens,
+        completion_tokens: usage.completion_tokens,
+        total_tokens: usage.prompt_tokens + usage.completion_tokens,
+        latency_ms: Date.now() - streamStartTime.getTime(),
+        ttft_ms: firstDataTime ? firstDataTime.getTime() - streamStartTime.getTime() : null,
+        is_streaming: true,
+      });
     });
 
     return new Response(stream, { headers: buildSseHeaders() });

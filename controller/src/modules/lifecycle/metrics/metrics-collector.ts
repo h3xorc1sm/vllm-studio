@@ -7,6 +7,7 @@ import { listLogFiles, resolveExistingLogPath, tailFileLines } from "../../../co
 import { fetchLocal } from "../../../http/local-fetch";
 import { isRecipeRunning } from "../recipes/recipe-matching";
 import type { ProcessInfo, Recipe } from "../types";
+import { loadPersistedConfig } from "../../../config/persisted-config";
 import {
   METRICS_COLLECT_INTERVAL_MS,
   METRICS_HTTP_TIMEOUT_MS,
@@ -113,6 +114,7 @@ export const startMetricsCollector = (context: AppContext): (() => void) => {
   let lastLlamacppSampleKey = "";
   let lastLlamacppPromptThroughput = 0;
   let lastLlamacppGenerationThroughput = 0;
+  let lastEnergySnapshotAt = 0;
 
   /**
    * Scrape Prometheus metrics from vLLM.
@@ -178,6 +180,12 @@ export const startMetricsCollector = (context: AppContext): (() => void) => {
       lifetimeStore.increment("energy_wh", energyWh);
       lifetimeStore.increment("uptime_seconds", METRICS_LIFETIME_UPTIME_INCREMENT_SECONDS);
 
+      // Record energy snapshot every ~1 hour
+      if (Date.now() - lastEnergySnapshotAt >= 3_600_000) {
+        lifetimeStore.recordEnergySnapshot(lifetimeStore.get("energy_wh"));
+        lastEnergySnapshotAt = Date.now();
+      }
+
       await context.eventManager.publishStatus({
         running: Boolean(current),
         process: current,
@@ -205,13 +213,21 @@ export const startMetricsCollector = (context: AppContext): (() => void) => {
 
       // Always publish basic metrics (lifetime, power) even when idle
       const lifetimeData = lifetimeStore.getAll();
+      const energyKwh = (lifetimeData["energy_wh"] ?? 0) / 1000;
+      const persisted = loadPersistedConfig(context.config.data_dir);
+      const electricityRate = persisted.electricity_rate ?? 0.11;
+      const electricityCurrency = persisted.electricity_currency ?? "USD";
+      const totalCost = (energyKwh * electricityRate).toFixed(2);
       const baseMetrics = {
         lifetime_prompt_tokens: lifetimeData["prompt_tokens_total"] ?? 0,
         lifetime_completion_tokens: lifetimeData["completion_tokens_total"] ?? 0,
         lifetime_requests: lifetimeData["requests_total"] ?? 0,
-        lifetime_energy_kwh: (lifetimeData["energy_wh"] ?? 0) / 1000,
+        lifetime_energy_kwh: energyKwh,
         lifetime_uptime_hours: (lifetimeData["uptime_seconds"] ?? 0) / 3600,
         current_power_watts: totalPowerWatts,
+        electricity_rate: electricityRate,
+        electricity_currency: electricityCurrency,
+        total_cost: totalCost,
         kwh_per_million_input: lifetimeData["prompt_tokens_total"]
           ? (lifetimeData["energy_wh"] ?? 0) /
             1000 /

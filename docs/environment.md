@@ -70,6 +70,13 @@ This list documents environment variables referenced in code or docker-compose. 
 | EXA_API_KEY          | -         | Exa API key for MCP search integration.                |
 | LITELLM_MASTER_KEY   | sk-master | LiteLLM master key (also used by controller to proxy). |
 
+## Electricity cost estimation
+
+| Variable                       | Default | Purpose                                       |
+| ------------------------------ | ------- | --------------------------------------------- |
+| VLLM_STUDIO_ELECTRICITY_RATE   | 0.11    | Cost per kWh for electricity calculations.    |
+| VLLM_STUDIO_ELECTRICITY_CURRENCY | USD   | Currency symbol for cost display.             |
+
 ## Logging and diagnostics
 
 | Variable                        | Default    | Purpose                |

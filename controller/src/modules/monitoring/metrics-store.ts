@@ -2,6 +2,28 @@
 import type { Database } from "bun:sqlite";
 import { openSqliteDatabase } from "../../stores/sqlite";
 
+export interface RequestLogEntry {
+  id?: number;
+  start_time: string;
+  end_time?: string | null;
+  model: string;
+  status: string;
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+  latency_ms?: number | null;
+  ttft_ms?: number | null;
+  session_id?: string | null;
+  is_streaming: boolean;
+}
+
+const PERIOD_FILTERS: Record<string, string> = {
+  d: "start_time >= datetime('now', '-24 hours')",
+  w: "start_time >= datetime('now', '-7 days')",
+  m: "start_time >= datetime('now', '-30 days')",
+  y: "start_time >= datetime('now', '-365 days')",
+};
+
 /**
  * SQLite-backed storage for peak metrics per model.
  */
@@ -201,6 +223,34 @@ export class LifetimeMetricsStore {
         .query("INSERT OR IGNORE INTO lifetime_metrics (key, value) VALUES (?, ?)")
         .run(key, value);
     }
+
+    this.db.run(`
+      CREATE TABLE IF NOT EXISTS request_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        start_time TEXT NOT NULL,
+        end_time TEXT,
+        model TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending',
+        prompt_tokens INTEGER NOT NULL DEFAULT 0,
+        completion_tokens INTEGER NOT NULL DEFAULT 0,
+        total_tokens INTEGER NOT NULL DEFAULT 0,
+        latency_ms REAL,
+        ttft_ms REAL,
+        session_id TEXT,
+        is_streaming INTEGER NOT NULL DEFAULT 0
+      )
+    `);
+    this.db.run(
+      "CREATE INDEX IF NOT EXISTS idx_request_logs_start_time ON request_logs(start_time)"
+    );
+    this.db.run("CREATE INDEX IF NOT EXISTS idx_request_logs_model ON request_logs(model)");
+
+    this.db.run(`
+      CREATE TABLE IF NOT EXISTS energy_snapshots (
+        sampled_at TEXT PRIMARY KEY,
+        energy_wh REAL NOT NULL
+      )
+    `);
   }
 
   /**
@@ -324,4 +374,94 @@ export class LifetimeMetricsStore {
   public addRequests(count = 1): void {
     this.increment("requests_total", count);
   }
+
+  public insertRequestLog(entry: RequestLogEntry): number {
+    const result = this.db
+      .query(
+        `INSERT INTO request_logs (start_time, end_time, model, status, prompt_tokens, completion_tokens, total_tokens, latency_ms, ttft_ms, session_id, is_streaming)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      )
+      .run(
+        entry.start_time,
+        entry.end_time ?? null,
+        entry.model,
+        entry.status,
+        entry.prompt_tokens,
+        entry.completion_tokens,
+        entry.total_tokens,
+        entry.latency_ms ?? null,
+        entry.ttft_ms ?? null,
+        entry.session_id ?? null,
+        entry.is_streaming ? 1 : 0,
+      );
+    return Number(result.lastInsertRowid);
+  }
+
+  public updateRequestLog(id: number, updates: Partial<RequestLogEntry>): void {
+    const fields: string[] = [];
+    const values: Array<string | number | null> = [];
+    for (const [key, value] of Object.entries(updates)) {
+      if (key === "id") continue;
+      if (value !== undefined) {
+        fields.push(`${key} = ?`);
+        values.push(key === "is_streaming" ? (value ? 1 : 0) : (value as string | number | null));
+      }
+    }
+    if (fields.length === 0) return;
+    values.push(id);
+    this.db.query(`UPDATE request_logs SET ${fields.join(", ")} WHERE id = ?`).run(...values);
+  }
+
+  public getRequestLogs(period?: string): { rows: Array<RequestLogEntry & { id: number }>; filtered: boolean } {
+    const where = period && PERIOD_FILTERS[period] ? `WHERE ${PERIOD_FILTERS[period]}` : "";
+    const rows = this.db
+      .query(`SELECT * FROM request_logs ${where} ORDER BY start_time DESC`)
+      .all() as Array<Record<string, unknown>>;
+    return {
+      rows: rows.map((r) => ({
+        id: Number(r["id"]),
+        start_time: String(r["start_time"] ?? ""),
+        end_time: r["end_time"] ? String(r["end_time"]) : null,
+        model: String(r["model"] ?? "unknown"),
+        status: String(r["status"] ?? "pending"),
+        prompt_tokens: Number(r["prompt_tokens"] ?? 0),
+        completion_tokens: Number(r["completion_tokens"] ?? 0),
+        total_tokens: Number(r["total_tokens"] ?? 0),
+        latency_ms: r["latency_ms"] != null ? Number(r["latency_ms"]) : null,
+        ttft_ms: r["ttft_ms"] != null ? Number(r["ttft_ms"]) : null,
+        session_id: r["session_id"] ? String(r["session_id"]) : null,
+        is_streaming: Boolean(r["is_streaming"]),
+      })),
+      filtered: Boolean(period && PERIOD_FILTERS[period]),
+    };
+  }
+
+  public getRequestLogCount(period?: string): number {
+    const where = period && PERIOD_FILTERS[period] ? `WHERE ${PERIOD_FILTERS[period]}` : "";
+    const row = this.db.query(`SELECT COUNT(*) as cnt FROM request_logs ${where}`).get() as {
+      cnt: number;
+    };
+    return row?.cnt ?? 0;
+  }
+
+  public recordEnergySnapshot(energyWh: number): void {
+    this.db
+      .query(
+        "INSERT OR REPLACE INTO energy_snapshots (sampled_at, energy_wh) VALUES (datetime('now'), ?)"
+      )
+      .run(energyWh);
+  }
+
+  public getEnergyBefore(timestamp: string): { energy_wh: number } | null {
+    const row = this.db
+      .query("SELECT energy_wh FROM energy_snapshots WHERE sampled_at <= ? ORDER BY sampled_at DESC LIMIT 1")
+      .get(timestamp) as { energy_wh: number } | null;
+    return row;
+  }
+
+  public getCurrentEnergy(): number {
+    return this.get("energy_wh");
+  }
 }
+
+export { PERIOD_FILTERS };

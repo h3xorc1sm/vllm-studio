@@ -1,0 +1,1047 @@
+From 0bbbd0bdd28e54a9f68836150e81769e50587708 Mon Sep 17 00:00:00 2001
+From: seroxdesign <sherifcherfa@gmail.com>
+Date: Sat, 21 Mar 2026 18:04:14 -0700
+Subject: [PATCH 1/4] feat: add configurable electricity cost settings with
+ currency selection
+
+Replace hardcoded PLN cost with user-configurable rate and currency.
+Adds electricity cost configuration to the Config page (System tab)
+with a 24-currency dropdown, and shows cost breakdown on the Usage page.
+
+Backend:
+- Add electricity_rate/currency to PersistedConfig and /studio/settings
+- Include total_cost, rate, currency in /lifetime-metrics response
+- Add /usage/cost endpoint with hourly and daily cost estimates
+
+Frontend:
+- Dashboard metric bar uses configurable rate/currency from API
+- Config page System tab: rate input + currency dropdown (24 ISO tickers)
+- Usage page: total cost card + cost breakdown section
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+---
+ .env.example                                  |  10 ++
+ controller/src/config/persisted-config.ts     |   2 +
+ .../src/modules/monitoring/metrics-routes.ts  |  31 ++++
+ controller/src/modules/studio/routes.ts       |  13 +-
+ docs/environment.md                           |   7 +
+ .../app/configs/_components/configs-view.tsx  |   2 +
+ .../_components/cost-settings-section.tsx     | 154 ++++++++++++++++++
+ .../app/usage/_components/cost-breakdown.tsx  | 151 +++++++++++++++++
+ .../usage/_components/overview-metrics.tsx    |  59 ++++++-
+ frontend/src/app/usage/page.tsx               |   4 +
+ .../dashboard/control-panel/metric-bar.tsx    |  35 +++-
+ frontend/src/lib/api/studio.ts                |   2 +
+ frontend/src/lib/api/system.ts                |   2 +
+ frontend/src/lib/types/system/metrics.ts      |   3 +
+ frontend/src/lib/types/system/studio.ts       |   4 +
+ 15 files changed, 474 insertions(+), 5 deletions(-)
+ create mode 100644 frontend/src/app/configs/_components/cost-settings-section.tsx
+ create mode 100644 frontend/src/app/usage/_components/cost-breakdown.tsx
+
+diff --git a/.env.example b/.env.example
+index 9f5c1ca..a0ecfcb 100644
+--- a/.env.example
++++ b/.env.example
+@@ -90,3 +90,13 @@ VLLM_STUDIO_GID=1000
+ # Exa AI API key for web search (used in chat for research mode)
+ # Get your API key from https://exa.ai
+ EXA_API_KEY=your-exa-api-key-here
++
++# =============================================================================
++# Electricity cost estimation
++# =============================================================================
++
++# Cost per kWh for electricity cost calculations (default: 0.11)
++# VLLM_STUDIO_ELECTRICITY_RATE=0.11
++
++# Currency for cost display (default: USD)
++# VLLM_STUDIO_ELECTRICITY_CURRENCY=USD
+diff --git a/controller/src/config/persisted-config.ts b/controller/src/config/persisted-config.ts
+index 407cc80..1a287d9 100644
+--- a/controller/src/config/persisted-config.ts
++++ b/controller/src/config/persisted-config.ts
+@@ -19,6 +19,8 @@ export interface PersistedConfig {
+   daytona_agent_mode?: boolean;
+   agent_fs_local_fallback?: boolean;
+   providers?: ProviderConfig[];
++  electricity_rate?: number;
++  electricity_currency?: string;
+ }
+ 
+ export const getPersistedConfigPath = (dataDirectory: string): string => {
+diff --git a/controller/src/modules/monitoring/metrics-routes.ts b/controller/src/modules/monitoring/metrics-routes.ts
+index 02d470f..715c754 100644
+--- a/controller/src/modules/monitoring/metrics-routes.ts
++++ b/controller/src/modules/monitoring/metrics-routes.ts
+@@ -4,6 +4,7 @@ import { performance } from "node:perf_hooks";
+ import type { AppContext } from "../../types/context";
+ import { getGpuInfo } from "../lifecycle/platform/gpu";
+ import { fetchInference } from "../../services/inference/inference-client";
++import { loadPersistedConfig } from "../../config/persisted-config";
+ 
+ /**
+  * Register monitoring routes.
+@@ -53,6 +54,11 @@ export const registerMonitoringRoutes = (app: Hono, context: AppContext): void =
+     const gpus = getGpuInfo();
+     const currentPower = gpus.reduce((sum, gpu) => sum + gpu.power_draw, 0);
+ 
++    const persisted = loadPersistedConfig(context.config.data_dir);
++    const electricityRate = persisted.electricity_rate ?? 0.11;
++    const electricityCurrency = persisted.electricity_currency ?? "USD";
++    const totalCost = (energyKwh * electricityRate).toFixed(2);
++
+     return ctx.json({
+       tokens_total: Math.floor(data["tokens_total"] ?? 0),
+       requests_total: Math.floor(data["requests_total"] ?? 0),
+@@ -63,6 +69,31 @@ export const registerMonitoringRoutes = (app: Hono, context: AppContext): void =
+       first_started_at: data["first_started_at"] ?? 0,
+       kwh_per_million_tokens: kwhPerMillion,
+       current_power_watts: currentPower,
++      electricity_rate: electricityRate,
++      electricity_currency: electricityCurrency,
++      total_cost: totalCost,
++    });
++  });
++
++  app.get("/usage/cost", async (ctx) => {
++    const data = context.stores.lifetimeMetricsStore.getAll();
++    const energyKwh = (data["energy_wh"] ?? 0) / 1000;
++    const gpus = getGpuInfo();
++    const currentPower = gpus.reduce((sum, gpu) => sum + gpu.power_draw, 0);
++
++    const persisted = loadPersistedConfig(context.config.data_dir);
++    const electricityRate = persisted.electricity_rate ?? 0.11;
++    const electricityCurrency = persisted.electricity_currency ?? "USD";
++    const totalCost = (energyKwh * electricityRate).toFixed(2);
++    const hourlyCost = ((currentPower / 1000) * electricityRate).toFixed(2);
++
++    return ctx.json({
++      total_cost: totalCost,
++      electricity_rate: electricityRate,
++      electricity_currency: electricityCurrency,
++      lifetime_energy_kwh: energyKwh,
++      current_power_watts: currentPower,
++      estimated_hourly_cost: hourlyCost,
+     });
+   });
+ 
+diff --git a/controller/src/modules/studio/routes.ts b/controller/src/modules/studio/routes.ts
+index 4ab42c4..45697f8 100644
+--- a/controller/src/modules/studio/routes.ts
++++ b/controller/src/modules/studio/routes.ts
+@@ -182,6 +182,13 @@ export const registerStudioRoutes = (app: Hono, context: AppContext): void => {
+       body?.agent_fs_local_fallback,
+       "agent_fs_local_fallback"
+     );
++    const electricityRate =
++      body?.electricity_rate !== undefined
++        ? typeof body.electricity_rate === "number"
++          ? body.electricity_rate
++          : undefined
++        : undefined;
++    const electricityCurrency = parseOptionalStringUpdate(body?.electricity_currency);
+ 
+     const hasAnyUpdate =
+       modelsDirectory !== undefined ||
+@@ -190,7 +197,9 @@ export const registerStudioRoutes = (app: Hono, context: AppContext): void => {
+       daytonaProxyUrl !== undefined ||
+       daytonaSandboxId !== undefined ||
+       daytonaAgentMode !== undefined ||
+-      agentFsLocalFallback !== undefined;
++      agentFsLocalFallback !== undefined ||
++      electricityRate !== undefined ||
++      electricityCurrency !== undefined;
+ 
+     if (!hasAnyUpdate) {
+       throw badRequest("No supported settings provided");
+@@ -206,6 +215,8 @@ export const registerStudioRoutes = (app: Hono, context: AppContext): void => {
+       ...(agentFsLocalFallback !== undefined
+         ? { agent_fs_local_fallback: agentFsLocalFallback }
+         : {}),
++      ...(electricityRate !== undefined ? { electricity_rate: electricityRate } : {}),
++      ...(electricityCurrency !== undefined ? { electricity_currency: electricityCurrency } : {}),
+     });
+ 
+     if (saved.models_dir) {
+diff --git a/docs/environment.md b/docs/environment.md
+index db5c70d..de58e09 100644
+--- a/docs/environment.md
++++ b/docs/environment.md
+@@ -70,6 +70,13 @@ This list documents environment variables referenced in code or docker-compose.
+ | EXA_API_KEY          | -         | Exa API key for MCP search integration.                |
+ | LITELLM_MASTER_KEY   | sk-master | LiteLLM master key (also used by controller to proxy). |
+ 
++## Electricity cost estimation
++
++| Variable                       | Default | Purpose                                       |
++| ------------------------------ | ------- | --------------------------------------------- |
++| VLLM_STUDIO_ELECTRICITY_RATE   | 0.11    | Cost per kWh for electricity calculations.    |
++| VLLM_STUDIO_ELECTRICITY_CURRENCY | USD   | Currency symbol for cost display.             |
++
+ ## Logging and diagnostics
+ 
+ | Variable                        | Default    | Purpose                |
+diff --git a/frontend/src/app/configs/_components/configs-view.tsx b/frontend/src/app/configs/_components/configs-view.tsx
+index 07207f8..b6a46db 100644
+--- a/frontend/src/app/configs/_components/configs-view.tsx
++++ b/frontend/src/app/configs/_components/configs-view.tsx
+@@ -14,6 +14,7 @@ import { NoBackendState } from "./no-backend-state";
+ import { ServiceTopology } from "./service-topology";
+ import { AppearanceSettings } from "./appearance-settings";
+ import { ProvidersSection } from "./providers-section";
++import { CostSettingsSection } from "./cost-settings-section";
+ 
+ interface ConfigsViewProps {
+   data: ConfigData | null;
+@@ -124,6 +125,7 @@ export function ConfigsView({
+ 
+           {activeTab === "system" && (
+             <section className="space-y-6">
++              <CostSettingsSection />
+               {data ? (
+                 <>
+                   <CompatibilityPanel report={compatibilityReport} />
+diff --git a/frontend/src/app/configs/_components/cost-settings-section.tsx b/frontend/src/app/configs/_components/cost-settings-section.tsx
+new file mode 100644
+index 0000000..a3f7c1e
+--- /dev/null
++++ b/frontend/src/app/configs/_components/cost-settings-section.tsx
+@@ -0,0 +1,154 @@
++// CRITICAL
++"use client";
++
++import { useEffect, useState } from "react";
++import { Check, Loader2, Zap } from "lucide-react";
++import api from "@/lib/api";
++
++const CURRENCIES = [
++  { ticker: "USD", symbol: "$", label: "US Dollar" },
++  { ticker: "EUR", symbol: "€", label: "Euro" },
++  { ticker: "GBP", symbol: "£", label: "British Pound" },
++  { ticker: "PLN", symbol: "zł", label: "Polish Złoty" },
++  { ticker: "CAD", symbol: "C$", label: "Canadian Dollar" },
++  { ticker: "AUD", symbol: "A$", label: "Australian Dollar" },
++  { ticker: "CHF", symbol: "CHF", label: "Swiss Franc" },
++  { ticker: "JPY", symbol: "¥", label: "Japanese Yen" },
++  { ticker: "CNY", symbol: "¥", label: "Chinese Yuan" },
++  { ticker: "SEK", symbol: "kr", label: "Swedish Krona" },
++  { ticker: "NOK", symbol: "kr", label: "Norwegian Krone" },
++  { ticker: "DKK", symbol: "kr", label: "Danish Krone" },
++  { ticker: "CZK", symbol: "Kč", label: "Czech Koruna" },
++  { ticker: "KRW", symbol: "₩", label: "South Korean Won" },
++  { ticker: "INR", symbol: "₹", label: "Indian Rupee" },
++  { ticker: "BRL", symbol: "R$", label: "Brazilian Real" },
++  { ticker: "MXN", symbol: "$", label: "Mexican Peso" },
++  { ticker: "ZAR", symbol: "R", label: "South African Rand" },
++  { ticker: "SGD", symbol: "S$", label: "Singapore Dollar" },
++  { ticker: "HKD", symbol: "HK$", label: "Hong Kong Dollar" },
++  { ticker: "NZD", symbol: "NZ$", label: "New Zealand Dollar" },
++  { ticker: "TWD", symbol: "NT$", label: "New Taiwan Dollar" },
++  { ticker: "THB", symbol: "฿", label: "Thai Baht" },
++] as const;
++
++interface CostSettings {
++  electricity_rate: number;
++  electricity_currency: string;
++}
++
++export function CostSettingsSection() {
++  const [settings, setSettings] = useState<CostSettings>({
++    electricity_rate: 0.11,
++    electricity_currency: "USD",
++  });
++  const [loading, setLoading] = useState(true);
++  const [saving, setSaving] = useState(false);
++  const [statusMessage, setStatusMessage] = useState("");
++
++  useEffect(() => {
++    const loadSettings = async () => {
++      try {
++        const response = await api.getStudioSettings();
++        if (response.effective) {
++          setSettings({
++            electricity_rate: response.effective.electricity_rate ?? 0.11,
++            electricity_currency: response.effective.electricity_currency ?? "USD",
++          });
++        }
++      } catch (e) {
++        console.error("Failed to load cost settings:", e);
++      } finally {
++        setLoading(false);
++      }
++    };
++    loadSettings();
++  }, []);
++
++  const handleSave = async () => {
++    try {
++      setSaving(true);
++      setStatusMessage("");
++      await api.updateStudioSettings({
++        electricity_rate: settings.electricity_rate,
++        electricity_currency: settings.electricity_currency,
++      });
++      setStatusMessage("Saved");
++    } catch (e) {
++      const message = e instanceof Error ? e.message : "Failed to save";
++      setStatusMessage(message);
++    } finally {
++      setSaving(false);
++    }
++  };
++
++  return (
++    <div className="mb-6 sm:mb-8">
++      <div className="text-xs text-(--dim) uppercase tracking-wider mb-3">
++        Electricity Cost
++      </div>
++      <div className="bg-(--surface) rounded-lg p-4 sm:p-6">
++        {loading ? (
++          <div className="flex items-center justify-center py-4">
++            <Zap className="h-5 w-5 text-(--dim) animate-pulse" />
++          </div>
++        ) : (
++          <div className="space-y-4">
++            <div>
++              <label className="block text-xs text-(--dim) mb-1.5">
++                Electricity Rate ($/kWh)
++              </label>
++              <input
++                type="number"
++                step="0.001"
++                value={settings.electricity_rate}
++                onChange={(e) =>
++                  setSettings({ ...settings, electricity_rate: parseFloat(e.target.value) || 0 })
++                }
++                className="w-full px-3 py-2 bg-(--surface) border border-(--border) rounded-lg text-sm text-(--fg) placeholder-(--dim)/50 focus:outline-none focus:border-(--hl1)"
++                placeholder="0.11"
++              />
++              <p className="mt-1 text-[11px] text-(--dim)">
++                Your local electricity cost per kilowatt-hour
++              </p>
++            </div>
++
++            <div>
++              <label className="block text-xs text-(--dim) mb-1.5">Currency</label>
++              <select
++                value={settings.electricity_currency}
++                onChange={(e) =>
++                  setSettings({ ...settings, electricity_currency: e.target.value })
++                }
++                className="w-full px-3 py-2 bg-(--surface) border border-(--border) rounded-lg text-sm text-(--fg) focus:outline-none focus:border-(--hl1)"
++              >
++                {CURRENCIES.map((currency) => (
++                  <option key={currency.ticker} value={currency.ticker}>
++                    {currency.ticker} - {currency.label}
++                  </option>
++                ))}
++              </select>
++            </div>
++
++            <div className="flex items-center justify-between pt-2">
++              <button
++                onClick={handleSave}
++                disabled={saving}
++                className="px-3 py-1.5 bg-(--hl1) rounded-lg text-xs text-(--fg) hover:opacity-90 disabled:opacity-50 flex items-center gap-1.5"
++              >
++                {saving ? (
++                  <Loader2 className="h-3 w-3 animate-spin" />
++                ) : (
++                  <Check className="h-3 w-3" />
++                )}
++                Save
++              </button>
++              {statusMessage && (
++                <span className="text-xs text-(--dim)">{statusMessage}</span>
++              )}
++            </div>
++          </div>
++        )}
++      </div>
++    </div>
++  );
++}
+diff --git a/frontend/src/app/usage/_components/cost-breakdown.tsx b/frontend/src/app/usage/_components/cost-breakdown.tsx
+new file mode 100644
+index 0000000..5c779c1
+--- /dev/null
++++ b/frontend/src/app/usage/_components/cost-breakdown.tsx
+@@ -0,0 +1,151 @@
++// CRITICAL
++"use client";
++
++import { useEffect, useState } from "react";
++import type { Metrics } from "@/lib/types";
++import { Zap, Clock, Calendar, TrendingUp } from "lucide-react";
++import api from "@/lib/api";
++
++const CURRENCY_SYMBOLS: Record<string, string> = {
++  USD: "$",
++  EUR: "€",
++  GBP: "£",
++  PLN: "zł",
++  CAD: "C$",
++  AUD: "A$",
++  CHF: "CHF",
++  JPY: "¥",
++  CNY: "¥",
++  SEK: "kr",
++  NOK: "kr",
++  DKK: "kr",
++  CZK: "Kč",
++  KRW: "₩",
++  INR: "₹",
++  BRL: "R$",
++  MXN: "$",
++  ZAR: "R",
++  SGD: "S$",
++  HKD: "HK$",
++  NZD: "NZ$",
++  TWD: "NT$",
++  THB: "฿",
++};
++
++const getCurrencySymbol = (ticker: string): string => CURRENCY_SYMBOLS[ticker] ?? ticker;
++
++interface CostCardProps {
++  icon: React.ElementType;
++  label: string;
++  value: string;
++  subvalue?: string;
++}
++
++function CostCard({ icon: Icon, label, value, subvalue }: CostCardProps) {
++  return (
++    <div className="bg-(--surface) rounded-lg p-4">
++      <div className="flex items-center gap-2 text-(--dim) mb-2">
++        <Icon className="h-4 w-4" />
++        <span className="text-xs">{label}</span>
++      </div>
++      <div className="text-xl font-medium tabular-nums tracking-tight">{value}</div>
++      {subvalue && <div className="mt-1 text-xs text-(--dim)">{subvalue}</div>}
++    </div>
++  );
++}
++
++export function CostBreakdown() {
++  const [metrics, setMetrics] = useState<Metrics | null>(null);
++  const [loading, setLoading] = useState(true);
++  const [error, setError] = useState<string | null>(null);
++
++  useEffect(() => {
++    const fetchMetrics = async () => {
++      try {
++        setLoading(true);
++        setError(null);
++        const data = await api.getLifetimeMetrics();
++        setMetrics(data);
++      } catch (e) {
++        setError(e instanceof Error ? e.message : "Failed to load cost data");
++      } finally {
++        setLoading(false);
++      }
++    };
++    fetchMetrics();
++  }, []);
++
++  if (loading) {
++    return (
++      <div className="bg-(--surface) rounded-lg p-4 sm:p-6">
++        <div className="text-xs text-(--dim) uppercase tracking-wider mb-4">Cost Breakdown</div>
++        <div className="flex items-center justify-center py-8">
++          <Zap className="h-5 w-5 text-(--dim) animate-pulse" />
++        </div>
++      </div>
++    );
++  }
++
++  if (error) {
++    return (
++      <div className="bg-(--surface) rounded-lg p-4 sm:p-6">
++        <div className="text-xs text-(--dim) uppercase tracking-wider mb-4">Cost Breakdown</div>
++        <div className="text-sm text-(--err)">{error}</div>
++      </div>
++    );
++  }
++
++  const currencySymbol = getCurrencySymbol(metrics?.electricity_currency ?? "USD");
++  const rate = metrics?.electricity_rate ?? 0.11;
++
++  const lifetimeCost = metrics?.lifetime_cost
++    ? parseFloat(metrics.lifetime_cost)
++    : metrics?.lifetime_energy_kwh
++      ? metrics.lifetime_energy_kwh * rate
++      : 0;
++
++  const currentPowerWatts = metrics?.current_power_watts ?? 0;
++  const hourlyCost = (currentPowerWatts * rate) / 1000;
++
++  const uptimeHours = metrics?.lifetime_uptime_hours ?? 0;
++  const avgCostPerDay = uptimeHours > 0 ? lifetimeCost / (uptimeHours / 24) : 0;
++
++  return (
++    <div className="bg-(--surface) rounded-lg p-4 sm:p-6">
++      <div className="flex items-center justify-between mb-4">
++        <div className="text-xs text-(--dim) uppercase tracking-wider">Cost Breakdown</div>
++        <div className="flex items-center gap-2">
++          <Calendar className="h-4 w-4 text-(--dim)" />
++          <span className="text-xs text-(--dim)">All time</span>
++        </div>
++      </div>
++
++      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
++        <CostCard
++          icon={Zap}
++          label="Lifetime Cost"
++          value={`${currencySymbol}${lifetimeCost.toFixed(2)}`}
++          subvalue={metrics?.lifetime_energy_kwh ? `${metrics.lifetime_energy_kwh.toFixed(2)} kWh` : undefined}
++        />
++        <CostCard
++          icon={TrendingUp}
++          label="Current Hourly Cost"
++          value={`${currencySymbol}${hourlyCost.toFixed(4)}`}
++          subvalue={currentPowerWatts > 0 ? `${currentPowerWatts.toFixed(0)} W` : "No active load"}
++        />
++        <CostCard
++          icon={Clock}
++          label="Avg Daily Cost"
++          value={`${currencySymbol}${avgCostPerDay.toFixed(2)}`}
++          subvalue={uptimeHours > 0 ? `${uptimeHours.toFixed(1)} hours uptime` : undefined}
++        />
++        <CostCard
++          icon={Zap}
++          label="Rate"
++          value={`${currencySymbol}${rate.toFixed(3)}/kWh`}
++          subvalue={metrics?.electricity_currency ?? "USD"}
++        />
++      </div>
++    </div>
++  );
++}
+diff --git a/frontend/src/app/usage/_components/overview-metrics.tsx b/frontend/src/app/usage/_components/overview-metrics.tsx
+index df4a80e..3d063f9 100644
+--- a/frontend/src/app/usage/_components/overview-metrics.tsx
++++ b/frontend/src/app/usage/_components/overview-metrics.tsx
+@@ -1,10 +1,40 @@
+ // CRITICAL
+ "use client";
+ 
+-import type { UsageStats } from "@/lib/types";
++import { useEffect, useState } from "react";
++import type { UsageStats, Metrics } from "@/lib/types";
+ import { formatNumber } from "@/lib/formatters";
+ import { ChangeIndicator } from "@/components/shared";
+-import { Hash, Activity, TrendingUp, Users, Clock, Database } from "lucide-react";
++import { Hash, Activity, TrendingUp, Users, Clock, Database, Zap } from "lucide-react";
++import api from "@/lib/api";
++
++const CURRENCY_SYMBOLS: Record<string, string> = {
++  USD: "$",
++  EUR: "€",
++  GBP: "£",
++  PLN: "zł",
++  CAD: "C$",
++  AUD: "A$",
++  CHF: "CHF",
++  JPY: "¥",
++  CNY: "¥",
++  SEK: "kr",
++  NOK: "kr",
++  DKK: "kr",
++  CZK: "Kč",
++  KRW: "₩",
++  INR: "₹",
++  BRL: "R$",
++  MXN: "$",
++  ZAR: "R",
++  SGD: "S$",
++  HKD: "HK$",
++  NZD: "NZ$",
++  TWD: "NT$",
++  THB: "฿",
++};
++
++const getCurrencySymbol = (ticker: string): string => CURRENCY_SYMBOLS[ticker] ?? ticker;
+ 
+ function MetricCard({
+   icon: Icon,
+@@ -45,6 +75,23 @@ function MetricCard({
+ }
+ 
+ export function OverviewMetrics(stats: UsageStats) {
++  const [lifetimeMetrics, setLifetimeMetrics] = useState<Metrics | null>(null);
++
++  useEffect(() => {
++    const fetchLifetimeMetrics = async () => {
++      try {
++        const metrics = await api.getLifetimeMetrics();
++        setLifetimeMetrics(metrics);
++      } catch (e) {
++        console.error("Failed to fetch lifetime metrics:", e);
++      }
++    };
++    fetchLifetimeMetrics();
++  }, []);
++
++  const totalCost = lifetimeMetrics?.lifetime_cost;
++  const currencySymbol = getCurrencySymbol(lifetimeMetrics?.electricity_currency ?? "USD");
++
+   return (
+     <section className="mb-6 sm:mb-8">
+       <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3 sm:gap-4">
+@@ -89,6 +136,14 @@ export function OverviewMetrics(stats: UsageStats) {
+           value={`${stats.cache.hit_rate.toFixed(1)}%`}
+           subvalue={`${formatNumber(stats.cache.hits)} hits · ${formatNumber(stats.cache.misses)} misses`}
+         />
++        {totalCost !== undefined && totalCost !== null && (
++          <MetricCard
++            icon={Zap}
++            label="Total Electricity Cost"
++            value={`${currencySymbol}${parseFloat(totalCost).toFixed(2)}`}
++            subvalue={`${lifetimeMetrics?.lifetime_energy_kwh?.toFixed(2) ?? "0"} kWh`}
++          />
++        )}
+       </div>
+     </section>
+   );
+diff --git a/frontend/src/app/usage/page.tsx b/frontend/src/app/usage/page.tsx
+index 1ef32b8..3fee86a 100644
+--- a/frontend/src/app/usage/page.tsx
++++ b/frontend/src/app/usage/page.tsx
+@@ -7,6 +7,7 @@ import { ModelPerformanceTable } from "./_components/model-performance-table";
+ import { PerformanceDetails } from "./_components/performance-details";
+ import { SecondaryMetrics } from "./_components/secondary-metrics";
+ import { OverviewMetrics } from "./_components/overview-metrics";
++import { CostBreakdown } from "./_components/cost-breakdown";
+ import { useUsage } from "./hooks/use-usage";
+ import { BarChart3 } from "lucide-react";
+ 
+@@ -53,6 +54,9 @@ export default function UsagePage() {
+         {/* Overview Metrics */}
+         {OverviewMetrics(stats)}
+ 
++        {/* Cost Breakdown */}
++        <CostBreakdown />
++
+         {/* Daily Usage Chart */}
+         {DailyUsageChart(stats, dailyByModel, modelsForChart)}
+ 
+diff --git a/frontend/src/components/dashboard/control-panel/metric-bar.tsx b/frontend/src/components/dashboard/control-panel/metric-bar.tsx
+index a6b40f7..094546b 100644
+--- a/frontend/src/components/dashboard/control-panel/metric-bar.tsx
++++ b/frontend/src/components/dashboard/control-panel/metric-bar.tsx
+@@ -61,6 +61,34 @@ const firstPositive = (...values: Array<number | null | undefined>): number => {
+   return 0;
+ };
+ 
++const CURRENCY_SYMBOLS: Record<string, string> = {
++  USD: "$",
++  EUR: "€",
++  GBP: "£",
++  PLN: "zł",
++  CAD: "C$",
++  AUD: "A$",
++  CHF: "CHF",
++  JPY: "¥",
++  CNY: "¥",
++  SEK: "kr",
++  NOK: "kr",
++  DKK: "kr",
++  CZK: "Kč",
++  KRW: "₩",
++  INR: "₹",
++  BRL: "R$",
++  MXN: "$",
++  ZAR: "R",
++  SGD: "S$",
++  HKD: "HK$",
++  NZD: "NZ$",
++  TWD: "NT$",
++  THB: "฿",
++};
++
++const getCurrencySymbol = (ticker: string): string => CURRENCY_SYMBOLS[ticker] ?? ticker;
++
+ export function MetricBar({ metrics, gpus, currentProcess, logs }: MetricBarProps) {
+   const isLlamacpp = currentProcess?.backend === "llamacpp";
+   const logThroughput = useMemo(() => parseLlamacppThroughputFromLogs(logs), [logs]);
+@@ -102,9 +130,12 @@ export function MetricBar({ metrics, gpus, currentProcess, logs }: MetricBarProp
+     return sum + toGB(g.memory_total ?? 0);
+   }, 0);
+   const kvCache = metrics?.kv_cache_usage ? Math.round(metrics.kv_cache_usage * 100) : 0;
++  const electricityRate = metrics?.electricity_rate ?? 0.11;
++  const electricityCurrency = metrics?.electricity_currency ?? "USD";
+   const totalCost = metrics?.lifetime_energy_kwh
+-    ? (metrics.lifetime_energy_kwh * 0.5).toFixed(2)
++    ? (metrics.lifetime_energy_kwh * electricityRate).toFixed(2)
+     : null;
++  const currencySymbol = getCurrencySymbol(electricityCurrency);
+ 
+   return (
+     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-px bg-foreground/5">
+@@ -132,7 +163,7 @@ export function MetricBar({ metrics, gpus, currentProcess, logs }: MetricBarProp
+       />
+       <UiMetricTile label="kv cache" value={kvCache > 0 ? kvCache.toString() : "--"} unit="%" />
+       <UiMetricTile label="power" value={Math.round(totalPower).toString()} unit="W" />
+-      {totalCost && <UiMetricTile label="cost" value={totalCost} unit="PLN" tone="success" />}
++      {totalCost && <UiMetricTile label="cost" value={totalCost} unit={currencySymbol} tone="success" />}
+     </div>
+   );
+ }
+diff --git a/frontend/src/lib/api/studio.ts b/frontend/src/lib/api/studio.ts
+index 7496fec..b09adbd 100644
+--- a/frontend/src/lib/api/studio.ts
++++ b/frontend/src/lib/api/studio.ts
+@@ -37,6 +37,8 @@ export function createStudioApi(core: ApiCore) {
+       daytona_sandbox_id?: string | null;
+       daytona_agent_mode?: boolean | null;
+       agent_fs_local_fallback?: boolean | null;
++      electricity_rate?: number | null;
++      electricity_currency?: string | null;
+     }): Promise<StudioSettings & { success: boolean }> =>
+       core.request("/studio/settings", {
+         method: "POST",
+diff --git a/frontend/src/lib/api/system.ts b/frontend/src/lib/api/system.ts
+index 7335425..bce4bee 100644
+--- a/frontend/src/lib/api/system.ts
++++ b/frontend/src/lib/api/system.ts
+@@ -78,6 +78,8 @@ export function createSystemApi(core: ApiCore) {
+ 
+     getMetrics: (): Promise<Metrics> => core.request("/v1/metrics/vllm"),
+ 
++    getLifetimeMetrics: (): Promise<Metrics> => core.request("/lifetime-metrics"),
++
+     runBenchmark: (
+       promptTokens = 1000,
+       maxTokens = 100,
+diff --git a/frontend/src/lib/types/system/metrics.ts b/frontend/src/lib/types/system/metrics.ts
+index 66a5229..32bab28 100644
+--- a/frontend/src/lib/types/system/metrics.ts
++++ b/frontend/src/lib/types/system/metrics.ts
+@@ -63,6 +63,9 @@ export interface Metrics {
+   kwh_per_million_input?: number;
+   kwh_per_million_output?: number;
+   current_power_watts?: number;
++  electricity_rate?: number;
++  electricity_currency?: string;
++  lifetime_cost?: string;
+ }
+ 
+ // VRAM calculation
+diff --git a/frontend/src/lib/types/system/studio.ts b/frontend/src/lib/types/system/studio.ts
+index 743d899..c516b22 100644
+--- a/frontend/src/lib/types/system/studio.ts
++++ b/frontend/src/lib/types/system/studio.ts
+@@ -16,6 +16,8 @@ export interface StudioSettings {
+     daytona_agent_mode?: boolean;
+     agent_fs_local_fallback?: boolean;
+     daytona_api_key_configured?: boolean;
++    electricity_rate?: number;
++    electricity_currency?: string;
+   };
+   effective: {
+     models_dir: string;
+@@ -25,6 +27,8 @@ export interface StudioSettings {
+     daytona_agent_mode: boolean;
+     agent_fs_local_fallback: boolean;
+     daytona_api_key_configured: boolean;
++    electricity_rate: number;
++    electricity_currency: string;
+   };
+ }
+ 
+-- 
+2.43.0
+
+
+From b5dee13c1bfb9871e8e0270dcb2ff2338153ccb1 Mon Sep 17 00:00:00 2001
+From: seroxdesign <sherifcherfa@gmail.com>
+Date: Sat, 21 Mar 2026 18:27:45 -0700
+Subject: [PATCH 2/4] fix: include electricity fields in buildSettingsPayload()
+ response
+
+The GET /studio/settings endpoint was missing electricity_rate and
+electricity_currency from both persisted and effective objects because
+buildSettingsPayload() had a hardcoded return type that didn't include
+the new fields.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+---
+ controller/src/modules/studio/routes.ts | 8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+diff --git a/controller/src/modules/studio/routes.ts b/controller/src/modules/studio/routes.ts
+index 45697f8..4b8a080 100644
+--- a/controller/src/modules/studio/routes.ts
++++ b/controller/src/modules/studio/routes.ts
+@@ -126,6 +126,8 @@ export const registerStudioRoutes = (app: Hono, context: AppContext): void => {
+       daytona_agent_mode: boolean | undefined;
+       agent_fs_local_fallback: boolean | undefined;
+       daytona_api_key_configured: boolean;
++      electricity_rate?: number;
++      electricity_currency?: string;
+     };
+     effective: {
+       models_dir: string;
+@@ -135,6 +137,8 @@ export const registerStudioRoutes = (app: Hono, context: AppContext): void => {
+       daytona_agent_mode: boolean;
+       agent_fs_local_fallback: boolean;
+       daytona_api_key_configured: boolean;
++      electricity_rate: number;
++      electricity_currency: string;
+     };
+   } => {
+     const persisted = loadPersistedConfig(context.config.data_dir);
+@@ -149,6 +153,8 @@ export const registerStudioRoutes = (app: Hono, context: AppContext): void => {
+         agent_fs_local_fallback: persisted.agent_fs_local_fallback,
+         daytona_api_key_configured:
+           typeof persisted.daytona_api_key === "string" && persisted.daytona_api_key.trim().length > 0,
++        electricity_rate: persisted.electricity_rate,
++        electricity_currency: persisted.electricity_currency,
+       },
+       effective: {
+         models_dir: context.config.models_dir,
+@@ -158,6 +164,8 @@ export const registerStudioRoutes = (app: Hono, context: AppContext): void => {
+         daytona_agent_mode: context.config.daytona_agent_mode,
+         agent_fs_local_fallback: context.config.agent_fs_local_fallback,
+         daytona_api_key_configured: Boolean(context.config.daytona_api_key),
++        electricity_rate: persisted.electricity_rate ?? 0.11,
++        electricity_currency: persisted.electricity_currency ?? "USD",
+       },
+     };
+   };
+-- 
+2.43.0
+
+
+From d341127944f6b002663c376ea4da5f6e88fd0b88 Mon Sep 17 00:00:00 2001
+From: seroxdesign <sherifcherfa@gmail.com>
+Date: Sat, 21 Mar 2026 18:39:03 -0700
+Subject: [PATCH 3/4] fix: correct field name mismatches and hooks error in
+ cost feature
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+- Fix cost-breakdown.tsx reading wrong field names (lifetime_cost →
+  total_cost, lifetime_energy_kwh → energy_kwh) to match backend API
+- Fix overview-metrics.tsx React hooks error by reverting to function
+  call pattern and moving cost card to CostBreakdown component only
+- Add null guard to formatNumber() to prevent crash on null values
+- Add energy_kwh, uptime_hours, total_cost to Metrics type
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+---
+ .../app/usage/_components/cost-breakdown.tsx  | 12 ++--
+ .../usage/_components/overview-metrics.tsx    | 59 +------------------
+ frontend/src/lib/formatters.ts                |  1 +
+ frontend/src/lib/types/system/metrics.ts      |  4 ++
+ 4 files changed, 13 insertions(+), 63 deletions(-)
+
+diff --git a/frontend/src/app/usage/_components/cost-breakdown.tsx b/frontend/src/app/usage/_components/cost-breakdown.tsx
+index 5c779c1..c9cd9c9 100644
+--- a/frontend/src/app/usage/_components/cost-breakdown.tsx
++++ b/frontend/src/app/usage/_components/cost-breakdown.tsx
+@@ -98,16 +98,16 @@ export function CostBreakdown() {
+   const currencySymbol = getCurrencySymbol(metrics?.electricity_currency ?? "USD");
+   const rate = metrics?.electricity_rate ?? 0.11;
+ 
+-  const lifetimeCost = metrics?.lifetime_cost
+-    ? parseFloat(metrics.lifetime_cost)
+-    : metrics?.lifetime_energy_kwh
+-      ? metrics.lifetime_energy_kwh * rate
++  const lifetimeCost = metrics?.total_cost
++    ? parseFloat(metrics.total_cost)
++    : metrics?.energy_kwh
++      ? metrics.energy_kwh * rate
+       : 0;
+ 
+   const currentPowerWatts = metrics?.current_power_watts ?? 0;
+   const hourlyCost = (currentPowerWatts * rate) / 1000;
+ 
+-  const uptimeHours = metrics?.lifetime_uptime_hours ?? 0;
++  const uptimeHours = metrics?.uptime_hours ?? 0;
+   const avgCostPerDay = uptimeHours > 0 ? lifetimeCost / (uptimeHours / 24) : 0;
+ 
+   return (
+@@ -125,7 +125,7 @@ export function CostBreakdown() {
+           icon={Zap}
+           label="Lifetime Cost"
+           value={`${currencySymbol}${lifetimeCost.toFixed(2)}`}
+-          subvalue={metrics?.lifetime_energy_kwh ? `${metrics.lifetime_energy_kwh.toFixed(2)} kWh` : undefined}
++          subvalue={metrics?.energy_kwh ? `${metrics.energy_kwh.toFixed(2)} kWh` : undefined}
+         />
+         <CostCard
+           icon={TrendingUp}
+diff --git a/frontend/src/app/usage/_components/overview-metrics.tsx b/frontend/src/app/usage/_components/overview-metrics.tsx
+index 3d063f9..df4a80e 100644
+--- a/frontend/src/app/usage/_components/overview-metrics.tsx
++++ b/frontend/src/app/usage/_components/overview-metrics.tsx
+@@ -1,40 +1,10 @@
+ // CRITICAL
+ "use client";
+ 
+-import { useEffect, useState } from "react";
+-import type { UsageStats, Metrics } from "@/lib/types";
++import type { UsageStats } from "@/lib/types";
+ import { formatNumber } from "@/lib/formatters";
+ import { ChangeIndicator } from "@/components/shared";
+-import { Hash, Activity, TrendingUp, Users, Clock, Database, Zap } from "lucide-react";
+-import api from "@/lib/api";
+-
+-const CURRENCY_SYMBOLS: Record<string, string> = {
+-  USD: "$",
+-  EUR: "€",
+-  GBP: "£",
+-  PLN: "zł",
+-  CAD: "C$",
+-  AUD: "A$",
+-  CHF: "CHF",
+-  JPY: "¥",
+-  CNY: "¥",
+-  SEK: "kr",
+-  NOK: "kr",
+-  DKK: "kr",
+-  CZK: "Kč",
+-  KRW: "₩",
+-  INR: "₹",
+-  BRL: "R$",
+-  MXN: "$",
+-  ZAR: "R",
+-  SGD: "S$",
+-  HKD: "HK$",
+-  NZD: "NZ$",
+-  TWD: "NT$",
+-  THB: "฿",
+-};
+-
+-const getCurrencySymbol = (ticker: string): string => CURRENCY_SYMBOLS[ticker] ?? ticker;
++import { Hash, Activity, TrendingUp, Users, Clock, Database } from "lucide-react";
+ 
+ function MetricCard({
+   icon: Icon,
+@@ -75,23 +45,6 @@ function MetricCard({
+ }
+ 
+ export function OverviewMetrics(stats: UsageStats) {
+-  const [lifetimeMetrics, setLifetimeMetrics] = useState<Metrics | null>(null);
+-
+-  useEffect(() => {
+-    const fetchLifetimeMetrics = async () => {
+-      try {
+-        const metrics = await api.getLifetimeMetrics();
+-        setLifetimeMetrics(metrics);
+-      } catch (e) {
+-        console.error("Failed to fetch lifetime metrics:", e);
+-      }
+-    };
+-    fetchLifetimeMetrics();
+-  }, []);
+-
+-  const totalCost = lifetimeMetrics?.lifetime_cost;
+-  const currencySymbol = getCurrencySymbol(lifetimeMetrics?.electricity_currency ?? "USD");
+-
+   return (
+     <section className="mb-6 sm:mb-8">
+       <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3 sm:gap-4">
+@@ -136,14 +89,6 @@ export function OverviewMetrics(stats: UsageStats) {
+           value={`${stats.cache.hit_rate.toFixed(1)}%`}
+           subvalue={`${formatNumber(stats.cache.hits)} hits · ${formatNumber(stats.cache.misses)} misses`}
+         />
+-        {totalCost !== undefined && totalCost !== null && (
+-          <MetricCard
+-            icon={Zap}
+-            label="Total Electricity Cost"
+-            value={`${currencySymbol}${parseFloat(totalCost).toFixed(2)}`}
+-            subvalue={`${lifetimeMetrics?.lifetime_energy_kwh?.toFixed(2) ?? "0"} kWh`}
+-          />
+-        )}
+       </div>
+     </section>
+   );
+diff --git a/frontend/src/lib/formatters.ts b/frontend/src/lib/formatters.ts
+index c58a017..289f59e 100644
+--- a/frontend/src/lib/formatters.ts
++++ b/frontend/src/lib/formatters.ts
+@@ -40,6 +40,7 @@ function toGBFromMB(value: number | null | undefined): number {
+ }
+ 
+ function formatNumber(n: number): string {
++  if (n == null) return "0";
+   if (n >= 1_000_000_000) return (n / 1_000_000_000).toFixed(2) + "B";
+   if (n >= 1_000_000) return (n / 1_000_000).toFixed(2) + "M";
+   if (n >= 1_000) return (n / 1_000).toFixed(1) + "K";
+diff --git a/frontend/src/lib/types/system/metrics.ts b/frontend/src/lib/types/system/metrics.ts
+index 32bab28..55c0744 100644
+--- a/frontend/src/lib/types/system/metrics.ts
++++ b/frontend/src/lib/types/system/metrics.ts
+@@ -58,7 +58,10 @@ export interface Metrics {
+   lifetime_requests?: number;
+   lifetime_energy_wh?: number;
+   lifetime_energy_kwh?: number;
++  energy_kwh?: number;
+   lifetime_uptime_hours?: number;
++  uptime_hours?: number;
++  uptime_hours?: number;
+   kwh_per_million_tokens?: number;
+   kwh_per_million_input?: number;
+   kwh_per_million_output?: number;
+@@ -66,6 +69,7 @@ export interface Metrics {
+   electricity_rate?: number;
+   electricity_currency?: string;
+   lifetime_cost?: string;
++  total_cost?: string;
+ }
+ 
+ // VRAM calculation
+-- 
+2.43.0
+
+
+From 61948584d8f545a51d58b8532a1315fb390d36eb Mon Sep 17 00:00:00 2001
+From: seroxdesign <sherifcherfa@gmail.com>
+Date: Sat, 21 Mar 2026 19:31:57 -0700
+Subject: [PATCH 4/4] fix: resolve exactOptionalPropertyTypes and duplicate
+ field errors
+
+- Fix persisted type in buildSettingsPayload() to use number | undefined
+  instead of optional property to satisfy exactOptionalPropertyTypes
+- Remove duplicate uptime_hours field in Metrics type
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+---
+ controller/src/modules/studio/routes.ts  | 4 ++--
+ frontend/src/lib/types/system/metrics.ts | 1 -
+ 2 files changed, 2 insertions(+), 3 deletions(-)
+
+diff --git a/controller/src/modules/studio/routes.ts b/controller/src/modules/studio/routes.ts
+index 4b8a080..11f56e8 100644
+--- a/controller/src/modules/studio/routes.ts
++++ b/controller/src/modules/studio/routes.ts
+@@ -126,8 +126,8 @@ export const registerStudioRoutes = (app: Hono, context: AppContext): void => {
+       daytona_agent_mode: boolean | undefined;
+       agent_fs_local_fallback: boolean | undefined;
+       daytona_api_key_configured: boolean;
+-      electricity_rate?: number;
+-      electricity_currency?: string;
++      electricity_rate: number | undefined;
++      electricity_currency: string | undefined;
+     };
+     effective: {
+       models_dir: string;
+diff --git a/frontend/src/lib/types/system/metrics.ts b/frontend/src/lib/types/system/metrics.ts
+index 55c0744..e6d2bc9 100644
+--- a/frontend/src/lib/types/system/metrics.ts
++++ b/frontend/src/lib/types/system/metrics.ts
+@@ -61,7 +61,6 @@ export interface Metrics {
+   energy_kwh?: number;
+   lifetime_uptime_hours?: number;
+   uptime_hours?: number;
+-  uptime_hours?: number;
+   kwh_per_million_tokens?: number;
+   kwh_per_million_input?: number;
+   kwh_per_million_output?: number;
+-- 
+2.43.0
+

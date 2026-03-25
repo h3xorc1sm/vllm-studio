@@ -3,8 +3,7 @@ export function ConnectionFlow() {
   const flowItems = [
     { name: "Client", port: "3000", color: "bg-(--border)" },
     { name: "UI", port: "8080", color: "bg-(--hl1)" },
-    { name: "API", port: "4100", color: "bg-(--hl1)" },
-    { name: "LiteLLM", port: "8000", color: "bg-(--hl1)" },
+    { name: "API", port: "8000", color: "bg-(--hl1)" },
     { name: "vLLM", port: "", color: "bg-(--hl1)" },
   ];
 
@@ -56,15 +55,6 @@ export function ConnectionFlow() {
           </div>
           <div className="flex-1 flex items-center gap-1 px-2">
             <div className="h-0.5 flex-1 bg-(--border)" />
-            <span className="text-(--dim) text-xs px-1">:4100</span>
-          </div>
-          <div className="flex flex-col items-center gap-2">
-            <div className="w-16 h-16 rounded-lg bg-(--hl1) flex items-center justify-center text-(--fg) font-medium">
-              LLM
-            </div>
-          </div>
-          <div className="flex-1 flex items-center gap-1 px-2">
-            <div className="h-0.5 flex-1 bg-(--border)" />
             <span className="text-(--dim) text-xs px-1">:8000</span>
           </div>
           <div className="flex flex-col items-center gap-2">
@@ -74,10 +64,9 @@ export function ConnectionFlow() {
           </div>
         </div>
         <div className="mt-4 pt-4 border-t border-(--border) text-[10px] sm:text-xs text-(--dim) text-center">
-          Client → Frontend → Controller → LiteLLM → Inference Backend
+          Client → Frontend → Controller → Inference Backend
         </div>
       </div>
     </div>
   );
 }
-

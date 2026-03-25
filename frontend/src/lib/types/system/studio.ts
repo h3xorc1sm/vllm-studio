@@ -16,6 +16,8 @@ export interface StudioSettings {
     daytona_agent_mode?: boolean;
     agent_fs_local_fallback?: boolean;
     daytona_api_key_configured?: boolean;
+    electricity_rate?: number;
+    electricity_currency?: string;
   };
   effective: {
     models_dir: string;
@@ -25,6 +27,8 @@ export interface StudioSettings {
     daytona_agent_mode: boolean;
     agent_fs_local_fallback: boolean;
     daytona_api_key_configured: boolean;
+    electricity_rate: number;
+    electricity_currency: string;
   };
 }
 

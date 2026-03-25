@@ -126,6 +126,8 @@ export const registerStudioRoutes = (app: Hono, context: AppContext): void => {
       daytona_agent_mode: boolean | undefined;
       agent_fs_local_fallback: boolean | undefined;
       daytona_api_key_configured: boolean;
+      electricity_rate: number | undefined;
+      electricity_currency: string | undefined;
     };
     effective: {
       models_dir: string;
@@ -135,6 +137,8 @@ export const registerStudioRoutes = (app: Hono, context: AppContext): void => {
       daytona_agent_mode: boolean;
       agent_fs_local_fallback: boolean;
       daytona_api_key_configured: boolean;
+      electricity_rate: number;
+      electricity_currency: string;
     };
   } => {
     const persisted = loadPersistedConfig(context.config.data_dir);
@@ -149,6 +153,8 @@ export const registerStudioRoutes = (app: Hono, context: AppContext): void => {
         agent_fs_local_fallback: persisted.agent_fs_local_fallback,
         daytona_api_key_configured:
           typeof persisted.daytona_api_key === "string" && persisted.daytona_api_key.trim().length > 0,
+        electricity_rate: persisted.electricity_rate,
+        electricity_currency: persisted.electricity_currency,
       },
       effective: {
         models_dir: context.config.models_dir,
@@ -158,6 +164,8 @@ export const registerStudioRoutes = (app: Hono, context: AppContext): void => {
         daytona_agent_mode: context.config.daytona_agent_mode,
         agent_fs_local_fallback: context.config.agent_fs_local_fallback,
         daytona_api_key_configured: Boolean(context.config.daytona_api_key),
+        electricity_rate: persisted.electricity_rate ?? 0.11,
+        electricity_currency: persisted.electricity_currency ?? "USD",
       },
     };
   };
@@ -182,6 +190,13 @@ export const registerStudioRoutes = (app: Hono, context: AppContext): void => {
       body?.agent_fs_local_fallback,
       "agent_fs_local_fallback"
     );
+    const electricityRate =
+      body?.electricity_rate !== undefined
+        ? typeof body.electricity_rate === "number"
+          ? body.electricity_rate
+          : undefined
+        : undefined;
+    const electricityCurrency = parseOptionalStringUpdate(body?.electricity_currency);
 
     const hasAnyUpdate =
       modelsDirectory !== undefined ||
@@ -190,7 +205,9 @@ export const registerStudioRoutes = (app: Hono, context: AppContext): void => {
       daytonaProxyUrl !== undefined ||
       daytonaSandboxId !== undefined ||
       daytonaAgentMode !== undefined ||
-      agentFsLocalFallback !== undefined;
+      agentFsLocalFallback !== undefined ||
+      electricityRate !== undefined ||
+      electricityCurrency !== undefined;
 
     if (!hasAnyUpdate) {
       throw badRequest("No supported settings provided");
@@ -206,6 +223,8 @@ export const registerStudioRoutes = (app: Hono, context: AppContext): void => {
       ...(agentFsLocalFallback !== undefined
         ? { agent_fs_local_fallback: agentFsLocalFallback }
         : {}),
+      ...(electricityRate !== undefined ? { electricity_rate: electricityRate } : {}),
+      ...(electricityCurrency !== undefined ? { electricity_currency: electricityCurrency } : {}),
     });
 
     if (saved.models_dir) {

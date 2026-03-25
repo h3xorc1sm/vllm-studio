@@ -61,6 +61,34 @@ const firstPositive = (...values: Array<number | null | undefined>): number => {
   return 0;
 };
 
+const CURRENCY_SYMBOLS: Record<string, string> = {
+  USD: "$",
+  EUR: "€",
+  GBP: "£",
+  PLN: "zł",
+  CAD: "C$",
+  AUD: "A$",
+  CHF: "CHF",
+  JPY: "¥",
+  CNY: "¥",
+  SEK: "kr",
+  NOK: "kr",
+  DKK: "kr",
+  CZK: "Kč",
+  KRW: "₩",
+  INR: "₹",
+  BRL: "R$",
+  MXN: "$",
+  ZAR: "R",
+  SGD: "S$",
+  HKD: "HK$",
+  NZD: "NZ$",
+  TWD: "NT$",
+  THB: "฿",
+};
+
+const getCurrencySymbol = (ticker: string): string => CURRENCY_SYMBOLS[ticker] ?? ticker;
+
 export function MetricBar({ metrics, gpus, currentProcess, logs }: MetricBarProps) {
   const isLlamacpp = currentProcess?.backend === "llamacpp";
   const logThroughput = useMemo(() => parseLlamacppThroughputFromLogs(logs), [logs]);
@@ -102,9 +130,12 @@ export function MetricBar({ metrics, gpus, currentProcess, logs }: MetricBarProp
     return sum + toGB(g.memory_total ?? 0);
   }, 0);
   const kvCache = metrics?.kv_cache_usage ? Math.round(metrics.kv_cache_usage * 100) : 0;
+  const electricityRate = metrics?.electricity_rate ?? 0.11;
+  const electricityCurrency = metrics?.electricity_currency ?? "USD";
   const totalCost = metrics?.lifetime_energy_kwh
-    ? (metrics.lifetime_energy_kwh * 0.5).toFixed(2)
+    ? (metrics.lifetime_energy_kwh * electricityRate).toFixed(2)
     : null;
+  const currencySymbol = getCurrencySymbol(electricityCurrency);
 
   return (
     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-px bg-foreground/5">
@@ -132,7 +163,7 @@ export function MetricBar({ metrics, gpus, currentProcess, logs }: MetricBarProp
       />
       <UiMetricTile label="kv cache" value={kvCache > 0 ? kvCache.toString() : "--"} unit="%" />
       <UiMetricTile label="power" value={Math.round(totalPower).toString()} unit="W" />
-      {totalCost && <UiMetricTile label="cost" value={totalCost} unit="PLN" tone="success" />}
+      {totalCost && <UiMetricTile label="cost" value={totalCost} unit={currencySymbol} tone="success" />}
     </div>
   );
 }

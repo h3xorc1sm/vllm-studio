@@ -58,11 +58,17 @@ export interface Metrics {
   lifetime_requests?: number;
   lifetime_energy_wh?: number;
   lifetime_energy_kwh?: number;
+  energy_kwh?: number;
   lifetime_uptime_hours?: number;
+  uptime_hours?: number;
   kwh_per_million_tokens?: number;
   kwh_per_million_input?: number;
   kwh_per_million_output?: number;
   current_power_watts?: number;
+  electricity_rate?: number;
+  electricity_currency?: string;
+  lifetime_cost?: string;
+  total_cost?: string;
 }
 
 // VRAM calculation

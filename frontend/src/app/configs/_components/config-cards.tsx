@@ -213,12 +213,6 @@ export function ConfigCards({ data }: { data: ConfigData }) {
           truncate
         />
         <ConfigRow
-          label="LiteLLM"
-          value={data.environment.litellm_url}
-          icon={<Globe className="h-3 w-3" />}
-          truncate
-        />
-        <ConfigRow
           label="Frontend"
           value={data.environment.frontend_url}
           icon={<Globe className="h-3 w-3" />}

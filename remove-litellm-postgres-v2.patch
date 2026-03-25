@@ -1,0 +1,1987 @@
+diff --git a/.env.example b/.env.example
+index a0ecfcb..c194b93 100644
+--- a/.env.example
++++ b/.env.example
+@@ -62,23 +62,16 @@ VLLM_STUDIO_DATA_DIR=./data
+ # VLLM_STUDIO_AGENT_FS_LOCAL_FALLBACK=false
+ 
+ # =============================================================================
+-# LiteLLM Gateway (Optional - for API routing/format translation)
++# Inference Backend
+ # =============================================================================
+ 
+-LITELLM_MASTER_KEY=sk-master
+-VLLM_STUDIO_LITELLM_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/litellm
+-
+-# Backend inference URL (used by LiteLLM to route requests)
+-INFERENCE_API_BASE=http://localhost:8000/v1
++# API key for direct inference backend access
+ INFERENCE_API_KEY=sk-placeholder
+ 
+ # =============================================================================
+ # Frontend Settings
+ # =============================================================================
+ 
+-# LiteLLM URL for chat (defaults to localhost if not set)
+-NEXT_PUBLIC_LITELLM_URL=http://localhost:4100
+-
+ # Frontend container user (helps write ./data on Linux hosts)
+ VLLM_STUDIO_UID=1000
+ VLLM_STUDIO_GID=1000
+diff --git a/controller/package.json b/controller/package.json
+index 47a4944..d6bdaa2 100644
+--- a/controller/package.json
++++ b/controller/package.json
+@@ -25,7 +25,6 @@
+     "agentfs-sdk": "^0.5.3",
+     "dotenv": "16.6.1",
+     "hono": "4.6.12",
+-    "pg": "8.13.3",
+     "prom-client": "15.1.3",
+     "swagger-ui-dist": "^5.18.0",
+     "yaml": "2.8.1",
+@@ -34,7 +33,6 @@
+   "devDependencies": {
+     "bun-types": "1.3.6",
+     "@types/node": "24.6.0",
+-    "@types/pg": "8.16.0",
+     "@typescript-eslint/eslint-plugin": "8.43.0",
+     "@typescript-eslint/parser": "8.43.0",
+     "eslint": "9.35.0",
+diff --git a/controller/src/config/env.ts b/controller/src/config/env.ts
+index b352096..d441e7d 100644
+--- a/controller/src/config/env.ts
++++ b/controller/src/config/env.ts
+@@ -25,7 +25,6 @@ export interface Config {
+ 
+   data_dir: string;
+   db_path: string;
+-  litellm_database_url?: string;
+   models_dir: string;
+   sglang_python?: string;
+   tabby_api_dir?: string;
+@@ -120,9 +119,6 @@ export const createConfig = (): Config => {
+     VLLM_STUDIO_DATA_DIR: z.string().default(defaultDataDirectory),
+     VLLM_STUDIO_DB_PATH: z.string().default(defaultDatabasePath),
+     VLLM_STUDIO_MODELS_DIR: z.string().default("/models"),
+-    VLLM_STUDIO_LITELLM_DATABASE_URL: z.string().optional(),
+-    LITELLM_DATABASE_URL: z.string().optional(),
+-    DATABASE_URL: z.string().optional(),
+     VLLM_STUDIO_SGLANG_PYTHON: z.string().optional(),
+     VLLM_STUDIO_TABBY_API_DIR: z.string().optional(),
+     VLLM_STUDIO_LLAMA_BIN: z.string().optional(),
+@@ -168,12 +164,6 @@ export const createConfig = (): Config => {
+     providers: [],
+   };
+ 
+-  const litellmDatabaseUrl =
+-    parsed.VLLM_STUDIO_LITELLM_DATABASE_URL ?? parsed.LITELLM_DATABASE_URL ?? parsed.DATABASE_URL;
+-  if (litellmDatabaseUrl) {
+-    config.litellm_database_url = litellmDatabaseUrl;
+-  }
+-
+   if (parsed.VLLM_STUDIO_API_KEY) {
+     config.api_key = parsed.VLLM_STUDIO_API_KEY;
+   }
+diff --git a/controller/src/modules/lifecycle/metrics/metrics-collector.ts b/controller/src/modules/lifecycle/metrics/metrics-collector.ts
+index 69d0e98..92417db 100644
+--- a/controller/src/modules/lifecycle/metrics/metrics-collector.ts
++++ b/controller/src/modules/lifecycle/metrics/metrics-collector.ts
+@@ -114,6 +114,7 @@ export const startMetricsCollector = (context: AppContext): (() => void) => {
+   let lastLlamacppSampleKey = "";
+   let lastLlamacppPromptThroughput = 0;
+   let lastLlamacppGenerationThroughput = 0;
++  let lastEnergySnapshotAt = 0;
+ 
+   /**
+    * Scrape Prometheus metrics from vLLM.
+@@ -179,6 +180,12 @@ export const startMetricsCollector = (context: AppContext): (() => void) => {
+       lifetimeStore.increment("energy_wh", energyWh);
+       lifetimeStore.increment("uptime_seconds", METRICS_LIFETIME_UPTIME_INCREMENT_SECONDS);
+ 
++      // Record energy snapshot every ~1 hour
++      if (Date.now() - lastEnergySnapshotAt >= 3_600_000) {
++        lifetimeStore.recordEnergySnapshot(lifetimeStore.get("energy_wh"));
++        lastEnergySnapshotAt = Date.now();
++      }
++
+       await context.eventManager.publishStatus({
+         running: Boolean(current),
+         process: current,
+diff --git a/controller/src/modules/lifecycle/routes/system-routes.ts b/controller/src/modules/lifecycle/routes/system-routes.ts
+index a0643fa..8a11cf7 100644
+--- a/controller/src/modules/lifecycle/routes/system-routes.ts
++++ b/controller/src/modules/lifecycle/routes/system-routes.ts
+@@ -265,42 +265,6 @@ export const registerSystemRoutes = (app: Hono, context: AppContext): void => {
+       description: "Inference backend (vLLM, SGLang, or llama.cpp)",
+     });
+ 
+-    let litellmStatus = "unknown";
+-    try {
+-      const masterKey = process.env["LITELLM_MASTER_KEY"] ?? "sk-master";
+-      const response = await fetchLocal(4100, "/health", {
+-        headers: { Authorization: `Bearer ${masterKey}` },
+-        timeoutMs: 10_000,
+-      });
+-      if (response.status === 200) {
+-        const data = (await response.json()) as { healthy_count?: number };
+-        litellmStatus = (data.healthy_count ?? 0) > 0 ? "running" : "degraded";
+-      } else {
+-        litellmStatus = "error";
+-      }
+-    } catch {
+-      litellmStatus = "stopped";
+-    }
+-
+-    services.push({
+-      name: "LiteLLM",
+-      port: 4100,
+-      internal_port: 4000,
+-      protocol: "http",
+-      status: litellmStatus,
+-      description: "API gateway and load balancer",
+-    });
+-
+-    const postgresReachable = await checkService("localhost", 5432);
+-    services.push({
+-      name: "PostgreSQL",
+-      port: 5432,
+-      internal_port: 5432,
+-      protocol: "tcp",
+-      status: postgresReachable ? "running" : "stopped",
+-      description: "Database for LiteLLM",
+-    });
+-
+     const redisReachable = await checkService("localhost", 6379);
+     services.push({
+       name: "Redis",
+@@ -362,7 +326,6 @@ export const registerSystemRoutes = (app: Hono, context: AppContext): void => {
+       environment: {
+         controller_url: `http://${hostname()}:${context.config.port}`,
+         inference_url: `http://${hostname()}:${context.config.inference_port}`,
+-        litellm_url: `http://${hostname()}:4100`,
+         frontend_url: `http://${hostname()}:3000`,
+       },
+       runtime,
+diff --git a/controller/src/modules/lifecycle/types.ts b/controller/src/modules/lifecycle/types.ts
+index e66c46d..50d119b 100644
+--- a/controller/src/modules/lifecycle/types.ts
++++ b/controller/src/modules/lifecycle/types.ts
+@@ -79,7 +79,6 @@ export interface SystemConfig {
+ export interface EnvironmentInfo {
+   controller_url: string;
+   inference_url: string;
+-  litellm_url: string;
+   frontend_url: string;
+ }
+ 
+diff --git a/controller/src/modules/monitoring/metrics-routes.ts b/controller/src/modules/monitoring/metrics-routes.ts
+index 715c754..2167488 100644
+--- a/controller/src/modules/monitoring/metrics-routes.ts
++++ b/controller/src/modules/monitoring/metrics-routes.ts
+@@ -46,23 +46,52 @@ export const registerMonitoringRoutes = (app: Hono, context: AppContext): void =
+   });
+ 
+   app.get("/lifetime-metrics", async (ctx) => {
++    const period = ctx.req.query("period");
+     const data = context.stores.lifetimeMetricsStore.getAll();
++    const persisted = loadPersistedConfig(context.config.data_dir);
++    const electricityRate = persisted.electricity_rate ?? 0.11;
++    const electricityCurrency = persisted.electricity_currency ?? "USD";
++
++    let energyKwh = (data["energy_wh"] ?? 0) / 1000;
++    let promptTokens = data["prompt_tokens_total"] ?? 0;
++    let completionTokens = data["completion_tokens_total"] ?? 0;
++    let requestCount = data["requests_total"] ?? 0;
++
++    // Period filtering using request_logs for tokens/requests and energy_snapshots for energy
++    if (period && period !== "all") {
++      const PERIOD_OFFSETS: Record<string, string> = {
++        d: "-24 hours",
++        w: "-7 days",
++        m: "-30 days",
++        y: "-365 days",
++      };
++      const offset = PERIOD_OFFSETS[period];
++      if (offset) {
++        const logs = context.stores.lifetimeMetricsStore.getRequestLogs(period);
++        promptTokens = logs.rows.reduce((sum, r) => sum + (r.prompt_tokens ?? 0), 0);
++        completionTokens = logs.rows.reduce((sum, r) => sum + (r.completion_tokens ?? 0), 0);
++        requestCount = logs.rows.length;
++
++        const currentEnergy = context.stores.lifetimeMetricsStore.getCurrentEnergy();
++        const snapshot = context.stores.lifetimeMetricsStore.getEnergyBefore(
++          new Date(Date.now() + new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 19).replace("T", " "),
++        );
++        const snapshotEnergy = snapshot?.energy_wh ?? 0;
++        energyKwh = Math.max(0, (currentEnergy - snapshotEnergy)) / 1000;
++      }
++    }
++
++    const tokens = promptTokens + completionTokens;
+     const uptimeHours = (data["uptime_seconds"] ?? 0) / 3600;
+-    const energyKwh = (data["energy_wh"] ?? 0) / 1000;
+-    const tokens = data["tokens_total"] ?? 0;
+     const kwhPerMillion = tokens > 0 ? energyKwh / (tokens / 1_000_000) : 0;
+     const gpus = getGpuInfo();
+     const currentPower = gpus.reduce((sum, gpu) => sum + gpu.power_draw, 0);
+-
+-    const persisted = loadPersistedConfig(context.config.data_dir);
+-    const electricityRate = persisted.electricity_rate ?? 0.11;
+-    const electricityCurrency = persisted.electricity_currency ?? "USD";
+     const totalCost = (energyKwh * electricityRate).toFixed(2);
+ 
+     return ctx.json({
+-      tokens_total: Math.floor(data["tokens_total"] ?? 0),
+-      requests_total: Math.floor(data["requests_total"] ?? 0),
+-      energy_wh: data["energy_wh"] ?? 0,
++      tokens_total: Math.floor(tokens),
++      requests_total: Math.floor(requestCount),
++      energy_wh: energyKwh * 1000,
+       energy_kwh: energyKwh,
+       uptime_seconds: data["uptime_seconds"] ?? 0,
+       uptime_hours: uptimeHours,
+@@ -76,14 +105,35 @@ export const registerMonitoringRoutes = (app: Hono, context: AppContext): void =
+   });
+ 
+   app.get("/usage/cost", async (ctx) => {
++    const period = ctx.req.query("period");
+     const data = context.stores.lifetimeMetricsStore.getAll();
+-    const energyKwh = (data["energy_wh"] ?? 0) / 1000;
+     const gpus = getGpuInfo();
+     const currentPower = gpus.reduce((sum, gpu) => sum + gpu.power_draw, 0);
+ 
+     const persisted = loadPersistedConfig(context.config.data_dir);
+     const electricityRate = persisted.electricity_rate ?? 0.11;
+     const electricityCurrency = persisted.electricity_currency ?? "USD";
++
++    let energyKwh = (data["energy_wh"] ?? 0) / 1000;
++
++    if (period && period !== "all") {
++      const PERIOD_OFFSETS: Record<string, string> = {
++        d: "-24 hours",
++        w: "-7 days",
++        m: "-30 days",
++        y: "-365 days",
++      };
++      const offset = PERIOD_OFFSETS[period];
++      if (offset) {
++        const currentEnergy = context.stores.lifetimeMetricsStore.getCurrentEnergy();
++        const snapshot = context.stores.lifetimeMetricsStore.getEnergyBefore(
++          new Date(Date.now() + new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 19).replace("T", " "),
++        );
++        const snapshotEnergy = snapshot?.energy_wh ?? 0;
++        energyKwh = Math.max(0, (currentEnergy - snapshotEnergy)) / 1000;
++      }
++    }
++
+     const totalCost = (energyKwh * electricityRate).toFixed(2);
+     const hourlyCost = ((currentPower / 1000) * electricityRate).toFixed(2);
+ 
+diff --git a/controller/src/modules/monitoring/metrics-store.ts b/controller/src/modules/monitoring/metrics-store.ts
+index d420154..4232286 100644
+--- a/controller/src/modules/monitoring/metrics-store.ts
++++ b/controller/src/modules/monitoring/metrics-store.ts
+@@ -2,6 +2,28 @@
+ import type { Database } from "bun:sqlite";
+ import { openSqliteDatabase } from "../../stores/sqlite";
+ 
++export interface RequestLogEntry {
++  id?: number;
++  start_time: string;
++  end_time?: string | null;
++  model: string;
++  status: string;
++  prompt_tokens: number;
++  completion_tokens: number;
++  total_tokens: number;
++  latency_ms?: number | null;
++  ttft_ms?: number | null;
++  session_id?: string | null;
++  is_streaming: boolean;
++}
++
++const PERIOD_FILTERS: Record<string, string> = {
++  d: "start_time >= datetime('now', '-24 hours')",
++  w: "start_time >= datetime('now', '-7 days')",
++  m: "start_time >= datetime('now', '-30 days')",
++  y: "start_time >= datetime('now', '-365 days')",
++};
++
+ /**
+  * SQLite-backed storage for peak metrics per model.
+  */
+@@ -201,6 +223,34 @@ export class LifetimeMetricsStore {
+         .query("INSERT OR IGNORE INTO lifetime_metrics (key, value) VALUES (?, ?)")
+         .run(key, value);
+     }
++
++    this.db.run(`
++      CREATE TABLE IF NOT EXISTS request_logs (
++        id INTEGER PRIMARY KEY AUTOINCREMENT,
++        start_time TEXT NOT NULL,
++        end_time TEXT,
++        model TEXT NOT NULL,
++        status TEXT NOT NULL DEFAULT 'pending',
++        prompt_tokens INTEGER NOT NULL DEFAULT 0,
++        completion_tokens INTEGER NOT NULL DEFAULT 0,
++        total_tokens INTEGER NOT NULL DEFAULT 0,
++        latency_ms REAL,
++        ttft_ms REAL,
++        session_id TEXT,
++        is_streaming INTEGER NOT NULL DEFAULT 0
++      )
++    `);
++    this.db.run(
++      "CREATE INDEX IF NOT EXISTS idx_request_logs_start_time ON request_logs(start_time)"
++    );
++    this.db.run("CREATE INDEX IF NOT EXISTS idx_request_logs_model ON request_logs(model)");
++
++    this.db.run(`
++      CREATE TABLE IF NOT EXISTS energy_snapshots (
++        sampled_at TEXT PRIMARY KEY,
++        energy_wh REAL NOT NULL
++      )
++    `);
+   }
+ 
+   /**
+@@ -324,4 +374,94 @@ export class LifetimeMetricsStore {
+   public addRequests(count = 1): void {
+     this.increment("requests_total", count);
+   }
++
++  public insertRequestLog(entry: RequestLogEntry): number {
++    const result = this.db
++      .query(
++        `INSERT INTO request_logs (start_time, end_time, model, status, prompt_tokens, completion_tokens, total_tokens, latency_ms, ttft_ms, session_id, is_streaming)
++         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
++      )
++      .run(
++        entry.start_time,
++        entry.end_time ?? null,
++        entry.model,
++        entry.status,
++        entry.prompt_tokens,
++        entry.completion_tokens,
++        entry.total_tokens,
++        entry.latency_ms ?? null,
++        entry.ttft_ms ?? null,
++        entry.session_id ?? null,
++        entry.is_streaming ? 1 : 0,
++      );
++    return Number(result.lastInsertRowid);
++  }
++
++  public updateRequestLog(id: number, updates: Partial<RequestLogEntry>): void {
++    const fields: string[] = [];
++    const values: Array<string | number | null> = [];
++    for (const [key, value] of Object.entries(updates)) {
++      if (key === "id") continue;
++      if (value !== undefined) {
++        fields.push(`${key} = ?`);
++        values.push(key === "is_streaming" ? (value ? 1 : 0) : (value as string | number | null));
++      }
++    }
++    if (fields.length === 0) return;
++    values.push(id);
++    this.db.query(`UPDATE request_logs SET ${fields.join(", ")} WHERE id = ?`).run(...values);
++  }
++
++  public getRequestLogs(period?: string): { rows: Array<RequestLogEntry & { id: number }>; filtered: boolean } {
++    const where = period && PERIOD_FILTERS[period] ? `WHERE ${PERIOD_FILTERS[period]}` : "";
++    const rows = this.db
++      .query(`SELECT * FROM request_logs ${where} ORDER BY start_time DESC`)
++      .all() as Array<Record<string, unknown>>;
++    return {
++      rows: rows.map((r) => ({
++        id: Number(r["id"]),
++        start_time: String(r["start_time"] ?? ""),
++        end_time: r["end_time"] ? String(r["end_time"]) : null,
++        model: String(r["model"] ?? "unknown"),
++        status: String(r["status"] ?? "pending"),
++        prompt_tokens: Number(r["prompt_tokens"] ?? 0),
++        completion_tokens: Number(r["completion_tokens"] ?? 0),
++        total_tokens: Number(r["total_tokens"] ?? 0),
++        latency_ms: r["latency_ms"] != null ? Number(r["latency_ms"]) : null,
++        ttft_ms: r["ttft_ms"] != null ? Number(r["ttft_ms"]) : null,
++        session_id: r["session_id"] ? String(r["session_id"]) : null,
++        is_streaming: Boolean(r["is_streaming"]),
++      })),
++      filtered: Boolean(period && PERIOD_FILTERS[period]),
++    };
++  }
++
++  public getRequestLogCount(period?: string): number {
++    const where = period && PERIOD_FILTERS[period] ? `WHERE ${PERIOD_FILTERS[period]}` : "";
++    const row = this.db.query(`SELECT COUNT(*) as cnt FROM request_logs ${where}`).get() as {
++      cnt: number;
++    };
++    return row?.cnt ?? 0;
++  }
++
++  public recordEnergySnapshot(energyWh: number): void {
++    this.db
++      .query(
++        "INSERT OR REPLACE INTO energy_snapshots (sampled_at, energy_wh) VALUES (datetime('now'), ?)"
++      )
++      .run(energyWh);
++  }
++
++  public getEnergyBefore(timestamp: string): { energy_wh: number } | null {
++    const row = this.db
++      .query("SELECT energy_wh FROM energy_snapshots WHERE sampled_at <= ? ORDER BY sampled_at DESC LIMIT 1")
++      .get(timestamp) as { energy_wh: number } | null;
++    return row;
++  }
++
++  public getCurrentEnergy(): number {
++    return this.get("energy_wh");
++  }
+ }
++
++export { PERIOD_FILTERS };
+diff --git a/controller/src/modules/monitoring/usage-routes.ts b/controller/src/modules/monitoring/usage-routes.ts
+index 75f2c87..1820b97 100644
+--- a/controller/src/modules/monitoring/usage-routes.ts
++++ b/controller/src/modules/monitoring/usage-routes.ts
+@@ -2,26 +2,27 @@
+ import type { Hono } from "hono";
+ import type { AppContext } from "../../types/context";
+ import { getUsageFromChatDatabase } from "./usage/chat-database";
+-import { getUsageFromPostgres } from "./usage/postgres";
+-import { getUsageFromSqliteSpendLogs } from "./usage/sqlite-spend-logs";
++import { getUsageFromRequestLogs } from "./usage/sqlite-request-logs";
+ import { emptyResponse } from "./usage/usage-utilities";
+ 
+ /**
+  * Register usage analytics routes.
+- * Uses LiteLLM spend logs (Postgres preferred) with SQLite/chat fallbacks.
++ * Tries request_logs (new SQLite source) first, then chat DB.
+  * Falls back to empty data if no sources are available.
++ * Supports ?period=d|w|m|y|all query parameter for time filtering.
+  * @param app - Hono app.
+  * @param context - App context.
+  */
+ export const registerUsageRoutes = (app: Hono, context: AppContext): void => {
+   app.get("/usage", async (ctx) => {
+     try {
+-      const postgresUsage = await getUsageFromPostgres(context);
+-      if (postgresUsage) return ctx.json(postgresUsage);
++      const period = ctx.req.query("period");
+ 
+-      const sqliteUsage = getUsageFromSqliteSpendLogs(context.config.db_path);
+-      if (sqliteUsage) return ctx.json(sqliteUsage);
++      // Try new request_logs source first (captures all requests including streaming)
++      const requestLogsUsage = getUsageFromRequestLogs(context.config.db_path, period);
++      if (requestLogsUsage) return ctx.json(requestLogsUsage);
+ 
++      // Fallback to chat database
+       const chatUsage = getUsageFromChatDatabase(context.config.data_dir);
+       if (chatUsage) return ctx.json(chatUsage);
+ 
+diff --git a/controller/src/modules/monitoring/usage/index.ts b/controller/src/modules/monitoring/usage/index.ts
+index 8a35a13..fca483c 100644
+--- a/controller/src/modules/monitoring/usage/index.ts
++++ b/controller/src/modules/monitoring/usage/index.ts
+@@ -1,4 +1,2 @@
+ export * from "./chat-database";
+-export * from "./postgres";
+-export * from "./sqlite-spend-logs";
+ export * from "./usage-utilities";
+diff --git a/controller/src/modules/monitoring/usage/postgres.ts b/controller/src/modules/monitoring/usage/postgres.ts
+deleted file mode 100644
+index af2f428..0000000
+--- a/controller/src/modules/monitoring/usage/postgres.ts
++++ /dev/null
+@@ -1,404 +0,0 @@
+-// CRITICAL
+-import { Client } from "pg";
+-import type { AppContext } from "../../../types/context";
+-import { calcChange, toNumber } from "./usage-utilities";
+-
+-export const getUsageFromPostgres = async (
+-  context: AppContext
+-): Promise<Record<string, unknown> | null> => {
+-  const databaseUrl =
+-    context.config.litellm_database_url ??
+-    process.env["LITELLM_DATABASE_URL"] ??
+-    process.env["DATABASE_URL"];
+-  if (!databaseUrl) return null;
+-
+-  const client = new Client({ connectionString: databaseUrl });
+-  try {
+-    await client.connect();
+-    const tableCheck = await client.query(
+-      `SELECT to_regclass('public."LiteLLM_SpendLogs"') as name`
+-    );
+-    if (!tableCheck.rows[0]?.name) {
+-      return null;
+-    }
+-
+-    const totalsRow =
+-      (
+-        await client.query(`
+-      SELECT
+-        COALESCE(SUM(total_tokens), 0) as total_tokens,
+-        COALESCE(SUM(prompt_tokens), 0) as prompt_tokens,
+-        COALESCE(SUM(completion_tokens), 0) as completion_tokens,
+-        COUNT(*) as total_requests,
+-        SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as successful_requests,
+-        SUM(CASE WHEN status != 'success' OR status IS NULL THEN 1 ELSE 0 END) as failed_requests,
+-        COUNT(DISTINCT session_id) as unique_sessions
+-      FROM "LiteLLM_SpendLogs"
+-    `)
+-      ).rows[0] ?? null;
+-
+-    if (!totalsRow || toNumber(totalsRow.total_requests) === 0) {
+-      return null;
+-    }
+-
+-    const uniqueUsersRow = (
+-      await client.query(`
+-      SELECT COUNT(DISTINCT NULLIF(COALESCE(end_user, "user"), '')) as unique_users
+-      FROM "LiteLLM_SpendLogs"
+-    `)
+-    ).rows[0] ?? { unique_users: 0 };
+-
+-    const latencyRow =
+-      (
+-        await client.query(`
+-      SELECT
+-        AVG(latency_ms) as avg_ms,
+-        MIN(latency_ms) as min_ms,
+-        MAX(latency_ms) as max_ms,
+-        percentile_cont(0.5) WITHIN GROUP (ORDER BY latency_ms) as p50_ms,
+-        percentile_cont(0.95) WITHIN GROUP (ORDER BY latency_ms) as p95_ms,
+-        percentile_cont(0.99) WITHIN GROUP (ORDER BY latency_ms) as p99_ms
+-      FROM (
+-        SELECT EXTRACT(EPOCH FROM ("endTime" - "startTime")) * 1000 as latency_ms
+-        FROM "LiteLLM_SpendLogs"
+-        WHERE status = 'success' AND "endTime" IS NOT NULL AND "startTime" IS NOT NULL
+-      ) s
+-    `)
+-      ).rows[0] ?? {};
+-
+-    const ttftRow =
+-      (
+-        await client.query(`
+-      SELECT
+-        AVG(ttft_ms) as avg_ms,
+-        percentile_cont(0.5) WITHIN GROUP (ORDER BY ttft_ms) as p50_ms,
+-        percentile_cont(0.95) WITHIN GROUP (ORDER BY ttft_ms) as p95_ms,
+-        percentile_cont(0.99) WITHIN GROUP (ORDER BY ttft_ms) as p99_ms
+-      FROM (
+-        SELECT EXTRACT(EPOCH FROM ("completionStartTime" - "startTime")) * 1000 as ttft_ms
+-        FROM "LiteLLM_SpendLogs"
+-        WHERE status = 'success'
+-          AND "completionStartTime" IS NOT NULL
+-          AND "startTime" IS NOT NULL
+-      ) s
+-    `)
+-      ).rows[0] ?? {};
+-
+-    const tokenRow =
+-      (
+-        await client.query(`
+-      SELECT
+-        AVG(total_tokens) as avg_tokens,
+-        AVG(prompt_tokens) as avg_prompt,
+-        AVG(completion_tokens) as avg_completion,
+-        MAX(total_tokens) as max_tokens,
+-        percentile_cont(0.5) WITHIN GROUP (ORDER BY total_tokens) as p50_tokens,
+-        percentile_cont(0.95) WITHIN GROUP (ORDER BY total_tokens) as p95_tokens
+-      FROM "LiteLLM_SpendLogs"
+-      WHERE status = 'success' AND total_tokens IS NOT NULL
+-    `)
+-      ).rows[0] ?? {};
+-
+-    const cacheRows =
+-      (
+-        await client.query(`
+-      SELECT cache_hit, COUNT(*) as count, COALESCE(SUM(total_tokens), 0) as tokens
+-      FROM "LiteLLM_SpendLogs"
+-      GROUP BY cache_hit
+-    `)
+-      ).rows ?? [];
+-
+-    const cache = { hits: 0, misses: 0, hit_tokens: 0, miss_tokens: 0, hit_rate: 0 };
+-    for (const row of cacheRows) {
+-      const value = String(row.cache_hit ?? "").toLowerCase();
+-      if (value === "true") {
+-        cache.hits = toNumber(row.count);
+-        cache.hit_tokens = toNumber(row.tokens);
+-      } else {
+-        cache.misses += toNumber(row.count);
+-        cache.miss_tokens += toNumber(row.tokens);
+-      }
+-    }
+-    const totalCache = cache.hits + cache.misses;
+-    if (totalCache > 0) {
+-      cache.hit_rate = Math.round((cache.hits / totalCache) * 10000) / 100;
+-    }
+-
+-    const byModelRows =
+-      (
+-        await client.query(`
+-      SELECT
+-        model,
+-        COUNT(*) as requests,
+-        SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as successful,
+-        COALESCE(SUM(total_tokens), 0) as total_tokens,
+-        COALESCE(SUM(prompt_tokens), 0) as prompt_tokens,
+-        COALESCE(SUM(completion_tokens), 0) as completion_tokens,
+-        AVG(CASE WHEN status = 'success' THEN total_tokens END) as avg_tokens,
+-        AVG(CASE WHEN status = 'success' THEN EXTRACT(EPOCH FROM ("endTime" - "startTime")) * 1000 END) as avg_latency_ms,
+-        AVG(CASE WHEN status = 'success' AND "completionStartTime" IS NOT NULL
+-          THEN EXTRACT(EPOCH FROM ("completionStartTime" - "startTime")) * 1000 END) as avg_ttft_ms
+-      FROM "LiteLLM_SpendLogs"
+-      WHERE model IS NOT NULL AND model != ''
+-      GROUP BY model
+-      ORDER BY total_tokens DESC
+-      LIMIT 25
+-    `)
+-      ).rows ?? [];
+-
+-    const dailyRows =
+-      (
+-        await client.query(`
+-      SELECT
+-        DATE("startTime") as date,
+-        COUNT(*) as requests,
+-        SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as successful,
+-        COALESCE(SUM(total_tokens), 0) as total_tokens,
+-        COALESCE(SUM(prompt_tokens), 0) as prompt_tokens,
+-        COALESCE(SUM(completion_tokens), 0) as completion_tokens,
+-        AVG(CASE WHEN status = 'success' THEN EXTRACT(EPOCH FROM ("endTime" - "startTime")) * 1000 END) as avg_latency_ms
+-      FROM "LiteLLM_SpendLogs"
+-      WHERE "startTime" >= NOW() - INTERVAL '14 days'
+-      GROUP BY DATE("startTime")
+-      ORDER BY date DESC
+-    `)
+-      ).rows ?? [];
+-
+-    const dailyByModelRows =
+-      (
+-        await client.query(`
+-      SELECT
+-        DATE("startTime") as date,
+-        model,
+-        COUNT(*) as requests,
+-        SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as successful,
+-        COALESCE(SUM(total_tokens), 0) as total_tokens,
+-        COALESCE(SUM(prompt_tokens), 0) as prompt_tokens,
+-        COALESCE(SUM(completion_tokens), 0) as completion_tokens
+-      FROM "LiteLLM_SpendLogs"
+-      WHERE "startTime" >= NOW() - INTERVAL '14 days'
+-        AND model IS NOT NULL
+-        AND model != ''
+-      GROUP BY DATE("startTime"), model
+-      ORDER BY date DESC
+-    `)
+-      ).rows ?? [];
+-
+-    const hourlyRows =
+-      (
+-        await client.query(`
+-      SELECT
+-        EXTRACT(HOUR FROM "startTime")::int as hour,
+-        COUNT(*) as requests,
+-        SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as successful,
+-        COALESCE(SUM(total_tokens), 0) as tokens
+-      FROM "LiteLLM_SpendLogs"
+-      WHERE "startTime" IS NOT NULL
+-      GROUP BY EXTRACT(HOUR FROM "startTime")
+-      ORDER BY hour
+-    `)
+-      ).rows ?? [];
+-
+-    const wowRow =
+-      (
+-        await client.query(`
+-      SELECT
+-        SUM(CASE WHEN "startTime" >= NOW() - INTERVAL '7 days' THEN 1 ELSE 0 END) as this_week_requests,
+-        SUM(CASE WHEN "startTime" >= NOW() - INTERVAL '14 days' AND "startTime" < NOW() - INTERVAL '7 days' THEN 1 ELSE 0 END) as last_week_requests,
+-        SUM(CASE WHEN "startTime" >= NOW() - INTERVAL '7 days' AND status = 'success' THEN total_tokens ELSE 0 END) as this_week_tokens,
+-        SUM(CASE WHEN "startTime" >= NOW() - INTERVAL '14 days' AND "startTime" < NOW() - INTERVAL '7 days' AND status = 'success' THEN total_tokens ELSE 0 END) as last_week_tokens,
+-        SUM(CASE WHEN "startTime" >= NOW() - INTERVAL '7 days' AND status = 'success' THEN 1 ELSE 0 END) as this_week_successful,
+-        SUM(CASE WHEN "startTime" >= NOW() - INTERVAL '14 days' AND "startTime" < NOW() - INTERVAL '7 days' AND status = 'success' THEN 1 ELSE 0 END) as last_week_successful
+-      FROM "LiteLLM_SpendLogs"
+-    `)
+-      ).rows[0] ?? {};
+-
+-    const peakDays =
+-      (
+-        await client.query(`
+-      SELECT
+-        DATE("startTime") as date,
+-        COUNT(*) as requests,
+-        COALESCE(SUM(total_tokens), 0) as tokens
+-      FROM "LiteLLM_SpendLogs"
+-      WHERE status = 'success'
+-      GROUP BY DATE("startTime")
+-      ORDER BY requests DESC
+-      LIMIT 5
+-    `)
+-      ).rows ?? [];
+-
+-    const peakHours =
+-      (
+-        await client.query(`
+-      SELECT
+-        EXTRACT(HOUR FROM "startTime")::int as hour,
+-        COUNT(*) as requests
+-      FROM "LiteLLM_SpendLogs"
+-      WHERE "startTime" >= NOW() - INTERVAL '7 days'
+-      GROUP BY EXTRACT(HOUR FROM "startTime")
+-      ORDER BY requests DESC
+-      LIMIT 5
+-    `)
+-      ).rows ?? [];
+-
+-    const recentRow =
+-      (
+-        await client.query(`
+-      SELECT
+-        SUM(CASE WHEN "startTime" >= NOW() - INTERVAL '24 hours' THEN 1 ELSE 0 END) as last_24h_requests,
+-        SUM(CASE WHEN "startTime" >= NOW() - INTERVAL '48 hours' AND "startTime" < NOW() - INTERVAL '24 hours' THEN 1 ELSE 0 END) as prev_24h_requests,
+-        SUM(CASE WHEN "startTime" >= NOW() - INTERVAL '24 hours' AND status = 'success' THEN total_tokens ELSE 0 END) as last_24h_tokens,
+-        SUM(CASE WHEN "startTime" >= NOW() - INTERVAL '1 hour' THEN 1 ELSE 0 END) as last_hour_requests
+-      FROM "LiteLLM_SpendLogs"
+-    `)
+-      ).rows[0] ?? {};
+-
+-    const modelsFormatted = byModelRows.map((row) => {
+-      const avgLatencyMs = toNumber(row.avg_latency_ms);
+-      const completionTokens = toNumber(row.completion_tokens);
+-      const successful = toNumber(row.successful);
+-      let tokensPerSec: number | null = null;
+-      if (avgLatencyMs > 0 && successful > 0) {
+-        const avgCompletion = completionTokens / successful;
+-        tokensPerSec = avgCompletion
+-          ? Math.round((avgCompletion / (avgLatencyMs / 1000)) * 10) / 10
+-          : null;
+-      }
+-      return {
+-        model: String(row.model),
+-        requests: toNumber(row.requests),
+-        successful,
+-        success_rate: toNumber(row.requests)
+-          ? Math.round((successful / toNumber(row.requests)) * 1000) / 10
+-          : 0,
+-        total_tokens: toNumber(row.total_tokens),
+-        prompt_tokens: toNumber(row.prompt_tokens),
+-        completion_tokens: completionTokens,
+-        avg_tokens: Math.round(toNumber(row.avg_tokens)),
+-        avg_latency_ms: Math.round(avgLatencyMs),
+-        p50_latency_ms: Math.round(avgLatencyMs),
+-        avg_ttft_ms: Math.round(toNumber(row.avg_ttft_ms)),
+-        tokens_per_sec: tokensPerSec,
+-        prefill_tps: null,
+-        generation_tps: null,
+-      };
+-    });
+-
+-    const totalRequests = toNumber(totalsRow.total_requests);
+-    const successRate = totalRequests
+-      ? Math.round((toNumber(totalsRow.successful_requests) / totalRequests) * 10000) / 100
+-      : 0;
+-
+-    return {
+-      totals: {
+-        total_tokens: toNumber(totalsRow.total_tokens),
+-        prompt_tokens: toNumber(totalsRow.prompt_tokens),
+-        completion_tokens: toNumber(totalsRow.completion_tokens),
+-        total_requests: totalRequests,
+-        successful_requests: toNumber(totalsRow.successful_requests),
+-        failed_requests: toNumber(totalsRow.failed_requests),
+-        success_rate: successRate,
+-        unique_sessions: toNumber(totalsRow.unique_sessions),
+-        unique_users: toNumber(uniqueUsersRow.unique_users),
+-      },
+-      latency: {
+-        avg_ms: Math.round(toNumber(latencyRow.avg_ms)),
+-        p50_ms: Math.round(toNumber(latencyRow.p50_ms)),
+-        p95_ms: Math.round(toNumber(latencyRow.p95_ms)),
+-        p99_ms: Math.round(toNumber(latencyRow.p99_ms)),
+-        min_ms: Math.round(toNumber(latencyRow.min_ms)),
+-        max_ms: Math.round(toNumber(latencyRow.max_ms)),
+-      },
+-      ttft: {
+-        avg_ms: Math.round(toNumber(ttftRow.avg_ms)),
+-        p50_ms: Math.round(toNumber(ttftRow.p50_ms)),
+-        p95_ms: Math.round(toNumber(ttftRow.p95_ms)),
+-        p99_ms: Math.round(toNumber(ttftRow.p99_ms)),
+-      },
+-      tokens_per_request: {
+-        avg: Math.round(toNumber(tokenRow.avg_tokens)),
+-        avg_prompt: Math.round(toNumber(tokenRow.avg_prompt)),
+-        avg_completion: Math.round(toNumber(tokenRow.avg_completion)),
+-        max: toNumber(tokenRow.max_tokens),
+-        p50: Math.round(toNumber(tokenRow.p50_tokens)),
+-        p95: Math.round(toNumber(tokenRow.p95_tokens)),
+-      },
+-      cache,
+-      week_over_week: {
+-        this_week: {
+-          requests: toNumber(wowRow.this_week_requests),
+-          tokens: toNumber(wowRow.this_week_tokens),
+-          successful: toNumber(wowRow.this_week_successful),
+-        },
+-        last_week: {
+-          requests: toNumber(wowRow.last_week_requests),
+-          tokens: toNumber(wowRow.last_week_tokens),
+-          successful: toNumber(wowRow.last_week_successful),
+-        },
+-        change_pct: {
+-          requests: calcChange(
+-            toNumber(wowRow.this_week_requests),
+-            toNumber(wowRow.last_week_requests)
+-          ),
+-          tokens: calcChange(toNumber(wowRow.this_week_tokens), toNumber(wowRow.last_week_tokens)),
+-        },
+-      },
+-      recent_activity: {
+-        last_hour_requests: toNumber(recentRow.last_hour_requests),
+-        last_24h_requests: toNumber(recentRow.last_24h_requests),
+-        prev_24h_requests: toNumber(recentRow.prev_24h_requests),
+-        last_24h_tokens: toNumber(recentRow.last_24h_tokens),
+-        change_24h_pct: calcChange(
+-          toNumber(recentRow.last_24h_requests),
+-          toNumber(recentRow.prev_24h_requests)
+-        ),
+-      },
+-      peak_days: peakDays.map((row) => ({
+-        date: String(row.date),
+-        requests: toNumber(row.requests),
+-        tokens: toNumber(row.tokens),
+-      })),
+-      peak_hours: peakHours.map((row) => ({
+-        hour: toNumber(row.hour),
+-        requests: toNumber(row.requests),
+-      })),
+-      by_model: modelsFormatted,
+-      daily: dailyRows.map((row) => ({
+-        date: String(row.date),
+-        requests: toNumber(row.requests),
+-        successful: toNumber(row.successful),
+-        success_rate: toNumber(row.requests)
+-          ? Math.round((toNumber(row.successful) / toNumber(row.requests)) * 1000) / 10
+-          : 0,
+-        total_tokens: toNumber(row.total_tokens),
+-        prompt_tokens: toNumber(row.prompt_tokens),
+-        completion_tokens: toNumber(row.completion_tokens),
+-        avg_latency_ms: Math.round(toNumber(row.avg_latency_ms)),
+-      })),
+-      daily_by_model: dailyByModelRows.map((row) => ({
+-        date: String(row.date),
+-        model: String(row.model),
+-        requests: toNumber(row.requests),
+-        successful: toNumber(row.successful),
+-        success_rate: toNumber(row.requests)
+-          ? Math.round((toNumber(row.successful) / toNumber(row.requests)) * 1000) / 10
+-          : 0,
+-        total_tokens: toNumber(row.total_tokens),
+-        prompt_tokens: toNumber(row.prompt_tokens),
+-        completion_tokens: toNumber(row.completion_tokens),
+-      })),
+-      hourly_pattern: hourlyRows.map((row) => ({
+-        hour: toNumber(row.hour),
+-        requests: toNumber(row.requests),
+-        successful: toNumber(row.successful),
+-        tokens: toNumber(row.tokens),
+-      })),
+-    };
+-  } catch (error) {
+-    console.error("[Usage] Error fetching usage stats from Postgres:", error);
+-    return null;
+-  } finally {
+-    await client.end().catch(() => {});
+-  }
+-};
+diff --git a/controller/src/modules/monitoring/usage/sqlite-spend-logs.ts b/controller/src/modules/monitoring/usage/sqlite-spend-logs.ts
+deleted file mode 100644
+index d11733a..0000000
+--- a/controller/src/modules/monitoring/usage/sqlite-spend-logs.ts
++++ /dev/null
+@@ -1,439 +0,0 @@
+-// CRITICAL
+-import Database from "bun:sqlite";
+-
+-import { calcChange, getPercentile } from "./usage-utilities";
+-
+-export const getUsageFromSqliteSpendLogs = (dbPath: string): Record<string, unknown> | null => {
+-  let db: Database | null = null;
+-  try {
+-    db = new Database(dbPath, { readonly: true });
+-
+-    // Check if spend_logs table exists
+-    const tableCheck = db.query<{ name: string }, []>(
+-      `SELECT name FROM sqlite_master WHERE type='table' AND name='spend_logs'`
+-    ).get();
+-
+-    if (!tableCheck) {
+-      return null;
+-    }
+-
+-    // Totals
+-    const totals = db.query<{
+-      total_tokens: number;
+-      prompt_tokens: number;
+-      completion_tokens: number;
+-      total_requests: number;
+-      successful_requests: number;
+-      failed_requests: number;
+-      unique_sessions: number;
+-    }, []>(`
+-      SELECT
+-        COALESCE(SUM(total_tokens), 0) as total_tokens,
+-        COALESCE(SUM(prompt_tokens), 0) as prompt_tokens,
+-        COALESCE(SUM(completion_tokens), 0) as completion_tokens,
+-        COUNT(*) as total_requests,
+-        SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as successful_requests,
+-        SUM(CASE WHEN status != 'success' OR status IS NULL THEN 1 ELSE 0 END) as failed_requests,
+-        COUNT(DISTINCT session_id) as unique_sessions
+-      FROM spend_logs
+-    `).get() ?? { total_tokens: 0, prompt_tokens: 0, completion_tokens: 0, total_requests: 0, successful_requests: 0, failed_requests: 0, unique_sessions: 0 };
+-
+-    // If no data at all, return empty response
+-    if (totals.total_requests === 0) {
+-      return null;
+-    }
+-
+-    // Latency stats (using julianday for time calculations)
+-    const latency = db.query<{
+-      avg_ms: number;
+-      min_ms: number;
+-      max_ms: number;
+-    }, []>(`
+-      SELECT
+-        AVG((julianday(end_time) - julianday(start_time)) * 86400000) as avg_ms,
+-        MIN((julianday(end_time) - julianday(start_time)) * 86400000) as min_ms,
+-        MAX((julianday(end_time) - julianday(start_time)) * 86400000) as max_ms
+-      FROM spend_logs
+-      WHERE status = 'success' AND end_time IS NOT NULL AND start_time IS NOT NULL
+-    `).get() ?? { avg_ms: 0, min_ms: 0, max_ms: 0 };
+-
+-    // Percentiles need to be calculated differently in SQLite
+-    const latencyPercentiles = db.query<{ latency_ms: number }, []>(`
+-      SELECT (julianday(end_time) - julianday(start_time)) * 86400000 as latency_ms
+-      FROM spend_logs
+-      WHERE status = 'success' AND end_time IS NOT NULL AND start_time IS NOT NULL
+-      ORDER BY latency_ms
+-    `).all();
+-
+-
+-    // TTFT stats
+-    const ttft = db.query<{
+-      avg_ms: number;
+-    }, []>(`
+-      SELECT
+-        AVG((julianday(completion_start_time) - julianday(start_time)) * 86400000) as avg_ms
+-      FROM spend_logs
+-      WHERE status = 'success'
+-        AND completion_start_time IS NOT NULL
+-        AND completion_start_time != ''
+-        AND start_time IS NOT NULL
+-    `).get() ?? { avg_ms: 0 };
+-
+-    const ttftPercentiles = db.query<{ ttft_ms: number }, []>(`
+-      SELECT (julianday(completion_start_time) - julianday(start_time)) * 86400000 as ttft_ms
+-      FROM spend_logs
+-      WHERE status = 'success'
+-        AND completion_start_time IS NOT NULL
+-        AND completion_start_time != ''
+-        AND start_time IS NOT NULL
+-      ORDER BY ttft_ms
+-    `).all();
+-
+-    // Token stats
+-    const tokenStats = db.query<{
+-      avg_tokens: number;
+-      avg_prompt: number;
+-      avg_completion: number;
+-      max_tokens: number;
+-    }, []>(`
+-      SELECT
+-        AVG(total_tokens) as avg_tokens,
+-        AVG(prompt_tokens) as avg_prompt,
+-        AVG(completion_tokens) as avg_completion,
+-        MAX(total_tokens) as max_tokens
+-      FROM spend_logs
+-      WHERE status = 'success' AND total_tokens IS NOT NULL
+-    `).get() ?? { avg_tokens: 0, avg_prompt: 0, avg_completion: 0, max_tokens: 0 };
+-
+-    const tokenPercentiles = db.query<{ tokens: number }, []>(`
+-      SELECT total_tokens as tokens
+-      FROM spend_logs
+-      WHERE status = 'success' AND total_tokens IS NOT NULL
+-      ORDER BY tokens
+-    `).all();
+-
+-    // Cache stats
+-    const cacheRows = db.query<{
+-      cache_hit: string | null;
+-      count: number;
+-      tokens: number;
+-    }, []>(`
+-      SELECT
+-        cache_hit,
+-        COUNT(*) as count,
+-        COALESCE(SUM(total_tokens), 0) as tokens
+-      FROM spend_logs
+-      GROUP BY cache_hit
+-    `).all();
+-
+-    const cache = { hits: 0, misses: 0, hit_tokens: 0, miss_tokens: 0, hit_rate: 0 };
+-    for (const row of cacheRows) {
+-      if (row.cache_hit === "True") {
+-        cache.hits = row.count;
+-        cache.hit_tokens = row.tokens;
+-      } else if (row.cache_hit === "False" || row.cache_hit === null) {
+-        cache.misses += row.count;
+-        cache.miss_tokens += row.tokens;
+-      }
+-    }
+-    const totalCache = cache.hits + cache.misses;
+-    if (totalCache > 0) {
+-      cache.hit_rate = Math.round((cache.hits / totalCache) * 10000) / 100;
+-    }
+-
+-    // By model
+-    const byModel = db.query<{
+-      model: string;
+-      requests: number;
+-      successful: number;
+-      total_tokens: number;
+-      prompt_tokens: number;
+-      completion_tokens: number;
+-      avg_tokens: number;
+-      avg_latency_ms: number;
+-      avg_ttft_ms: number;
+-    }, []>(`
+-      SELECT
+-        model,
+-        COUNT(*) as requests,
+-        SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as successful,
+-        COALESCE(SUM(total_tokens), 0) as total_tokens,
+-        COALESCE(SUM(prompt_tokens), 0) as prompt_tokens,
+-        COALESCE(SUM(completion_tokens), 0) as completion_tokens,
+-        AVG(CASE WHEN status = 'success' THEN total_tokens END) as avg_tokens,
+-        AVG(CASE WHEN status = 'success' THEN (julianday(end_time) - julianday(start_time)) * 86400000 END) as avg_latency_ms,
+-        AVG(CASE WHEN status = 'success' AND completion_start_time IS NOT NULL AND completion_start_time != ''
+-            THEN (julianday(completion_start_time) - julianday(start_time)) * 86400000 END) as avg_ttft_ms
+-      FROM spend_logs
+-      WHERE model != '' AND model IS NOT NULL
+-      GROUP BY model
+-      ORDER BY total_tokens DESC
+-      LIMIT 25
+-    `).all();
+-
+-    // Daily stats (last 14 days)
+-    const daily = db.query<{
+-      date: string;
+-      requests: number;
+-      successful: number;
+-      total_tokens: number;
+-      prompt_tokens: number;
+-      completion_tokens: number;
+-      avg_latency_ms: number;
+-    }, []>(`
+-      SELECT
+-        DATE(start_time) as date,
+-        COUNT(*) as requests,
+-        SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as successful,
+-        COALESCE(SUM(total_tokens), 0) as total_tokens,
+-        COALESCE(SUM(prompt_tokens), 0) as prompt_tokens,
+-        COALESCE(SUM(completion_tokens), 0) as completion_tokens,
+-        AVG(CASE WHEN status = 'success' THEN (julianday(end_time) - julianday(start_time)) * 86400000 END) as avg_latency_ms
+-      FROM spend_logs
+-      WHERE DATE(start_time) >= DATE('now', '-14 days')
+-      GROUP BY DATE(start_time)
+-      ORDER BY date DESC
+-    `).all();
+-
+-    const dailyByModel = db.query<{
+-      date: string;
+-      model: string;
+-      requests: number;
+-      successful: number;
+-      total_tokens: number;
+-      prompt_tokens: number;
+-      completion_tokens: number;
+-    }, []>(`
+-      SELECT
+-        DATE(start_time) as date,
+-        model,
+-        COUNT(*) as requests,
+-        SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as successful,
+-        COALESCE(SUM(total_tokens), 0) as total_tokens,
+-        COALESCE(SUM(prompt_tokens), 0) as prompt_tokens,
+-        COALESCE(SUM(completion_tokens), 0) as completion_tokens
+-      FROM spend_logs
+-      WHERE DATE(start_time) >= DATE('now', '-14 days')
+-        AND model IS NOT NULL
+-        AND model != ''
+-      GROUP BY DATE(start_time), model
+-      ORDER BY date DESC
+-    `).all();
+-
+-    // Hourly pattern
+-    const hourly = db.query<{
+-      hour: number;
+-      requests: number;
+-      successful: number;
+-      tokens: number;
+-    }, []>(`
+-      SELECT
+-        CAST(strftime('%H', start_time) AS INTEGER) as hour,
+-        COUNT(*) as requests,
+-        SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as successful,
+-        COALESCE(SUM(total_tokens), 0) as tokens
+-      FROM spend_logs
+-      WHERE start_time IS NOT NULL
+-      GROUP BY strftime('%H', start_time)
+-      ORDER BY hour
+-    `).all();
+-
+-    // Week over week
+-    const wow = db.query<{
+-      this_week_requests: number;
+-      last_week_requests: number;
+-      this_week_tokens: number;
+-      last_week_tokens: number;
+-      this_week_successful: number;
+-      last_week_successful: number;
+-    }, []>(`
+-      SELECT
+-        SUM(CASE WHEN DATE(start_time) >= DATE('now', '-7 days') THEN 1 ELSE 0 END) as this_week_requests,
+-        SUM(CASE WHEN DATE(start_time) >= DATE('now', '-14 days') AND DATE(start_time) < DATE('now', '-7 days') THEN 1 ELSE 0 END) as last_week_requests,
+-        SUM(CASE WHEN DATE(start_time) >= DATE('now', '-7 days') AND status = 'success' THEN total_tokens ELSE 0 END) as this_week_tokens,
+-        SUM(CASE WHEN DATE(start_time) >= DATE('now', '-14 days') AND DATE(start_time) < DATE('now', '-7 days') AND status = 'success' THEN total_tokens ELSE 0 END) as last_week_tokens,
+-        SUM(CASE WHEN DATE(start_time) >= DATE('now', '-7 days') AND status = 'success' THEN 1 ELSE 0 END) as this_week_successful,
+-        SUM(CASE WHEN DATE(start_time) >= DATE('now', '-14 days') AND DATE(start_time) < DATE('now', '-7 days') AND status = 'success' THEN 1 ELSE 0 END) as last_week_successful
+-      FROM spend_logs
+-    `).get() ?? { this_week_requests: 0, last_week_requests: 0, this_week_tokens: 0, last_week_tokens: 0, this_week_successful: 0, last_week_successful: 0 };
+-
+-    // Peak days
+-    const peakDays = db.query<{
+-      date: string;
+-      requests: number;
+-      tokens: number;
+-    }, []>(`
+-      SELECT
+-        DATE(start_time) as date,
+-        COUNT(*) as requests,
+-        COALESCE(SUM(total_tokens), 0) as tokens
+-      FROM spend_logs
+-      WHERE status = 'success'
+-      GROUP BY DATE(start_time)
+-      ORDER BY requests DESC
+-      LIMIT 5
+-    `).all();
+-
+-    // Peak hours
+-    const peakHours = db.query<{
+-      hour: number;
+-      requests: number;
+-    }, []>(`
+-      SELECT
+-        CAST(strftime('%H', start_time) AS INTEGER) as hour,
+-        COUNT(*) as requests
+-      FROM spend_logs
+-      WHERE DATE(start_time) >= DATE('now', '-7 days')
+-      GROUP BY strftime('%H', start_time)
+-      ORDER BY requests DESC
+-      LIMIT 5
+-    `).all();
+-
+-    // Recent activity
+-    const recent = db.query<{
+-      last_24h_requests: number;
+-      prev_24h_requests: number;
+-      last_24h_tokens: number;
+-      last_hour_requests: number;
+-    }, []>(`
+-      SELECT
+-        SUM(CASE WHEN datetime(start_time) >= datetime('now', '-24 hours') THEN 1 ELSE 0 END) as last_24h_requests,
+-        SUM(CASE WHEN datetime(start_time) >= datetime('now', '-48 hours') AND datetime(start_time) < datetime('now', '-24 hours') THEN 1 ELSE 0 END) as prev_24h_requests,
+-        SUM(CASE WHEN datetime(start_time) >= datetime('now', '-24 hours') AND status = 'success' THEN total_tokens ELSE 0 END) as last_24h_tokens,
+-        SUM(CASE WHEN datetime(start_time) >= datetime('now', '-1 hour') THEN 1 ELSE 0 END) as last_hour_requests
+-      FROM spend_logs
+-    `).get() ?? { last_24h_requests: 0, prev_24h_requests: 0, last_24h_tokens: 0, last_hour_requests: 0 };
+-
+-    // Format by_model with tokens_per_sec
+-    const modelsFormatted = byModel.map((row) => {
+-      const avgLatencyMs = row.avg_latency_ms ?? 0;
+-      const completionTokens = row.completion_tokens;
+-      let tokensPerSec: number | null = null;
+-      if (avgLatencyMs > 0 && row.successful > 0) {
+-        const avgCompletion = completionTokens / row.successful;
+-        tokensPerSec = avgCompletion ? Math.round((avgCompletion / (avgLatencyMs / 1000)) * 10) / 10 : null;
+-      }
+-      return {
+-        model: row.model,
+-        requests: row.requests,
+-        successful: row.successful,
+-        success_rate: row.requests ? Math.round((row.successful / row.requests) * 1000) / 10 : 0,
+-        total_tokens: row.total_tokens,
+-        prompt_tokens: row.prompt_tokens,
+-        completion_tokens: completionTokens,
+-        avg_tokens: Math.round(row.avg_tokens ?? 0),
+-        avg_latency_ms: Math.round(avgLatencyMs),
+-        p50_latency_ms: Math.round(avgLatencyMs), // Approximation
+-        avg_ttft_ms: Math.round(row.avg_ttft_ms ?? 0),
+-        tokens_per_sec: tokensPerSec,
+-        prefill_tps: null,
+-        generation_tps: null,
+-      };
+-    });
+-
+-    const successRate = totals.total_requests
+-      ? Math.round((totals.successful_requests / totals.total_requests) * 10000) / 100
+-      : 0;
+-
+-    return {
+-      totals: {
+-        total_tokens: totals.total_tokens,
+-        prompt_tokens: totals.prompt_tokens,
+-        completion_tokens: totals.completion_tokens,
+-        total_requests: totals.total_requests,
+-        successful_requests: totals.successful_requests,
+-        failed_requests: totals.failed_requests,
+-        success_rate: successRate,
+-        unique_sessions: totals.unique_sessions,
+-        unique_users: 2, // Hardcoded for now
+-      },
+-      latency: {
+-        avg_ms: Math.round(latency.avg_ms ?? 0),
+-        p50_ms: getPercentile(latencyPercentiles, 0.5),
+-        p95_ms: getPercentile(latencyPercentiles, 0.95),
+-        p99_ms: getPercentile(latencyPercentiles, 0.99),
+-        min_ms: Math.round(latency.min_ms ?? 0),
+-        max_ms: Math.round(latency.max_ms ?? 0),
+-      },
+-      ttft: {
+-        avg_ms: Math.round(ttft.avg_ms ?? 0),
+-        p50_ms: getPercentile(ttftPercentiles.map(r => ({ latency_ms: r.ttft_ms })), 0.5),
+-        p95_ms: getPercentile(ttftPercentiles.map(r => ({ latency_ms: r.ttft_ms })), 0.95),
+-        p99_ms: getPercentile(ttftPercentiles.map(r => ({ latency_ms: r.ttft_ms })), 0.99),
+-      },
+-      tokens_per_request: {
+-        avg: Math.round(tokenStats.avg_tokens ?? 0),
+-        avg_prompt: Math.round(tokenStats.avg_prompt ?? 0),
+-        avg_completion: Math.round(tokenStats.avg_completion ?? 0),
+-        max: tokenStats.max_tokens ?? 0,
+-        p50: getPercentile(tokenPercentiles.map(r => ({ latency_ms: r.tokens })), 0.5),
+-        p95: getPercentile(tokenPercentiles.map(r => ({ latency_ms: r.tokens })), 0.95),
+-      },
+-      cache,
+-      week_over_week: {
+-        this_week: {
+-          requests: wow.this_week_requests,
+-          tokens: wow.this_week_tokens,
+-          successful: wow.this_week_successful,
+-        },
+-        last_week: {
+-          requests: wow.last_week_requests,
+-          tokens: wow.last_week_tokens,
+-          successful: wow.last_week_successful,
+-        },
+-        change_pct: {
+-          requests: calcChange(wow.this_week_requests, wow.last_week_requests),
+-          tokens: calcChange(wow.this_week_tokens, wow.last_week_tokens),
+-        },
+-      },
+-      recent_activity: {
+-        last_hour_requests: recent.last_hour_requests,
+-        last_24h_requests: recent.last_24h_requests,
+-        prev_24h_requests: recent.prev_24h_requests,
+-        last_24h_tokens: recent.last_24h_tokens,
+-        change_24h_pct: calcChange(recent.last_24h_requests, recent.prev_24h_requests),
+-      },
+-      peak_days: peakDays.map((row) => ({
+-        date: row.date,
+-        requests: row.requests,
+-        tokens: row.tokens,
+-      })),
+-      peak_hours: peakHours.map((row) => ({
+-        hour: row.hour,
+-        requests: row.requests,
+-      })),
+-      by_model: modelsFormatted,
+-      daily: daily.map((row) => ({
+-        date: row.date,
+-        requests: row.requests,
+-        successful: row.successful,
+-        success_rate: row.requests ? Math.round((row.successful / row.requests) * 1000) / 10 : 0,
+-        total_tokens: row.total_tokens,
+-        prompt_tokens: row.prompt_tokens,
+-        completion_tokens: row.completion_tokens,
+-        avg_latency_ms: Math.round(row.avg_latency_ms ?? 0),
+-      })),
+-      daily_by_model: dailyByModel.map((row) => ({
+-        date: row.date,
+-        model: row.model,
+-        requests: row.requests,
+-        successful: row.successful,
+-        success_rate: row.requests ? Math.round((row.successful / row.requests) * 1000) / 10 : 0,
+-        total_tokens: row.total_tokens,
+-        prompt_tokens: row.prompt_tokens,
+-        completion_tokens: row.completion_tokens,
+-      })),
+-      hourly_pattern: hourly.map((row) => ({
+-        hour: row.hour,
+-        requests: row.requests,
+-        successful: row.successful,
+-        tokens: row.tokens,
+-      })),
+-    };
+-  } catch (error) {
+-    console.error('[Usage] Error fetching usage stats from sqlite spend_logs:', error);
+-    return null;
+-  } finally {
+-    if (db) db.close();
+-  }
+-};
+diff --git a/controller/src/modules/proxy/openai-routes.ts b/controller/src/modules/proxy/openai-routes.ts
+index 70e851d..9bd43ac 100644
+--- a/controller/src/modules/proxy/openai-routes.ts
++++ b/controller/src/modules/proxy/openai-routes.ts
+@@ -177,33 +177,27 @@ export const registerOpenAIRoutes = (app: Hono, context: AppContext): void => {
+       }
+     }
+ 
+-    const toolsPayload = Array.isArray(parsed["tools"]) ? parsed["tools"] : [];
+-    const hasTools = toolsPayload.length > 0;
+-    const useDirectInference = isStreaming && hasTools && !providerRouting;
+     const upstreamUrl =
+       providerRouting && requestedModel
+         ? `${providerRouting.baseUrl.replace(/\/+$/, "")}/v1/chat/completions`
+-        : useDirectInference
+-          ? buildInferenceUrl(context, "/v1/chat/completions")
+-          : "http://localhost:4100/v1/chat/completions";
+-    const masterKey = process.env["LITELLM_MASTER_KEY"] ?? "sk-master";
++        : buildInferenceUrl(context, "/v1/chat/completions");
+     const inferenceKey = process.env["INFERENCE_API_KEY"] ?? "";
+     const headers: Record<string, string> = {
+       "Content-Type": "application/json",
+       ...(providerRouting
+         ? { Authorization: `Bearer ${providerRouting.apiKey}` }
+-        : useDirectInference
+-          ? inferenceKey
+-            ? { Authorization: `Bearer ${inferenceKey}` }
+-            : {}
+-          : { Authorization: `Bearer ${masterKey}` }),
++        : inferenceKey
++          ? { Authorization: `Bearer ${inferenceKey}` }
++          : {}),
+     };
+     const finalBody = bodyChanged
+       ? new TextEncoder().encode(JSON.stringify(parsed)).buffer
+       : bodyBuffer;
+ 
+     if (!isStreaming) {
++      const startTime = new Date();
+       const response = await fetch(upstreamUrl, { method: "POST", headers, body: finalBody });
++      const endTime = new Date();
+       const result = (await response.json()) as Record<string, unknown>;
+ 
+       const usage = result["usage"] as Record<string, number> | undefined;
+@@ -221,6 +215,19 @@ export const registerOpenAIRoutes = (app: Hono, context: AppContext): void => {
+         if (promptTokens > 0 || completionTokens > 0) {
+           context.stores.lifetimeMetricsStore.addRequests(1);
+         }
++
++        context.stores.lifetimeMetricsStore.insertRequestLog({
++          start_time: startTime.toISOString(),
++          end_time: endTime.toISOString(),
++          model: requestedModel ?? "unknown",
++          status: response.ok ? "success" : "error",
++          prompt_tokens: promptTokens,
++          completion_tokens: completionTokens,
++          total_tokens: promptTokens + completionTokens,
++          latency_ms: endTime.getTime() - startTime.getTime(),
++          ttft_ms: null,
++          is_streaming: false,
++        });
+       }
+ 
+       const choices = result["choices"];
+@@ -239,6 +246,8 @@ export const registerOpenAIRoutes = (app: Hono, context: AppContext): void => {
+       return ctx.json(result, { status: response.status });
+     }
+ 
++    const streamStartTime = new Date();
++
+     const upstreamResponse = await fetch(upstreamUrl, { method: "POST", headers, body: finalBody });
+     if (!upstreamResponse.ok) {
+       const errorText = await upstreamResponse.text();
+@@ -250,17 +259,32 @@ export const registerOpenAIRoutes = (app: Hono, context: AppContext): void => {
+       });
+     }
+ 
+-    const reader = upstreamResponse.body?.getReader();
+-    if (!reader) {
++    const rawReader = upstreamResponse.body?.getReader();
++    if (!rawReader) {
+       throw serviceUnavailable(
+         providerRouting
+           ? `${requestProvider} backend unavailable`
+-          : useDirectInference
+-            ? "Inference backend unavailable"
+-            : "LiteLLM backend unavailable"
++          : "Inference backend unavailable"
+       );
+     }
+ 
++    // Track TTFT via wrapped reader
++    let firstDataTime: Date | null = null;
++    const wrappedReader = new ReadableStream<Uint8Array>({
++      async start(controller) {
++        while (true) {
++          const { done, value } = await rawReader.read();
++          if (done) {
++            controller.close();
++            break;
++          }
++          if (!firstDataTime) firstDataTime = new Date();
++          controller.enqueue(value);
++        }
++      },
++    });
++    const reader = wrappedReader.getReader();
++
+     const stream = createToolCallStream(reader, (usage) => {
+       if (usage.prompt_tokens > 0) {
+         context.stores.lifetimeMetricsStore.addPromptTokens(usage.prompt_tokens);
+@@ -273,6 +297,19 @@ export const registerOpenAIRoutes = (app: Hono, context: AppContext): void => {
+       if (usage.prompt_tokens > 0 || usage.completion_tokens > 0) {
+         context.stores.lifetimeMetricsStore.addRequests(1);
+       }
++
++      context.stores.lifetimeMetricsStore.insertRequestLog({
++        start_time: streamStartTime.toISOString(),
++        end_time: new Date().toISOString(),
++        model: requestedModel ?? "unknown",
++        status: "success",
++        prompt_tokens: usage.prompt_tokens,
++        completion_tokens: usage.completion_tokens,
++        total_tokens: usage.prompt_tokens + usage.completion_tokens,
++        latency_ms: Date.now() - streamStartTime.getTime(),
++        ttft_ms: firstDataTime ? firstDataTime.getTime() - streamStartTime.getTime() : null,
++        is_streaming: true,
++      });
+     });
+ 
+     return new Response(stream, { headers: buildSseHeaders() });
+diff --git a/controller/src/modules/proxy/tokenization-routes.ts b/controller/src/modules/proxy/tokenization-routes.ts
+index 298ec8b..ef09864 100644
+--- a/controller/src/modules/proxy/tokenization-routes.ts
++++ b/controller/src/modules/proxy/tokenization-routes.ts
+@@ -2,7 +2,6 @@
+ import type { Hono } from "hono";
+ import type { AppContext } from "../../types/context";
+ import { fetchInference } from "../../services/inference/inference-client";
+-import { fetchLocal } from "../../http/local-fetch";
+ 
+ /**
+  * Register tokenization and title routes.
+@@ -224,12 +223,12 @@ Assistant: ${assistantMessage ? assistantMessage.slice(0, 500) : "(response pend
+ 
+ Title:`;
+ 
+-      const litellmKey = process.env["LITELLM_MASTER_KEY"] ?? "sk-master";
+-      const response = await fetchLocal(4100, "/v1/chat/completions", {
++      const inferenceKey = process.env["INFERENCE_API_KEY"] ?? "";
++      const response = await fetchInference(context, "/v1/chat/completions", {
+         method: "POST",
+         headers: {
+           "Content-Type": "application/json",
+-          Authorization: `Bearer ${litellmKey}`,
++          ...(inferenceKey ? { Authorization: `Bearer ${inferenceKey}` } : {}),
+         },
+         body: JSON.stringify({
+           model,
+diff --git a/docker-compose.yml b/docker-compose.yml
+index dbb24c4..1846ed7 100644
+--- a/docker-compose.yml
++++ b/docker-compose.yml
+@@ -3,54 +3,6 @@
+ # Controller and frontend run natively on the host (not in Docker)
+ # because they need nvidia-smi access and host process visibility.
+ 
+-services:
+-  postgres:
+-    image: postgres:16
+-    container_name: vllm-studio-postgres
+-    ports:
+-      - "5432:5432"
+-    environment:
+-      - POSTGRES_USER=postgres
+-      - POSTGRES_PASSWORD=postgres
+-      - POSTGRES_DB=litellm
+-    volumes:
+-      - ./data/postgres:/var/lib/postgresql/data
+-    restart: unless-stopped
+-    healthcheck:
+-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+-      interval: 10s
+-      timeout: 5s
+-      retries: 5
+-
+-  litellm:
+-    image: ghcr.io/berriai/litellm:main-latest
+-    container_name: vllm-studio-litellm
+-    ports:
+-      - "4100:4000"
+-    volumes:
+-      - ./config/litellm.yaml:/app/config.yaml
+-      - ./config/think_parser.py:/app/think_parser.py
+-      - ./data:/app/data
+-    environment:
+-      - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY:-sk-master}
+-      - DATABASE_URL=postgresql://postgres:postgres@vllm-studio-postgres:5432/litellm?connect_timeout=10&pool_pre_ping=true&pool_size=5&max_overflow=10
+-      - INFERENCE_API_BASE=${INFERENCE_API_BASE:-http://host.docker.internal:8000/v1}
+-      - INFERENCE_API_KEY=${INFERENCE_API_KEY:-sk-placeholder}
+-      - PYTHONPATH=/app
+-    extra_hosts:
+-      - "host.docker.internal:host-gateway"
+-    command: ["--config", "/app/config.yaml", "--port", "4000"]
+-    restart: unless-stopped
+-    depends_on:
+-      postgres:
+-        condition: service_started
+-    healthcheck:
+-      test:
+-        [
+-          "CMD-SHELL",
+-          "python -c \"import urllib.request, urllib.error, sys; req = urllib.request.Request('http://localhost:4000/health');\ntry:\n  urllib.request.urlopen(req, timeout=5)\n  sys.exit(0)\nexcept urllib.error.HTTPError as e:\n  sys.exit(0 if e.code == 401 else 1)\nexcept Exception:\n  sys.exit(1)\n\"",
+-        ]
+-      interval: 30s
+-      timeout: 10s
+-      retries: 3
+-      start_period: 40s
++# NOTE: LiteLLM and Postgres services were removed.
++# All inference requests now go directly to the backend (vLLM/SGLang/llama.cpp).
++# Usage analytics use SQLite (request_logs table).
+diff --git a/frontend/.env.example b/frontend/.env.example
+index 9e1029d..c65380f 100644
+--- a/frontend/.env.example
++++ b/frontend/.env.example
+@@ -4,11 +4,6 @@
+ NEXT_PUBLIC_API_URL=http://localhost:8080
+ BACKEND_URL=http://localhost:8080
+ 
+-# LiteLLM API Gateway (for chat)
+-NEXT_PUBLIC_LITELLM_URL=http://localhost:4100
+-LITELLM_URL=http://localhost:4100
+-LITELLM_MASTER_KEY=sk-master
+-
+ # Optional controller API authentication
+ # Prefer saving this server-side via /api/settings instead of persisting it in the browser.
+ API_KEY=
+diff --git a/frontend/package-lock.json b/frontend/package-lock.json
+index 85920d5..bd7f8da 100644
+--- a/frontend/package-lock.json
++++ b/frontend/package-lock.json
+@@ -2586,17 +2586,6 @@
+         "node": ">=10"
+       }
+     },
+-    "node_modules/@opentelemetry/api": {
+-      "version": "1.9.0",
+-      "resolved": "https://registry.npmjs.org/@opentelemetry/api/-/api-1.9.0.tgz",
+-      "integrity": "sha512-3giAOQvZiH5F9bMlMiv8+GSPMeqg0dbaeo58/0SlA9sxSqZhnUtxzX9/2FzyhS9sWQf5S0GJE0AKBrFqjpeYcg==",
+-      "license": "Apache-2.0",
+-      "optional": true,
+-      "peer": true,
+-      "engines": {
+-        "node": ">=8.0.0"
+-      }
+-    },
+     "node_modules/@oxc-resolver/binding-android-arm-eabi": {
+       "version": "11.16.4",
+       "resolved": "https://registry.npmjs.org/@oxc-resolver/binding-android-arm-eabi/-/binding-android-arm-eabi-11.16.4.tgz",
+@@ -13474,7 +13463,6 @@
+       "version": "2.3.2",
+       "resolved": "https://registry.npmjs.org/fsevents/-/fsevents-2.3.2.tgz",
+       "integrity": "sha512-xiqMQR4xAeHTuB9uWm+fFRcIOgKBMiOBP+eXiyT7jsgVCq1bkVygt00oASowB7EdtpOHaaPgKt812P9ab+DDKA==",
+-      "dev": true,
+       "hasInstallScript": true,
+       "optional": true,
+       "os": [
+@@ -16726,23 +16714,6 @@
+       "dev": true,
+       "license": "ISC"
+     },
+-    "node_modules/yaml": {
+-      "version": "2.8.2",
+-      "resolved": "https://registry.npmjs.org/yaml/-/yaml-2.8.2.tgz",
+-      "integrity": "sha512-mplynKqc1C2hTVYxd0PU2xQAc22TI1vShAYGksCCfxbn/dFwnHTNi1bvYsBTkhdUNtGIf5xNOg938rrSSYvS9A==",
+-      "dev": true,
+-      "optional": true,
+-      "peer": true,
+-      "bin": {
+-        "yaml": "bin.mjs"
+-      },
+-      "engines": {
+-        "node": ">= 14.6"
+-      },
+-      "funding": {
+-        "url": "https://github.com/sponsors/eemeli"
+-      }
+-    },
+     "node_modules/yargs": {
+       "version": "16.2.0",
+       "resolved": "https://registry.npmjs.org/yargs/-/yargs-16.2.0.tgz",
+diff --git a/frontend/src/app/configs/_components/config-cards.tsx b/frontend/src/app/configs/_components/config-cards.tsx
+index 98b4cd9..0cd0f43 100644
+--- a/frontend/src/app/configs/_components/config-cards.tsx
++++ b/frontend/src/app/configs/_components/config-cards.tsx
+@@ -212,12 +212,6 @@ export function ConfigCards({ data }: { data: ConfigData }) {
+           icon={<Globe className="h-3 w-3" />}
+           truncate
+         />
+-        <ConfigRow
+-          label="LiteLLM"
+-          value={data.environment.litellm_url}
+-          icon={<Globe className="h-3 w-3" />}
+-          truncate
+-        />
+         <ConfigRow
+           label="Frontend"
+           value={data.environment.frontend_url}
+diff --git a/frontend/src/app/configs/_components/connection-flow.tsx b/frontend/src/app/configs/_components/connection-flow.tsx
+index 845c5df..230287a 100644
+--- a/frontend/src/app/configs/_components/connection-flow.tsx
++++ b/frontend/src/app/configs/_components/connection-flow.tsx
+@@ -3,8 +3,7 @@ export function ConnectionFlow() {
+   const flowItems = [
+     { name: "Client", port: "3000", color: "bg-(--border)" },
+     { name: "UI", port: "8080", color: "bg-(--hl1)" },
+-    { name: "API", port: "4100", color: "bg-(--hl1)" },
+-    { name: "LiteLLM", port: "8000", color: "bg-(--hl1)" },
++    { name: "API", port: "8000", color: "bg-(--hl1)" },
+     { name: "vLLM", port: "", color: "bg-(--hl1)" },
+   ];
+ 
+@@ -54,15 +53,6 @@ export function ConnectionFlow() {
+               API
+             </div>
+           </div>
+-          <div className="flex-1 flex items-center gap-1 px-2">
+-            <div className="h-0.5 flex-1 bg-(--border)" />
+-            <span className="text-(--dim) text-xs px-1">:4100</span>
+-          </div>
+-          <div className="flex flex-col items-center gap-2">
+-            <div className="w-16 h-16 rounded-lg bg-(--hl1) flex items-center justify-center text-(--fg) font-medium">
+-              LLM
+-            </div>
+-          </div>
+           <div className="flex-1 flex items-center gap-1 px-2">
+             <div className="h-0.5 flex-1 bg-(--border)" />
+             <span className="text-(--dim) text-xs px-1">:8000</span>
+@@ -74,10 +64,9 @@ export function ConnectionFlow() {
+           </div>
+         </div>
+         <div className="mt-4 pt-4 border-t border-(--border) text-[10px] sm:text-xs text-(--dim) text-center">
+-          Client → Frontend → Controller → LiteLLM → Inference Backend
++          Client → Frontend → Controller → Inference Backend
+         </div>
+       </div>
+     </div>
+   );
+ }
+-
+diff --git a/frontend/src/app/usage/_components/cost-breakdown.tsx b/frontend/src/app/usage/_components/cost-breakdown.tsx
+index c9cd9c9..10912be 100644
+--- a/frontend/src/app/usage/_components/cost-breakdown.tsx
++++ b/frontend/src/app/usage/_components/cost-breakdown.tsx
+@@ -54,7 +54,15 @@ function CostCard({ icon: Icon, label, value, subvalue }: CostCardProps) {
+   );
+ }
+ 
+-export function CostBreakdown() {
++const PERIOD_LABELS: Record<string, string> = {
++  all: "All time",
++  d: "Last 24 hours",
++  w: "Last 7 days",
++  m: "Last 30 days",
++  y: "Last year",
++};
++
++export function CostBreakdown({ period }: { period?: string }) {
+   const [metrics, setMetrics] = useState<Metrics | null>(null);
+   const [loading, setLoading] = useState(true);
+   const [error, setError] = useState<string | null>(null);
+@@ -64,7 +72,7 @@ export function CostBreakdown() {
+       try {
+         setLoading(true);
+         setError(null);
+-        const data = await api.getLifetimeMetrics();
++        const data = await api.getLifetimeMetrics(period);
+         setMetrics(data);
+       } catch (e) {
+         setError(e instanceof Error ? e.message : "Failed to load cost data");
+@@ -73,7 +81,7 @@ export function CostBreakdown() {
+       }
+     };
+     fetchMetrics();
+-  }, []);
++  }, [period]);
+ 
+   if (loading) {
+     return (
+@@ -116,14 +124,14 @@ export function CostBreakdown() {
+         <div className="text-xs text-(--dim) uppercase tracking-wider">Cost Breakdown</div>
+         <div className="flex items-center gap-2">
+           <Calendar className="h-4 w-4 text-(--dim)" />
+-          <span className="text-xs text-(--dim)">All time</span>
++          <span className="text-xs text-(--dim)">{PERIOD_LABELS[period ?? "all"] ?? "All time"}</span>
+         </div>
+       </div>
+ 
+       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+         <CostCard
+           icon={Zap}
+-          label="Lifetime Cost"
++          label={period && period !== "all" ? "Cost" : "Lifetime Cost"}
+           value={`${currencySymbol}${lifetimeCost.toFixed(2)}`}
+           subvalue={metrics?.energy_kwh ? `${metrics.energy_kwh.toFixed(2)} kWh` : undefined}
+         />
+diff --git a/frontend/src/app/usage/hooks/use-usage.ts b/frontend/src/app/usage/hooks/use-usage.ts
+index 42aadcd..e2d6f0f 100644
+--- a/frontend/src/app/usage/hooks/use-usage.ts
++++ b/frontend/src/app/usage/hooks/use-usage.ts
+@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
+ import api from "@/lib/api";
+ import type { PeakMetrics, SortDirection, SortField, UsageStats } from "@/lib/types";
+ 
+-export function useUsage() {
++export function useUsage(period?: string) {
+   const [stats, setStats] = useState<UsageStats | null>(null);
+   const [peakMetrics, setPeakMetrics] = useState<Map<string, PeakMetrics>>(new Map());
+   const [loading, setLoading] = useState(true);
+@@ -18,7 +18,10 @@ export function useUsage() {
+     try {
+       setLoading(true);
+       setError(null);
+-      const [usageData, peakData] = await Promise.all([api.getUsageStats(), api.getPeakMetrics()]);
++      const [usageData, peakData] = await Promise.all([
++        api.getUsageStats(period),
++        api.getPeakMetrics(),
++      ]);
+       setStats(usageData);
+ 
+       if (peakData.metrics) {
+@@ -33,7 +36,7 @@ export function useUsage() {
+     } finally {
+       setLoading(false);
+     }
+-  }, []);
++  }, [period]);
+ 
+   useEffect(() => {
+     loadStats();
+diff --git a/frontend/src/app/usage/page.tsx b/frontend/src/app/usage/page.tsx
+index 3fee86a..10639e1 100644
+--- a/frontend/src/app/usage/page.tsx
++++ b/frontend/src/app/usage/page.tsx
+@@ -1,6 +1,7 @@
+ // CRITICAL
+ "use client";
+ 
++import { useState } from "react";
+ import { RefreshButton, PageState } from "@/components/shared";
+ import { DailyUsageChart } from "./_components/daily-usage-chart";
+ import { ModelPerformanceTable } from "./_components/model-performance-table";
+@@ -11,7 +12,16 @@ import { CostBreakdown } from "./_components/cost-breakdown";
+ import { useUsage } from "./hooks/use-usage";
+ import { BarChart3 } from "lucide-react";
+ 
++const PERIODS = [
++  { key: "d", label: "D" },
++  { key: "w", label: "W" },
++  { key: "m", label: "M" },
++  { key: "y", label: "Y" },
++  { key: "all", label: "All" },
++] as const;
++
+ export default function UsagePage() {
++  const [period, setPeriod] = useState<string>("all");
+   const {
+     stats,
+     peakMetrics,
+@@ -26,7 +36,7 @@ export default function UsagePage() {
+     sortedModels,
+     handleSort,
+     toggleRow,
+-  } = useUsage();
++  } = useUsage(period);
+ 
+   const pageStateRender = PageState({
+     loading,
+@@ -48,14 +58,32 @@ export default function UsagePage() {
+             <BarChart3 className="h-5 w-5 text-(--dim)" />
+             <h1 className="text-lg font-medium">Usage Analytics</h1>
+           </div>
+-          <RefreshButton onRefresh={loadStats} loading={loading} />
++          <div className="flex items-center gap-2">
++            {/* Period Toggle */}
++            <div className="flex items-center bg-(--bg-subtle) rounded-full p-0.5">
++              {PERIODS.map((p) => (
++                <button
++                  key={p.key}
++                  onClick={() => setPeriod(p.key)}
++                  className={`px-2.5 py-1 text-xs font-medium rounded-full transition-colors ${
++                    period === p.key
++                      ? "bg-(--accent) text-(--fg)"
++                      : "text-(--dim) hover:text-(--fg)"
++                  }`}
++                >
++                  {p.label}
++                </button>
++              ))}
++            </div>
++            <RefreshButton onRefresh={loadStats} loading={loading} />
++          </div>
+         </div>
+ 
+         {/* Overview Metrics */}
+         {OverviewMetrics(stats)}
+ 
+         {/* Cost Breakdown */}
+-        <CostBreakdown />
++        <CostBreakdown period={period} />
+ 
+         {/* Daily Usage Chart */}
+         {DailyUsageChart(stats, dailyByModel, modelsForChart)}
+diff --git a/frontend/src/lib/api/system.ts b/frontend/src/lib/api/system.ts
+index bce4bee..6e562ca 100644
+--- a/frontend/src/lib/api/system.ts
++++ b/frontend/src/lib/api/system.ts
+@@ -78,7 +78,8 @@ export function createSystemApi(core: ApiCore) {
+ 
+     getMetrics: (): Promise<Metrics> => core.request("/v1/metrics/vllm"),
+ 
+-    getLifetimeMetrics: (): Promise<Metrics> => core.request("/lifetime-metrics"),
++    getLifetimeMetrics: (period?: string): Promise<Metrics> =>
++      core.request(`/lifetime-metrics${period ? `?period=${period}` : ""}`),
+ 
+     runBenchmark: (
+       promptTokens = 1000,
+@@ -122,7 +123,8 @@ export function createSystemApi(core: ApiCore) {
+       return core.request(`/peak-metrics${query}`);
+     },
+ 
+-    getUsageStats: (): Promise<UsageStats> => core.request("/usage"),
++    getUsageStats: (period?: string): Promise<UsageStats> =>
++      core.request(`/usage${period ? `?period=${period}` : ""}`),
+ 
+     getSystemConfig: (): Promise<ConfigData> => core.request("/config"),
+ 
+diff --git a/frontend/src/lib/types/system/config.ts b/frontend/src/lib/types/system/config.ts
+index f2ff592..1b0820c 100644
+--- a/frontend/src/lib/types/system/config.ts
++++ b/frontend/src/lib/types/system/config.ts
+@@ -30,7 +30,6 @@ export interface SystemConfig {
+ export interface EnvironmentInfo {
+   controller_url: string;
+   inference_url: string;
+-  litellm_url: string;
+   frontend_url: string;
+ }
+ 
+diff --git a/scripts/deploy-remote.sh b/scripts/deploy-remote.sh
+index c13d2f5..55c9374 100755
+--- a/scripts/deploy-remote.sh
++++ b/scripts/deploy-remote.sh
+@@ -14,10 +14,6 @@
+ #
+ # ─── What runs where ─────────────────────────────────────────────────────
+ #
+-#   Docker (infra only, stays up across deploys):
+-#     postgres:16       :5432   LiteLLM database
+-#     litellm           :4100   API gateway
+-#
+ #   Native on host (needs nvidia-smi + host process visibility):
+ #     controller (bun)  :8080   Model lifecycle, GPU stats, chat, recipes
+ #     frontend (next)   :3000   Web UI
+@@ -128,11 +124,10 @@ sync_shared() {
+ 
+ sync_config() {
+   step "Syncing config"
+-  sync_dir config/ "$REMOTE_DIR/config/"
+   rsync -az -e "ssh $SSH_OPTS" \
+-    docker-compose.yml .env.example \
++    .env.example \
+     "$REMOTE:$REMOTE_DIR/"
+-  ok "config/, docker-compose.yml → remote"
++  ok ".env.example → remote"
+ }
+ 
+ sync_all() {
+@@ -181,8 +176,6 @@ restart_frontend() {
+ set -euo pipefail
+ cd /home/ser/workspace/projects/lmvllm/frontend
+ export BACKEND_URL=http://localhost:8080
+-export LITELLM_URL=http://localhost:4100
+-export LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY:-sk-master}
+ npx next build 2>&1 | tail -5
+ REMOTE
+   ok "next build"
+@@ -197,8 +190,6 @@ pkill -f "next dev" 2>/dev/null || true
+ fuser -k 3000/tcp >/dev/null 2>&1 || true
+ sleep 1
+ export BACKEND_URL=http://localhost:8080
+-export LITELLM_URL=http://localhost:4100
+-export LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY:-sk-master}
+ nohup npx next start > /tmp/frontend-stdout.log 2>&1 &
+ REMOTE
+   wait_port 3000 frontend 15 || return 1
+@@ -208,9 +199,7 @@ REMOTE
+ # ─── Infra ────────────────────────────────────────────────────────────────
+ 
+ start_infra() {
+-  step "Starting Docker infra (postgres + litellm)"
+-  remote "cd $REMOTE_DIR && docker compose up -d postgres litellm 2>&1 | tail -5"
+-  ok "postgres :5432, litellm :4100"
++  step "No Docker infra needed — all services run natively"
+ }
+ 
+ # ─── Status / diagnostics ────────────────────────────────────────────────
+@@ -236,16 +225,6 @@ probe "controller"      http://localhost:8080/health    8080
+ probe "frontend"        http://localhost:3000            3000
+ probe "frontend→proxy"  http://localhost:3000/api/proxy/health 3000
+ probe "vllm"            http://localhost:8000/v1/models  8000
+-
+-# Services that need port checks instead of HTTP probes
+-for pair in "litellm:4100" "postgres:5432"; do
+-  label="${pair%%:*}" port="${pair##*:}"
+-  if ss -tlnp 2>/dev/null | grep -q ":${port}\b"; then
+-    printf "  ${_g}%-22s${_n} %s\n" "$label" ":$port OK"
+-  else
+-    printf "  ${_r}%-22s${_n} %s\n" "$label" ":$port down"
+-  fi
+-done
+ echo ""
+ 
+ # GPU table
+@@ -280,7 +259,7 @@ cd "$(dirname "$0")/.."
+ 
+ case "${1:-}" in
+   controller)
+-    sync_controller; sync_shared; install_controller; restart_controller
++    sync_controller; sync_config; sync_shared; install_controller; restart_controller
+     echo ""; show_status ;;
+   frontend)
+     sync_frontend; install_frontend; restart_frontend
+@@ -292,7 +271,6 @@ case "${1:-}" in
+   ""|all)
+     sync_all
+     install_controller; install_frontend
+-    start_infra
+     restart_controller; restart_frontend
+     echo ""; show_status ;;
+   *)

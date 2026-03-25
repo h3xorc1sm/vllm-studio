@@ -2,26 +2,27 @@
 import type { Hono } from "hono";
 import type { AppContext } from "../../types/context";
 import { getUsageFromChatDatabase } from "./usage/chat-database";
-import { getUsageFromPostgres } from "./usage/postgres";
-import { getUsageFromSqliteSpendLogs } from "./usage/sqlite-spend-logs";
+import { getUsageFromRequestLogs } from "./usage/sqlite-request-logs";
 import { emptyResponse } from "./usage/usage-utilities";
 
 /**
  * Register usage analytics routes.
- * Uses LiteLLM spend logs (Postgres preferred) with SQLite/chat fallbacks.
+ * Tries request_logs (new SQLite source) first, then chat DB.
  * Falls back to empty data if no sources are available.
+ * Supports ?period=d|w|m|y|all query parameter for time filtering.
  * @param app - Hono app.
  * @param context - App context.
  */
 export const registerUsageRoutes = (app: Hono, context: AppContext): void => {
   app.get("/usage", async (ctx) => {
     try {
-      const postgresUsage = await getUsageFromPostgres(context);
-      if (postgresUsage) return ctx.json(postgresUsage);
+      const period = ctx.req.query("period");
 
-      const sqliteUsage = getUsageFromSqliteSpendLogs(context.config.db_path);
-      if (sqliteUsage) return ctx.json(sqliteUsage);
+      // Try new request_logs source first (captures all requests including streaming)
+      const requestLogsUsage = getUsageFromRequestLogs(context.config.db_path, period);
+      if (requestLogsUsage) return ctx.json(requestLogsUsage);
 
+      // Fallback to chat database
       const chatUsage = getUsageFromChatDatabase(context.config.data_dir);
       if (chatUsage) return ctx.json(chatUsage);
 

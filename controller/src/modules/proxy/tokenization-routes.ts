@@ -2,7 +2,6 @@
 import type { Hono } from "hono";
 import type { AppContext } from "../../types/context";
 import { fetchInference } from "../../services/inference/inference-client";
-import { fetchLocal } from "../../http/local-fetch";
 
 /**
  * Register tokenization and title routes.
@@ -224,12 +223,12 @@ Assistant: ${assistantMessage ? assistantMessage.slice(0, 500) : "(response pend
 
 Title:`;
 
-      const litellmKey = process.env["LITELLM_MASTER_KEY"] ?? "sk-master";
-      const response = await fetchLocal(4100, "/v1/chat/completions", {
+      const inferenceKey = process.env["INFERENCE_API_KEY"] ?? "";
+      const response = await fetchInference(context, "/v1/chat/completions", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${litellmKey}`,
+          ...(inferenceKey ? { Authorization: `Bearer ${inferenceKey}` } : {}),
         },
         body: JSON.stringify({
           model,

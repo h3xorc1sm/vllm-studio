@@ -265,42 +265,6 @@ export const registerSystemRoutes = (app: Hono, context: AppContext): void => {
       description: "Inference backend (vLLM, SGLang, or llama.cpp)",
     });
 
-    let litellmStatus = "unknown";
-    try {
-      const masterKey = process.env["LITELLM_MASTER_KEY"] ?? "sk-master";
-      const response = await fetchLocal(4100, "/health", {
-        headers: { Authorization: `Bearer ${masterKey}` },
-        timeoutMs: 10_000,
-      });
-      if (response.status === 200) {
-        const data = (await response.json()) as { healthy_count?: number };
-        litellmStatus = (data.healthy_count ?? 0) > 0 ? "running" : "degraded";
-      } else {
-        litellmStatus = "error";
-      }
-    } catch {
-      litellmStatus = "stopped";
-    }
-
-    services.push({
-      name: "LiteLLM",
-      port: 4100,
-      internal_port: 4000,
-      protocol: "http",
-      status: litellmStatus,
-      description: "API gateway and load balancer",
-    });
-
-    const postgresReachable = await checkService("localhost", 5432);
-    services.push({
-      name: "PostgreSQL",
-      port: 5432,
-      internal_port: 5432,
-      protocol: "tcp",
-      status: postgresReachable ? "running" : "stopped",
-      description: "Database for LiteLLM",
-    });
-
     const redisReachable = await checkService("localhost", 6379);
     services.push({
       name: "Redis",
@@ -362,7 +326,6 @@ export const registerSystemRoutes = (app: Hono, context: AppContext): void => {
       environment: {
         controller_url: `http://${hostname()}:${context.config.port}`,
         inference_url: `http://${hostname()}:${context.config.inference_port}`,
-        litellm_url: `http://${hostname()}:4100`,
         frontend_url: `http://${hostname()}:3000`,
       },
       runtime,

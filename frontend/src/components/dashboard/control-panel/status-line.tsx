@@ -10,6 +10,34 @@ import type {
 } from "@/lib/types";
 import { toGB, toGBFromMB } from "@/lib/formatters";
 
+const CURRENCY_SYMBOLS: Record<string, string> = {
+  USD: "$",
+  EUR: "€",
+  GBP: "£",
+  PLN: "zł",
+  CAD: "C$",
+  AUD: "A$",
+  CHF: "CHF",
+  JPY: "¥",
+  CNY: "¥",
+  SEK: "kr",
+  NOK: "kr",
+  DKK: "kr",
+  CZK: "Kč",
+  KRW: "₩",
+  INR: "₹",
+  BRL: "R$",
+  MXN: "$",
+  ZAR: "R",
+  SGD: "S$",
+  HKD: "HK$",
+  NZD: "NZ$",
+  TWD: "NT$",
+  THB: "฿",
+};
+
+const getCurrencySymbol = (ticker: string): string => CURRENCY_SYMBOLS[ticker] ?? ticker;
+
 interface StatusLineProps {
   currentProcess: ProcessInfo | null;
   currentRecipe: RecipeWithStatus | null;
@@ -51,7 +79,14 @@ export function StatusLine({
     return sum + toGB(g.memory_used ?? 0);
   }, 0);
   
-  const totalCost = metrics?.lifetime_energy_kwh ? (metrics.lifetime_energy_kwh * 0.5).toFixed(2) : null;
+  const electricityRate = metrics?.electricity_rate ?? 0.11;
+  const electricityCurrency = metrics?.electricity_currency ?? "USD";
+  const totalCost = metrics?.total_cost
+    ? metrics.total_cost
+    : metrics?.lifetime_energy_kwh
+      ? (metrics.lifetime_energy_kwh * electricityRate).toFixed(2)
+      : null;
+  const currencySymbol = getCurrencySymbol(electricityCurrency);
   const sessionInput = metrics?.prompt_tokens_total || 0;
   const sessionOutput = metrics?.generation_tokens_total || 0;
 
@@ -106,7 +141,7 @@ export function StatusLine({
             </span>
             {totalCost && (
               <span className="text-(--hl2)">
-                {totalCost} PLN
+                {totalCost} {currencySymbol}
               </span>
             )}
             {inferencePort && (

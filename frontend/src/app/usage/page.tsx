@@ -1,16 +1,27 @@
 // CRITICAL
 "use client";
 
+import { useState } from "react";
 import { RefreshButton, PageState } from "@/components/shared";
 import { DailyUsageChart } from "./_components/daily-usage-chart";
 import { ModelPerformanceTable } from "./_components/model-performance-table";
 import { PerformanceDetails } from "./_components/performance-details";
 import { SecondaryMetrics } from "./_components/secondary-metrics";
 import { OverviewMetrics } from "./_components/overview-metrics";
+import { CostBreakdown } from "./_components/cost-breakdown";
 import { useUsage } from "./hooks/use-usage";
 import { BarChart3 } from "lucide-react";
 
+const PERIODS = [
+  { key: "d", label: "D" },
+  { key: "w", label: "W" },
+  { key: "m", label: "M" },
+  { key: "y", label: "Y" },
+  { key: "all", label: "All" },
+] as const;
+
 export default function UsagePage() {
+  const [period, setPeriod] = useState<string>("all");
   const {
     stats,
     peakMetrics,
@@ -25,7 +36,7 @@ export default function UsagePage() {
     sortedModels,
     handleSort,
     toggleRow,
-  } = useUsage();
+  } = useUsage(period);
 
   const pageStateRender = PageState({
     loading,
@@ -47,11 +58,32 @@ export default function UsagePage() {
             <BarChart3 className="h-5 w-5 text-(--dim)" />
             <h1 className="text-lg font-medium">Usage Analytics</h1>
           </div>
-          <RefreshButton onRefresh={loadStats} loading={loading} />
+          <div className="flex items-center gap-2">
+            {/* Period Toggle */}
+            <div className="flex items-center bg-(--bg-subtle) rounded-full p-0.5">
+              {PERIODS.map((p) => (
+                <button
+                  key={p.key}
+                  onClick={() => setPeriod(p.key)}
+                  className={`px-2.5 py-1 text-xs font-medium rounded-full transition-colors ${
+                    period === p.key
+                      ? "bg-(--accent) text-(--fg)"
+                      : "text-(--dim) hover:text-(--fg)"
+                  }`}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+            <RefreshButton onRefresh={loadStats} loading={loading} />
+          </div>
         </div>
 
         {/* Overview Metrics */}
         {OverviewMetrics(stats)}
+
+        {/* Cost Breakdown */}
+        <CostBreakdown period={period} />
 
         {/* Daily Usage Chart */}
         {DailyUsageChart(stats, dailyByModel, modelsForChart)}

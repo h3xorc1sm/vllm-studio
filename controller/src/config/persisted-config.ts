@@ -19,6 +19,8 @@ export interface PersistedConfig {
   daytona_agent_mode?: boolean;
   agent_fs_local_fallback?: boolean;
   providers?: ProviderConfig[];
+  electricity_rate?: number;
+  electricity_currency?: string;
 }
 
 export const getPersistedConfigPath = (dataDirectory: string): string => {
