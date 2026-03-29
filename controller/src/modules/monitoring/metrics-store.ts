@@ -15,6 +15,7 @@ export interface RequestLogEntry {
   ttft_ms?: number | null;
   session_id?: string | null;
   is_streaming: boolean;
+  cached_tokens?: number | undefined;
 }
 
 const PERIOD_FILTERS: Record<string, string> = {
@@ -237,13 +238,20 @@ export class LifetimeMetricsStore {
         latency_ms REAL,
         ttft_ms REAL,
         session_id TEXT,
-        is_streaming INTEGER NOT NULL DEFAULT 0
+        is_streaming INTEGER NOT NULL DEFAULT 0,
+        cached_tokens INTEGER DEFAULT 0
       )
     `);
     this.db.run(
       "CREATE INDEX IF NOT EXISTS idx_request_logs_start_time ON request_logs(start_time)"
     );
     this.db.run("CREATE INDEX IF NOT EXISTS idx_request_logs_model ON request_logs(model)");
+
+    // Migration: add cached_tokens column to existing databases
+    const columns = this.db.query("PRAGMA table_info(request_logs)").all() as Array<{ name: string }>;
+    if (!columns.some((col) => col.name === "cached_tokens")) {
+      this.db.run("ALTER TABLE request_logs ADD COLUMN cached_tokens INTEGER DEFAULT 0");
+    }
 
     this.db.run(`
       CREATE TABLE IF NOT EXISTS energy_snapshots (
@@ -378,8 +386,8 @@ export class LifetimeMetricsStore {
   public insertRequestLog(entry: RequestLogEntry): number {
     const result = this.db
       .query(
-        `INSERT INTO request_logs (start_time, end_time, model, status, prompt_tokens, completion_tokens, total_tokens, latency_ms, ttft_ms, session_id, is_streaming)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO request_logs (start_time, end_time, model, status, prompt_tokens, completion_tokens, total_tokens, latency_ms, ttft_ms, session_id, is_streaming, cached_tokens)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         entry.start_time,
@@ -393,6 +401,7 @@ export class LifetimeMetricsStore {
         entry.ttft_ms ?? null,
         entry.session_id ?? null,
         entry.is_streaming ? 1 : 0,
+        entry.cached_tokens ?? 0,
       );
     return Number(result.lastInsertRowid);
   }
@@ -431,6 +440,7 @@ export class LifetimeMetricsStore {
         ttft_ms: r["ttft_ms"] != null ? Number(r["ttft_ms"]) : null,
         session_id: r["session_id"] ? String(r["session_id"]) : null,
         is_streaming: Boolean(r["is_streaming"]),
+        cached_tokens: Number(r["cached_tokens"] ?? 0),
       })),
       filtered: Boolean(period && PERIOD_FILTERS[period]),
     };

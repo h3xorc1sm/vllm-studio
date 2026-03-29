@@ -20,7 +20,22 @@ export const registerUsageRoutes = (app: Hono, context: AppContext): void => {
 
       // Try new request_logs source first (captures all requests including streaming)
       const requestLogsUsage = getUsageFromRequestLogs(context.config.db_path, period);
-      if (requestLogsUsage) return ctx.json(requestLogsUsage);
+      if (requestLogsUsage) {
+        // Supplement cache stats from vLLM Prometheus metrics if per-request data is all zeros
+        const cache = requestLogsUsage["cache"] as { hit_rate: number; hit_tokens: number; miss_tokens: number; hits: number; misses: number } | undefined;
+        if (cache && cache.hit_tokens === 0) {
+          const prefixQueries = context.stores.lifetimeMetricsStore.get("prefix_cache_queries_total");
+          const prefixHits = context.stores.lifetimeMetricsStore.get("prefix_cache_hits_total");
+          if (prefixQueries > 0) {
+            cache.hit_tokens = Math.round(prefixHits);
+            cache.miss_tokens = Math.round(prefixQueries - prefixHits);
+            cache.hit_rate = Math.round((prefixHits / prefixQueries) * 10000) / 100;
+            cache.hits = prefixHits > 0 ? 1 : 0;
+            cache.misses = (prefixQueries - prefixHits) > 0 ? 1 : 0;
+          }
+        }
+        return ctx.json(requestLogsUsage);
+      }
 
       // Fallback to chat database
       const chatUsage = getUsageFromChatDatabase(context.config.data_dir);

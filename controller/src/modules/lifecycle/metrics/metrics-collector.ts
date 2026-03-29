@@ -278,6 +278,13 @@ export const startMetricsCollector = (context: AppContext): (() => void) => {
           kvCacheUsage = vllmMetrics["vllm:kv_cache_usage_perc"] ?? 0;
           promptTokensTotal = Number(vllmMetrics["vllm:prompt_tokens_total"] ?? 0);
           generationTokensTotal = Number(vllmMetrics["vllm:generation_tokens_total"] ?? 0);
+
+          // Store prefix cache counters for usage stats
+          const prefixQueries = vllmMetrics["vllm:prefix_cache_queries_total"];
+          const prefixHits = vllmMetrics["vllm:prefix_cache_hits_total"];
+          if (prefixQueries != null) lifetimeStore.set("prefix_cache_queries_total", prefixQueries);
+          if (prefixHits != null) lifetimeStore.set("prefix_cache_hits_total", prefixHits);
+
           lastVllmMetrics = vllmMetrics;
           lastMetricsTime = now;
 

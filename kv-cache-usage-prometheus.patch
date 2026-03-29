@@ -1,0 +1,272 @@
+diff --git a/controller/src/modules/lifecycle/metrics/metrics-collector.ts b/controller/src/modules/lifecycle/metrics/metrics-collector.ts
+index 92417db..fbde7d8 100644
+--- a/controller/src/modules/lifecycle/metrics/metrics-collector.ts
++++ b/controller/src/modules/lifecycle/metrics/metrics-collector.ts
+@@ -278,6 +278,13 @@ export const startMetricsCollector = (context: AppContext): (() => void) => {
+           kvCacheUsage = vllmMetrics["vllm:kv_cache_usage_perc"] ?? 0;
+           promptTokensTotal = Number(vllmMetrics["vllm:prompt_tokens_total"] ?? 0);
+           generationTokensTotal = Number(vllmMetrics["vllm:generation_tokens_total"] ?? 0);
++
++          // Store prefix cache counters for usage stats
++          const prefixQueries = vllmMetrics["vllm:prefix_cache_queries_total"];
++          const prefixHits = vllmMetrics["vllm:prefix_cache_hits_total"];
++          if (prefixQueries != null) lifetimeStore.set("prefix_cache_queries_total", prefixQueries);
++          if (prefixHits != null) lifetimeStore.set("prefix_cache_hits_total", prefixHits);
++
+           lastVllmMetrics = vllmMetrics;
+           lastMetricsTime = now;
+ 
+diff --git a/controller/src/modules/monitoring/metrics-routes.ts b/controller/src/modules/monitoring/metrics-routes.ts
+index 2167488..d1cd074 100644
+--- a/controller/src/modules/monitoring/metrics-routes.ts
++++ b/controller/src/modules/monitoring/metrics-routes.ts
+@@ -73,8 +73,15 @@ export const registerMonitoringRoutes = (app: Hono, context: AppContext): void =
+         requestCount = logs.rows.length;
+ 
+         const currentEnergy = context.stores.lifetimeMetricsStore.getCurrentEnergy();
++        const periodMs: Record<string, number> = {
++          d: 24 * 60 * 60 * 1000,
++          w: 7 * 24 * 60 * 60 * 1000,
++          m: 30 * 24 * 60 * 60 * 1000,
++          y: 365 * 24 * 60 * 60 * 1000,
++        };
++        const periodStart = new Date(Date.now() - (periodMs[period] ?? 0));
+         const snapshot = context.stores.lifetimeMetricsStore.getEnergyBefore(
+-          new Date(Date.now() + new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 19).replace("T", " "),
++          periodStart.toISOString().slice(0, 19).replace("T", " "),
+         );
+         const snapshotEnergy = snapshot?.energy_wh ?? 0;
+         energyKwh = Math.max(0, (currentEnergy - snapshotEnergy)) / 1000;
+@@ -126,8 +133,15 @@ export const registerMonitoringRoutes = (app: Hono, context: AppContext): void =
+       const offset = PERIOD_OFFSETS[period];
+       if (offset) {
+         const currentEnergy = context.stores.lifetimeMetricsStore.getCurrentEnergy();
++        const periodMs: Record<string, number> = {
++          d: 24 * 60 * 60 * 1000,
++          w: 7 * 24 * 60 * 60 * 1000,
++          m: 30 * 24 * 60 * 60 * 1000,
++          y: 365 * 24 * 60 * 60 * 1000,
++        };
++        const periodStart = new Date(Date.now() - (periodMs[period] ?? 0));
+         const snapshot = context.stores.lifetimeMetricsStore.getEnergyBefore(
+-          new Date(Date.now() + new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 19).replace("T", " "),
++          periodStart.toISOString().slice(0, 19).replace("T", " "),
+         );
+         const snapshotEnergy = snapshot?.energy_wh ?? 0;
+         energyKwh = Math.max(0, (currentEnergy - snapshotEnergy)) / 1000;
+diff --git a/controller/src/modules/monitoring/metrics-store.ts b/controller/src/modules/monitoring/metrics-store.ts
+index 4232286..ccd8a96 100644
+--- a/controller/src/modules/monitoring/metrics-store.ts
++++ b/controller/src/modules/monitoring/metrics-store.ts
+@@ -15,6 +15,7 @@ export interface RequestLogEntry {
+   ttft_ms?: number | null;
+   session_id?: string | null;
+   is_streaming: boolean;
++  cached_tokens?: number | undefined;
+ }
+ 
+ const PERIOD_FILTERS: Record<string, string> = {
+@@ -237,7 +238,8 @@ export class LifetimeMetricsStore {
+         latency_ms REAL,
+         ttft_ms REAL,
+         session_id TEXT,
+-        is_streaming INTEGER NOT NULL DEFAULT 0
++        is_streaming INTEGER NOT NULL DEFAULT 0,
++        cached_tokens INTEGER DEFAULT 0
+       )
+     `);
+     this.db.run(
+@@ -245,6 +247,12 @@ export class LifetimeMetricsStore {
+     );
+     this.db.run("CREATE INDEX IF NOT EXISTS idx_request_logs_model ON request_logs(model)");
+ 
++    // Migration: add cached_tokens column to existing databases
++    const columns = this.db.query("PRAGMA table_info(request_logs)").all() as Array<{ name: string }>;
++    if (!columns.some((col) => col.name === "cached_tokens")) {
++      this.db.run("ALTER TABLE request_logs ADD COLUMN cached_tokens INTEGER DEFAULT 0");
++    }
++
+     this.db.run(`
+       CREATE TABLE IF NOT EXISTS energy_snapshots (
+         sampled_at TEXT PRIMARY KEY,
+@@ -378,8 +386,8 @@ export class LifetimeMetricsStore {
+   public insertRequestLog(entry: RequestLogEntry): number {
+     const result = this.db
+       .query(
+-        `INSERT INTO request_logs (start_time, end_time, model, status, prompt_tokens, completion_tokens, total_tokens, latency_ms, ttft_ms, session_id, is_streaming)
+-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
++        `INSERT INTO request_logs (start_time, end_time, model, status, prompt_tokens, completion_tokens, total_tokens, latency_ms, ttft_ms, session_id, is_streaming, cached_tokens)
++         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+       )
+       .run(
+         entry.start_time,
+@@ -393,6 +401,7 @@ export class LifetimeMetricsStore {
+         entry.ttft_ms ?? null,
+         entry.session_id ?? null,
+         entry.is_streaming ? 1 : 0,
++        entry.cached_tokens ?? 0,
+       );
+     return Number(result.lastInsertRowid);
+   }
+@@ -431,6 +440,7 @@ export class LifetimeMetricsStore {
+         ttft_ms: r["ttft_ms"] != null ? Number(r["ttft_ms"]) : null,
+         session_id: r["session_id"] ? String(r["session_id"]) : null,
+         is_streaming: Boolean(r["is_streaming"]),
++        cached_tokens: Number(r["cached_tokens"] ?? 0),
+       })),
+       filtered: Boolean(period && PERIOD_FILTERS[period]),
+     };
+diff --git a/controller/src/modules/monitoring/usage-routes.ts b/controller/src/modules/monitoring/usage-routes.ts
+index 1820b97..7593b3f 100644
+--- a/controller/src/modules/monitoring/usage-routes.ts
++++ b/controller/src/modules/monitoring/usage-routes.ts
+@@ -20,7 +20,22 @@ export const registerUsageRoutes = (app: Hono, context: AppContext): void => {
+ 
+       // Try new request_logs source first (captures all requests including streaming)
+       const requestLogsUsage = getUsageFromRequestLogs(context.config.db_path, period);
+-      if (requestLogsUsage) return ctx.json(requestLogsUsage);
++      if (requestLogsUsage) {
++        // Supplement cache stats from vLLM Prometheus metrics if per-request data is all zeros
++        const cache = requestLogsUsage["cache"] as { hit_rate: number; hit_tokens: number; miss_tokens: number; hits: number; misses: number } | undefined;
++        if (cache && cache.hit_tokens === 0 && cache.miss_tokens === 0) {
++          const prefixQueries = context.stores.lifetimeMetricsStore.get("prefix_cache_queries_total");
++          const prefixHits = context.stores.lifetimeMetricsStore.get("prefix_cache_hits_total");
++          if (prefixQueries > 0) {
++            cache.hit_tokens = Math.round(prefixHits);
++            cache.miss_tokens = Math.round(prefixQueries - prefixHits);
++            cache.hit_rate = Math.round((prefixHits / prefixQueries) * 10000) / 100;
++            cache.hits = prefixHits > 0 ? 1 : 0;
++            cache.misses = (prefixQueries - prefixHits) > 0 ? 1 : 0;
++          }
++        }
++        return ctx.json(requestLogsUsage);
++      }
+ 
+       // Fallback to chat database
+       const chatUsage = getUsageFromChatDatabase(context.config.data_dir);
+diff --git a/controller/src/modules/monitoring/usage/sqlite-request-logs.ts b/controller/src/modules/monitoring/usage/sqlite-request-logs.ts
+index ba2de44..f9ac821 100644
+--- a/controller/src/modules/monitoring/usage/sqlite-request-logs.ts
++++ b/controller/src/modules/monitoring/usage/sqlite-request-logs.ts
+@@ -131,7 +131,7 @@ export const getUsageFromRequestLogs = (
+         AVG(CASE WHEN status = 'success' THEN latency_ms END) as avg_latency_ms,
+         AVG(CASE WHEN status = 'success' THEN ttft_ms END) as avg_ttft_ms
+       FROM request_logs
+-      ${where} AND model IS NOT NULL AND model != ''
++      ${where ? `${where} AND` : "WHERE"} model IS NOT NULL AND model != ''
+       GROUP BY model
+       ORDER BY total_tokens DESC
+       LIMIT 25
+@@ -198,7 +198,7 @@ export const getUsageFromRequestLogs = (
+         SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as successful,
+         COALESCE(SUM(total_tokens), 0) as tokens
+       FROM request_logs
+-      ${where} AND start_time IS NOT NULL
++      ${where ? `${where} AND` : "WHERE"} start_time IS NOT NULL
+       GROUP BY strftime('%H', start_time)
+       ORDER BY hour
+     `).all();
+@@ -300,6 +300,27 @@ export const getUsageFromRequestLogs = (
+       ? Math.round((totals.successful_requests / totals.total_requests) * 10000) / 100
+       : 0;
+ 
++    // Cache stats
++    const cache = db.query<{
++      hit_tokens: number;
++      miss_tokens: number;
++      hits: number;
++      misses: number;
++    }, []>(`
++      SELECT
++        COALESCE(SUM(cached_tokens), 0) as hit_tokens,
++        COALESCE(SUM(prompt_tokens - cached_tokens), 0) as miss_tokens,
++        SUM(CASE WHEN cached_tokens > 0 THEN 1 ELSE 0 END) as hits,
++        SUM(CASE WHEN cached_tokens = 0 OR cached_tokens IS NULL THEN 1 ELSE 0 END) as misses
++      FROM request_logs
++      ${successWhere}
++    `).get() ?? { hit_tokens: 0, miss_tokens: 0, hits: 0, misses: 0 };
++
++    const totalCacheTokens = cache.hit_tokens + cache.miss_tokens;
++    const cacheHitRate = totalCacheTokens > 0
++      ? Math.round((cache.hit_tokens / totalCacheTokens) * 10000) / 100
++      : 0;
++
+     return {
+       totals: {
+         total_tokens: totals.total_tokens,
+@@ -334,7 +355,7 @@ export const getUsageFromRequestLogs = (
+         p50: getPercentile(tokenPercentiles.map(r => ({ latency_ms: r.tokens })), 0.5),
+         p95: getPercentile(tokenPercentiles.map(r => ({ latency_ms: r.tokens })), 0.95),
+       },
+-      cache: { hits: 0, misses: 0, hit_tokens: 0, miss_tokens: 0, hit_rate: 0 },
++      cache: { hits: cache.hits, misses: cache.misses, hit_tokens: cache.hit_tokens, miss_tokens: cache.miss_tokens, hit_rate: cacheHitRate },
+       week_over_week: {
+         this_week: {
+           requests: wow.this_week_requests,
+diff --git a/controller/src/modules/proxy/openai-routes.ts b/controller/src/modules/proxy/openai-routes.ts
+index 9bd43ac..f8987f5 100644
+--- a/controller/src/modules/proxy/openai-routes.ts
++++ b/controller/src/modules/proxy/openai-routes.ts
+@@ -200,10 +200,13 @@ export const registerOpenAIRoutes = (app: Hono, context: AppContext): void => {
+       const endTime = new Date();
+       const result = (await response.json()) as Record<string, unknown>;
+ 
+-      const usage = result["usage"] as Record<string, number> | undefined;
++      const usage = result["usage"] as Record<string, unknown> | undefined;
+       if (usage) {
+-        const promptTokens = usage["prompt_tokens"] ?? 0;
+-        const completionTokens = usage["completion_tokens"] ?? 0;
++        const promptTokens = Number(usage["prompt_tokens"] ?? 0);
++        const completionTokens = Number(usage["completion_tokens"] ?? 0);
++        const promptDetails = usage["prompt_tokens_details"] as Record<string, unknown> | undefined;
++        const rawCached = promptDetails?.["cached_tokens"];
++        const cachedTokens = rawCached != null ? Number(rawCached) : undefined;
+         if (promptTokens > 0) {
+           context.stores.lifetimeMetricsStore.addPromptTokens(promptTokens);
+           context.stores.lifetimeMetricsStore.addTokens(promptTokens);
+@@ -227,6 +230,7 @@ export const registerOpenAIRoutes = (app: Hono, context: AppContext): void => {
+           latency_ms: endTime.getTime() - startTime.getTime(),
+           ttft_ms: null,
+           is_streaming: false,
++          cached_tokens: cachedTokens,
+         });
+       }
+ 
+@@ -309,6 +313,7 @@ export const registerOpenAIRoutes = (app: Hono, context: AppContext): void => {
+         latency_ms: Date.now() - streamStartTime.getTime(),
+         ttft_ms: firstDataTime ? firstDataTime.getTime() - streamStartTime.getTime() : null,
+         is_streaming: true,
++        cached_tokens: usage.cached_tokens,
+       });
+     });
+ 
+diff --git a/controller/src/modules/proxy/tool-call-core.ts b/controller/src/modules/proxy/tool-call-core.ts
+index bcbe7c9..5d946ac 100644
+--- a/controller/src/modules/proxy/tool-call-core.ts
++++ b/controller/src/modules/proxy/tool-call-core.ts
+@@ -11,6 +11,7 @@ export interface ToolCall {
+ export interface StreamUsage {
+   prompt_tokens: number;
+   completion_tokens: number;
++  cached_tokens?: number | undefined;
+ }
+ 
+ export const createToolCallId = (): string => `call_${randomUUID().replace(/-/g, "").slice(0, 9)}`;
+@@ -542,11 +543,14 @@ export const createToolCallStream = (
+ 
+   const parseUsage = (data: Record<string, unknown>): void => {
+     if (usageTracked || !onUsage) return;
+-    const usage = data["usage"] as Record<string, number> | undefined;
++    const usage = data["usage"] as Record<string, unknown> | undefined;
+     if (usage && (usage["prompt_tokens"] || usage["completion_tokens"])) {
++      const details = usage["prompt_tokens_details"] as Record<string, unknown> | undefined;
++      const rawCached = details?.["cached_tokens"];
+       onUsage({
+-        prompt_tokens: usage["prompt_tokens"] ?? 0,
+-        completion_tokens: usage["completion_tokens"] ?? 0,
++        prompt_tokens: Number(usage["prompt_tokens"] ?? 0),
++        completion_tokens: Number(usage["completion_tokens"] ?? 0),
++        cached_tokens: rawCached != null ? Number(rawCached) : undefined,
+       });
+       usageTracked = true;
+     }

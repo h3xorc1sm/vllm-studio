@@ -11,6 +11,7 @@ export interface ToolCall {
 export interface StreamUsage {
   prompt_tokens: number;
   completion_tokens: number;
+  cached_tokens?: number | undefined;
 }
 
 export const createToolCallId = (): string => `call_${randomUUID().replace(/-/g, "").slice(0, 9)}`;
@@ -542,11 +543,14 @@ export const createToolCallStream = (
 
   const parseUsage = (data: Record<string, unknown>): void => {
     if (usageTracked || !onUsage) return;
-    const usage = data["usage"] as Record<string, number> | undefined;
+    const usage = data["usage"] as Record<string, unknown> | undefined;
     if (usage && (usage["prompt_tokens"] || usage["completion_tokens"])) {
+      const details = usage["prompt_tokens_details"] as Record<string, unknown> | undefined;
+      const rawCached = details?.["cached_tokens"];
       onUsage({
-        prompt_tokens: usage["prompt_tokens"] ?? 0,
-        completion_tokens: usage["completion_tokens"] ?? 0,
+        prompt_tokens: Number(usage["prompt_tokens"] ?? 0),
+        completion_tokens: Number(usage["completion_tokens"] ?? 0),
+        cached_tokens: rawCached != null ? Number(rawCached) : undefined,
       });
       usageTracked = true;
     }

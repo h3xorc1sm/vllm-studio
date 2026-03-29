@@ -200,10 +200,13 @@ export const registerOpenAIRoutes = (app: Hono, context: AppContext): void => {
       const endTime = new Date();
       const result = (await response.json()) as Record<string, unknown>;
 
-      const usage = result["usage"] as Record<string, number> | undefined;
+      const usage = result["usage"] as Record<string, unknown> | undefined;
       if (usage) {
-        const promptTokens = usage["prompt_tokens"] ?? 0;
-        const completionTokens = usage["completion_tokens"] ?? 0;
+        const promptTokens = Number(usage["prompt_tokens"] ?? 0);
+        const completionTokens = Number(usage["completion_tokens"] ?? 0);
+        const promptDetails = usage["prompt_tokens_details"] as Record<string, unknown> | undefined;
+        const rawCached = promptDetails?.["cached_tokens"];
+        const cachedTokens = rawCached != null ? Number(rawCached) : undefined;
         if (promptTokens > 0) {
           context.stores.lifetimeMetricsStore.addPromptTokens(promptTokens);
           context.stores.lifetimeMetricsStore.addTokens(promptTokens);
@@ -227,6 +230,7 @@ export const registerOpenAIRoutes = (app: Hono, context: AppContext): void => {
           latency_ms: endTime.getTime() - startTime.getTime(),
           ttft_ms: null,
           is_streaming: false,
+          cached_tokens: cachedTokens,
         });
       }
 
@@ -309,6 +313,7 @@ export const registerOpenAIRoutes = (app: Hono, context: AppContext): void => {
         latency_ms: Date.now() - streamStartTime.getTime(),
         ttft_ms: firstDataTime ? firstDataTime.getTime() - streamStartTime.getTime() : null,
         is_streaming: true,
+        cached_tokens: usage.cached_tokens,
       });
     });
 

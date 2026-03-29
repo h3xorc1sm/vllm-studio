@@ -131,7 +131,7 @@ export const getUsageFromRequestLogs = (
         AVG(CASE WHEN status = 'success' THEN latency_ms END) as avg_latency_ms,
         AVG(CASE WHEN status = 'success' THEN ttft_ms END) as avg_ttft_ms
       FROM request_logs
-      ${where} AND model IS NOT NULL AND model != ''
+      ${where ? `${where} AND` : "WHERE"} model IS NOT NULL AND model != ''
       GROUP BY model
       ORDER BY total_tokens DESC
       LIMIT 25
@@ -198,7 +198,7 @@ export const getUsageFromRequestLogs = (
         SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as successful,
         COALESCE(SUM(total_tokens), 0) as tokens
       FROM request_logs
-      ${where} AND start_time IS NOT NULL
+      ${where ? `${where} AND` : "WHERE"} start_time IS NOT NULL
       GROUP BY strftime('%H', start_time)
       ORDER BY hour
     `).all();
@@ -300,6 +300,27 @@ export const getUsageFromRequestLogs = (
       ? Math.round((totals.successful_requests / totals.total_requests) * 10000) / 100
       : 0;
 
+    // Cache stats
+    const cache = db.query<{
+      hit_tokens: number;
+      miss_tokens: number;
+      hits: number;
+      misses: number;
+    }, []>(`
+      SELECT
+        COALESCE(SUM(cached_tokens), 0) as hit_tokens,
+        COALESCE(SUM(prompt_tokens - cached_tokens), 0) as miss_tokens,
+        SUM(CASE WHEN cached_tokens > 0 THEN 1 ELSE 0 END) as hits,
+        SUM(CASE WHEN cached_tokens = 0 OR cached_tokens IS NULL THEN 1 ELSE 0 END) as misses
+      FROM request_logs
+      ${successWhere}
+    `).get() ?? { hit_tokens: 0, miss_tokens: 0, hits: 0, misses: 0 };
+
+    const totalCacheTokens = cache.hit_tokens + cache.miss_tokens;
+    const cacheHitRate = totalCacheTokens > 0
+      ? Math.round((cache.hit_tokens / totalCacheTokens) * 10000) / 100
+      : 0;
+
     return {
       totals: {
         total_tokens: totals.total_tokens,
@@ -334,7 +355,7 @@ export const getUsageFromRequestLogs = (
         p50: getPercentile(tokenPercentiles.map(r => ({ latency_ms: r.tokens })), 0.5),
         p95: getPercentile(tokenPercentiles.map(r => ({ latency_ms: r.tokens })), 0.95),
       },
-      cache: { hits: 0, misses: 0, hit_tokens: 0, miss_tokens: 0, hit_rate: 0 },
+      cache: { hits: cache.hits, misses: cache.misses, hit_tokens: cache.hit_tokens, miss_tokens: cache.miss_tokens, hit_rate: cacheHitRate },
       week_over_week: {
         this_week: {
           requests: wow.this_week_requests,

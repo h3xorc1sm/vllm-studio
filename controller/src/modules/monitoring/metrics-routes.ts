@@ -73,8 +73,15 @@ export const registerMonitoringRoutes = (app: Hono, context: AppContext): void =
         requestCount = logs.rows.length;
 
         const currentEnergy = context.stores.lifetimeMetricsStore.getCurrentEnergy();
+        const periodMs: Record<string, number> = {
+          d: 24 * 60 * 60 * 1000,
+          w: 7 * 24 * 60 * 60 * 1000,
+          m: 30 * 24 * 60 * 60 * 1000,
+          y: 365 * 24 * 60 * 60 * 1000,
+        };
+        const periodStart = new Date(Date.now() - (periodMs[period] ?? 0));
         const snapshot = context.stores.lifetimeMetricsStore.getEnergyBefore(
-          new Date(Date.now() + new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 19).replace("T", " "),
+          periodStart.toISOString().slice(0, 19).replace("T", " "),
         );
         const snapshotEnergy = snapshot?.energy_wh ?? 0;
         energyKwh = Math.max(0, (currentEnergy - snapshotEnergy)) / 1000;
@@ -126,8 +133,15 @@ export const registerMonitoringRoutes = (app: Hono, context: AppContext): void =
       const offset = PERIOD_OFFSETS[period];
       if (offset) {
         const currentEnergy = context.stores.lifetimeMetricsStore.getCurrentEnergy();
+        const periodMs: Record<string, number> = {
+          d: 24 * 60 * 60 * 1000,
+          w: 7 * 24 * 60 * 60 * 1000,
+          m: 30 * 24 * 60 * 60 * 1000,
+          y: 365 * 24 * 60 * 60 * 1000,
+        };
+        const periodStart = new Date(Date.now() - (periodMs[period] ?? 0));
         const snapshot = context.stores.lifetimeMetricsStore.getEnergyBefore(
-          new Date(Date.now() + new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 19).replace("T", " "),
+          periodStart.toISOString().slice(0, 19).replace("T", " "),
         );
         const snapshotEnergy = snapshot?.energy_wh ?? 0;
         energyKwh = Math.max(0, (currentEnergy - snapshotEnergy)) / 1000;
