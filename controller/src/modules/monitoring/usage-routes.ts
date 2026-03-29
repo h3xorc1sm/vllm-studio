@@ -17,13 +17,14 @@ export const registerUsageRoutes = (app: Hono, context: AppContext): void => {
   app.get("/usage", async (ctx) => {
     try {
       const period = ctx.req.query("period");
+      const isAllTime = !period || period === "all";
 
       // Try new request_logs source first (captures all requests including streaming)
       const requestLogsUsage = getUsageFromRequestLogs(context.config.db_path, period);
       if (requestLogsUsage) {
         // Supplement cache stats from vLLM Prometheus metrics (only for all-time view)
         // Prometheus counters are lifetime totals, not period-filtered
-        if (!period) {
+        if (isAllTime) {
           const cache = requestLogsUsage["cache"] as { hit_rate: number; hit_tokens: number; miss_tokens: number; hits: number; misses: number } | undefined;
           if (cache && cache.hit_tokens === 0) {
             const prefixQueries = context.stores.lifetimeMetricsStore.get("prefix_cache_queries_total");
@@ -40,7 +41,7 @@ export const registerUsageRoutes = (app: Hono, context: AppContext): void => {
 
         // Supplement token totals from vLLM Prometheus metrics (only for all-time view)
         // Prometheus counters are lifetime totals, not period-filtered
-        if (!period) {
+        if (isAllTime) {
           const totals = requestLogsUsage["totals"] as { total_tokens: number; prompt_tokens: number; completion_tokens: number } | undefined;
           if (totals) {
             const vllmPrompt = context.stores.lifetimeMetricsStore.get("vllm_prompt_tokens_total");
