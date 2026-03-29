@@ -285,9 +285,27 @@ export const startMetricsCollector = (context: AppContext): (() => void) => {
           if (prefixQueries != null) lifetimeStore.set("prefix_cache_queries_total", prefixQueries);
           if (prefixHits != null) lifetimeStore.set("prefix_cache_hits_total", prefixHits);
 
-          // Store vLLM token totals for usage stats
-          if (promptTokensTotal > 0) lifetimeStore.set("vllm_prompt_tokens_total", promptTokensTotal);
-          if (generationTokensTotal > 0) lifetimeStore.set("vllm_generation_tokens_total", generationTokensTotal);
+          // Accumulate vLLM token totals for usage stats (persist across restarts)
+          // vLLM Prometheus counters reset to 0 on restart, so we track delta
+          let lastPrompt = lifetimeStore.get("vllm_last_prompt_tokens");
+          let lastGeneration = lifetimeStore.get("vllm_last_generation_tokens");
+          // Detect vLLM counter reset (current < last means vLLM restarted)
+          if (promptTokensTotal > 0 && lastPrompt > 0 && promptTokensTotal < lastPrompt) {
+            lastPrompt = 0;
+          }
+          if (generationTokensTotal > 0 && lastGeneration > 0 && generationTokensTotal < lastGeneration) {
+            lastGeneration = 0;
+          }
+          const promptDelta = promptTokensTotal > 0 ? (lastPrompt > 0 ? Math.max(0, promptTokensTotal - lastPrompt) : promptTokensTotal) : 0;
+          const generationDelta = generationTokensTotal > 0 ? (lastGeneration > 0 ? Math.max(0, generationTokensTotal - lastGeneration) : generationTokensTotal) : 0;
+          if (promptDelta > 0) {
+            lifetimeStore.increment("vllm_prompt_tokens_total", promptDelta);
+            lifetimeStore.set("vllm_last_prompt_tokens", promptTokensTotal);
+          }
+          if (generationDelta > 0) {
+            lifetimeStore.increment("vllm_generation_tokens_total", generationDelta);
+            lifetimeStore.set("vllm_last_generation_tokens", generationTokensTotal);
+          }
 
           lastVllmMetrics = vllmMetrics;
           lastMetricsTime = now;
