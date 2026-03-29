@@ -259,6 +259,17 @@ export class LifetimeMetricsStore {
         energy_wh REAL NOT NULL
       )
     `);
+
+    this.db.run(`
+      CREATE TABLE IF NOT EXISTS usage_hourly (
+        hour TEXT PRIMARY KEY,
+        prompt_tokens INTEGER NOT NULL DEFAULT 0,
+        completion_tokens INTEGER NOT NULL DEFAULT 0,
+        cache_queries INTEGER NOT NULL DEFAULT 0,
+        cache_hits INTEGER NOT NULL DEFAULT 0,
+        energy_wh REAL NOT NULL DEFAULT 0
+      )
+    `);
   }
 
   /**
@@ -471,6 +482,73 @@ export class LifetimeMetricsStore {
 
   public getCurrentEnergy(): number {
     return this.get("energy_wh");
+  }
+
+  public recordUsageHour(deltas: {
+    prompt_tokens?: number;
+    completion_tokens?: number;
+    cache_queries?: number;
+    cache_hits?: number;
+    energy_wh?: number;
+  }): void {
+    const hour = new Date().toISOString().slice(0, 13);
+    this.db
+      .query(
+        `INSERT INTO usage_hourly (hour, prompt_tokens, completion_tokens, cache_queries, cache_hits, energy_wh)
+         VALUES (?, ?, ?, ?, ?, ?)
+         ON CONFLICT(hour) DO UPDATE SET
+           prompt_tokens = prompt_tokens + excluded.prompt_tokens,
+           completion_tokens = completion_tokens + excluded.completion_tokens,
+           cache_queries = cache_queries + excluded.cache_queries,
+           cache_hits = cache_hits + excluded.cache_hits,
+           energy_wh = energy_wh + excluded.energy_wh`
+      )
+      .run(
+        hour,
+        deltas.prompt_tokens ?? 0,
+        deltas.completion_tokens ?? 0,
+        deltas.cache_queries ?? 0,
+        deltas.cache_hits ?? 0,
+        deltas.energy_wh ?? 0
+      );
+  }
+
+  private static readonly HOURLY_PERIOD_SQL: Record<string, string> = {
+    d: "hour >= strftime('%Y-%m-%dT%H', 'now', '-24 hours')",
+    w: "hour >= strftime('%Y-%m-%dT%H', 'now', '-7 days')",
+    m: "hour >= strftime('%Y-%m-%dT%H', 'now', '-30 days')",
+    y: "hour >= strftime('%Y-%m-%dT%H', 'now', '-365 days')",
+  };
+
+  public getUsageHourly(period?: string): {
+    prompt_tokens: number;
+    completion_tokens: number;
+    cache_queries: number;
+    cache_hits: number;
+    energy_wh: number;
+  } | null {
+    const where = period && LifetimeMetricsStore.HOURLY_PERIOD_SQL[period]
+      ? `WHERE ${LifetimeMetricsStore.HOURLY_PERIOD_SQL[period]}`
+      : "";
+    const row = this.db.query(`
+      SELECT
+        COALESCE(SUM(prompt_tokens), 0) as prompt_tokens,
+        COALESCE(SUM(completion_tokens), 0) as completion_tokens,
+        COALESCE(SUM(cache_queries), 0) as cache_queries,
+        COALESCE(SUM(cache_hits), 0) as cache_hits,
+        COALESCE(SUM(energy_wh), 0) as energy_wh
+      FROM usage_hourly ${where}
+    `).get() as {
+      prompt_tokens: number;
+      completion_tokens: number;
+      cache_queries: number;
+      cache_hits: number;
+      energy_wh: number;
+    } | null;
+    if (!row || (row.prompt_tokens === 0 && row.completion_tokens === 0 && row.cache_queries === 0 && row.energy_wh === 0)) {
+      return null;
+    }
+    return row;
   }
 }
 

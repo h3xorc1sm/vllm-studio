@@ -186,6 +186,11 @@ export const startMetricsCollector = (context: AppContext): (() => void) => {
         lastEnergySnapshotAt = Date.now();
       }
 
+      // Write energy delta to hourly bucket
+      if (energyWh > 0) {
+        lifetimeStore.recordUsageHour({ energy_wh: energyWh });
+      }
+
       await context.eventManager.publishStatus({
         running: Boolean(current),
         process: current,
@@ -309,6 +314,40 @@ export const startMetricsCollector = (context: AppContext): (() => void) => {
 
           lastVllmMetrics = vllmMetrics;
           lastMetricsTime = now;
+
+          // Write token deltas to hourly bucket
+          if (promptDelta > 0 || generationDelta > 0) {
+            lifetimeStore.recordUsageHour({
+              prompt_tokens: promptDelta,
+              completion_tokens: generationDelta,
+            });
+          }
+
+          // Write cache deltas to hourly bucket (independent of token activity)
+          if (prefixQueries != null || prefixHits != null) {
+            let cacheQueryDelta = 0;
+            let cacheHitDelta = 0;
+            const lastPrefixQueries = lifetimeStore.get("vllm_last_prefix_cache_queries");
+            const lastPrefixHits = lifetimeStore.get("vllm_last_prefix_cache_hits");
+            if (prefixQueries != null) {
+              cacheQueryDelta = lastPrefixQueries > 0 && prefixQueries >= lastPrefixQueries
+                ? Math.max(0, prefixQueries - lastPrefixQueries)
+                : 0;
+              lifetimeStore.set("vllm_last_prefix_cache_queries", prefixQueries);
+            }
+            if (prefixHits != null) {
+              cacheHitDelta = lastPrefixHits > 0 && prefixHits >= lastPrefixHits
+                ? Math.max(0, prefixHits - lastPrefixHits)
+                : 0;
+              lifetimeStore.set("vllm_last_prefix_cache_hits", prefixHits);
+            }
+            if (cacheQueryDelta > 0 || cacheHitDelta > 0) {
+              lifetimeStore.recordUsageHour({
+                cache_queries: cacheQueryDelta,
+                cache_hits: cacheHitDelta,
+              });
+            }
+          }
 
           // Update peak metrics with actual observed throughput (not fake benchmark calculations)
           if (generationThroughput > 5) {

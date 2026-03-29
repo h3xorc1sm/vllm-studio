@@ -17,44 +17,74 @@ export const registerUsageRoutes = (app: Hono, context: AppContext): void => {
   app.get("/usage", async (ctx) => {
     try {
       const period = ctx.req.query("period");
-      const isAllTime = !period || period === "all";
 
       // Try new request_logs source first (captures all requests including streaming)
       const requestLogsUsage = getUsageFromRequestLogs(context.config.db_path, period);
       if (requestLogsUsage) {
-        // Supplement cache stats from vLLM Prometheus metrics (only for all-time view)
-        // Prometheus counters are lifetime totals, not period-filtered
-        if (isAllTime) {
-          const cache = requestLogsUsage["cache"] as { hit_rate: number; hit_tokens: number; miss_tokens: number; hits: number; misses: number } | undefined;
-          if (cache && cache.hit_tokens === 0) {
-            const prefixQueries = context.stores.lifetimeMetricsStore.get("prefix_cache_queries_total");
-            const prefixHits = context.stores.lifetimeMetricsStore.get("prefix_cache_hits_total");
-            if (prefixQueries > 0) {
-              cache.hit_tokens = Math.round(prefixHits);
-              cache.miss_tokens = Math.round(prefixQueries - prefixHits);
-              cache.hit_rate = Math.round((prefixHits / prefixQueries) * 10000) / 100;
-              cache.hits = prefixHits > 0 ? 1 : 0;
-              cache.misses = (prefixQueries - prefixHits) > 0 ? 1 : 0;
-            }
+        // Supplement from usage_hourly buckets (period-filtered, no vLLM dependency)
+        const hourlyData = context.stores.lifetimeMetricsStore.getUsageHourly(period);
+        if (hourlyData) {
+          const totals = requestLogsUsage["totals"] as {
+            total_tokens: number;
+            prompt_tokens: number;
+            completion_tokens: number;
+          } | undefined;
+          if (totals && (hourlyData.prompt_tokens > 0 || hourlyData.completion_tokens > 0)) {
+            totals.prompt_tokens = hourlyData.prompt_tokens;
+            totals.completion_tokens = hourlyData.completion_tokens;
+            totals.total_tokens = hourlyData.prompt_tokens + hourlyData.completion_tokens;
           }
-        }
 
-        // Supplement token totals from vLLM Prometheus metrics (only for all-time view)
-        // Prometheus counters are lifetime totals, not period-filtered
-        if (isAllTime) {
-          const totals = requestLogsUsage["totals"] as { total_tokens: number; prompt_tokens: number; completion_tokens: number } | undefined;
-          if (totals) {
-            const vllmPrompt = context.stores.lifetimeMetricsStore.get("vllm_prompt_tokens_total");
-            const vllmGeneration = context.stores.lifetimeMetricsStore.get("vllm_generation_tokens_total");
-            if (vllmPrompt > 0 || vllmGeneration > 0) {
-              totals.prompt_tokens = Math.round(vllmPrompt);
-              totals.completion_tokens = Math.round(vllmGeneration);
-              totals.total_tokens = Math.round(vllmPrompt + vllmGeneration);
-            }
+          const cache = requestLogsUsage["cache"] as {
+            hit_rate: number;
+            hit_tokens: number;
+            miss_tokens: number;
+            hits: number;
+            misses: number;
+          } | undefined;
+          if (cache && cache.hit_tokens === 0 && hourlyData.cache_queries > 0) {
+            cache.hit_tokens = hourlyData.cache_hits;
+            cache.miss_tokens = hourlyData.cache_queries - hourlyData.cache_hits;
+            cache.hit_rate =
+              Math.round((hourlyData.cache_hits / hourlyData.cache_queries) * 10000) / 100;
+            cache.hits = hourlyData.cache_hits > 0 ? 1 : 0;
+            cache.misses =
+              (hourlyData.cache_queries - hourlyData.cache_hits) > 0 ? 1 : 0;
           }
         }
 
         return ctx.json(requestLogsUsage);
+      }
+
+      // Fallback: usage_hourly buckets alone (no request_logs data)
+      const hourlyData = context.stores.lifetimeMetricsStore.getUsageHourly(period);
+      if (hourlyData) {
+        const totalTokens = hourlyData.prompt_tokens + hourlyData.completion_tokens;
+        const cacheHitRate =
+          hourlyData.cache_queries > 0
+            ? Math.round((hourlyData.cache_hits / hourlyData.cache_queries) * 10000) / 100
+            : 0;
+        return ctx.json({
+          ...emptyResponse(),
+          totals: {
+            total_tokens: totalTokens,
+            prompt_tokens: hourlyData.prompt_tokens,
+            completion_tokens: hourlyData.completion_tokens,
+            total_requests: 0,
+            successful_requests: 0,
+            failed_requests: 0,
+            success_rate: 0,
+            unique_sessions: 0,
+            unique_users: 0,
+          },
+          cache: {
+            hits: hourlyData.cache_hits > 0 ? 1 : 0,
+            misses: (hourlyData.cache_queries - hourlyData.cache_hits) > 0 ? 1 : 0,
+            hit_tokens: hourlyData.cache_hits,
+            miss_tokens: hourlyData.cache_queries - hourlyData.cache_hits,
+            hit_rate: cacheHitRate,
+          },
+        });
       }
 
       // Fallback to chat database
