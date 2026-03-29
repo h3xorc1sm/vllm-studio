@@ -17,12 +17,14 @@ export const registerUsageRoutes = (app: Hono, context: AppContext): void => {
   app.get("/usage", async (ctx) => {
     try {
       const period = ctx.req.query("period");
+      const isAllTime = !period || period === "all";
+      const lifetimeStore = context.stores.lifetimeMetricsStore;
 
       // Try new request_logs source first (captures all requests including streaming)
       const requestLogsUsage = getUsageFromRequestLogs(context.config.db_path, period);
       if (requestLogsUsage) {
         // Supplement from usage_hourly buckets (period-filtered, no vLLM dependency)
-        const hourlyData = context.stores.lifetimeMetricsStore.getUsageHourly(period);
+        const hourlyData = lifetimeStore.getUsageHourly(period);
         if (hourlyData) {
           const totals = requestLogsUsage["totals"] as {
             total_tokens: number;
@@ -53,11 +55,49 @@ export const registerUsageRoutes = (app: Hono, context: AppContext): void => {
           }
         }
 
+        // For all-time view: fall back to lifetime Prometheus keys when hourly buckets are empty
+        // This preserves historical data accumulated before usage_hourly table existed
+        if (isAllTime) {
+          const totals = requestLogsUsage["totals"] as {
+            total_tokens: number;
+            prompt_tokens: number;
+            completion_tokens: number;
+          } | undefined;
+          if (totals && totals.prompt_tokens === 0 && totals.completion_tokens === 0) {
+            const vllmPrompt = lifetimeStore.get("vllm_prompt_tokens_total");
+            const vllmGeneration = lifetimeStore.get("vllm_generation_tokens_total");
+            if (vllmPrompt > 0 || vllmGeneration > 0) {
+              totals.prompt_tokens = Math.round(vllmPrompt);
+              totals.completion_tokens = Math.round(vllmGeneration);
+              totals.total_tokens = Math.round(vllmPrompt + vllmGeneration);
+            }
+          }
+
+          const cache = requestLogsUsage["cache"] as {
+            hit_rate: number;
+            hit_tokens: number;
+            miss_tokens: number;
+            hits: number;
+            misses: number;
+          } | undefined;
+          if (cache && cache.hit_tokens === 0) {
+            const prefixQueries = lifetimeStore.get("prefix_cache_queries_total");
+            const prefixHits = lifetimeStore.get("prefix_cache_hits_total");
+            if (prefixQueries > 0) {
+              cache.hit_tokens = Math.round(prefixHits);
+              cache.miss_tokens = Math.round(prefixQueries - prefixHits);
+              cache.hit_rate = Math.round((prefixHits / prefixQueries) * 10000) / 100;
+              cache.hits = prefixHits > 0 ? 1 : 0;
+              cache.misses = (prefixQueries - prefixHits) > 0 ? 1 : 0;
+            }
+          }
+        }
+
         return ctx.json(requestLogsUsage);
       }
 
       // Fallback: usage_hourly buckets alone (no request_logs data)
-      const hourlyData = context.stores.lifetimeMetricsStore.getUsageHourly(period);
+      const hourlyData = lifetimeStore.getUsageHourly(period);
       if (hourlyData) {
         const totalTokens = hourlyData.prompt_tokens + hourlyData.completion_tokens;
         const cacheHitRate =
