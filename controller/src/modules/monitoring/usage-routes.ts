@@ -55,15 +55,15 @@ export const registerUsageRoutes = (app: Hono, context: AppContext): void => {
           }
         }
 
-        // For all-time view: fall back to lifetime Prometheus keys when hourly buckets are empty
-        // This preserves historical data accumulated before usage_hourly table existed
+        // For all-time view: lifetime Prometheus keys are more complete than request_logs
+        // (request_logs only captures proxy traffic; Prometheus captures all vLLM processing)
         if (isAllTime) {
           const totals = requestLogsUsage["totals"] as {
             total_tokens: number;
             prompt_tokens: number;
             completion_tokens: number;
           } | undefined;
-          if (totals && totals.prompt_tokens === 0 && totals.completion_tokens === 0) {
+          if (totals) {
             const vllmPrompt = lifetimeStore.get("vllm_prompt_tokens_total");
             const vllmGeneration = lifetimeStore.get("vllm_generation_tokens_total");
             if (vllmPrompt > 0 || vllmGeneration > 0) {
