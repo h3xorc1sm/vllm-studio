@@ -285,6 +285,10 @@ export const startMetricsCollector = (context: AppContext): (() => void) => {
           if (prefixQueries != null) lifetimeStore.set("prefix_cache_queries_total", prefixQueries);
           if (prefixHits != null) lifetimeStore.set("prefix_cache_hits_total", prefixHits);
 
+          // Store vLLM token totals for usage stats
+          if (promptTokensTotal > 0) lifetimeStore.set("vllm_prompt_tokens_total", promptTokensTotal);
+          if (generationTokensTotal > 0) lifetimeStore.set("vllm_generation_tokens_total", generationTokensTotal);
+
           lastVllmMetrics = vllmMetrics;
           lastMetricsTime = now;
 
