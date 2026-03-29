@@ -35,15 +35,18 @@ export const registerUsageRoutes = (app: Hono, context: AppContext): void => {
           }
         }
 
-        // Supplement token totals from vLLM Prometheus metrics when request_logs data is incomplete
-        const totals = requestLogsUsage["totals"] as { total_tokens: number; prompt_tokens: number; completion_tokens: number } | undefined;
-        if (totals) {
-          const vllmPrompt = context.stores.lifetimeMetricsStore.get("vllm_prompt_tokens_total");
-          const vllmGeneration = context.stores.lifetimeMetricsStore.get("vllm_generation_tokens_total");
-          if (vllmPrompt > 0 || vllmGeneration > 0) {
-            totals.prompt_tokens = Math.round(vllmPrompt);
-            totals.completion_tokens = Math.round(vllmGeneration);
-            totals.total_tokens = Math.round(vllmPrompt + vllmGeneration);
+        // Supplement token totals from vLLM Prometheus metrics (only for all-time view)
+        // Prometheus counters are lifetime totals, not period-filtered
+        if (!period) {
+          const totals = requestLogsUsage["totals"] as { total_tokens: number; prompt_tokens: number; completion_tokens: number } | undefined;
+          if (totals) {
+            const vllmPrompt = context.stores.lifetimeMetricsStore.get("vllm_prompt_tokens_total");
+            const vllmGeneration = context.stores.lifetimeMetricsStore.get("vllm_generation_tokens_total");
+            if (vllmPrompt > 0 || vllmGeneration > 0) {
+              totals.prompt_tokens = Math.round(vllmPrompt);
+              totals.completion_tokens = Math.round(vllmGeneration);
+              totals.total_tokens = Math.round(vllmPrompt + vllmGeneration);
+            }
           }
         }
 
