@@ -5,6 +5,10 @@
 *.local
 !.env.example
 
+.factory
+
+website-dist
+
 # Python
 __pycache__/
 *.pyc
@@ -83,3 +87,4 @@ scripts/*.local.sh
 
 # Sensitive data - do not commit specific IPs or domains
 # Use environment variables or config files instead
+refactory/

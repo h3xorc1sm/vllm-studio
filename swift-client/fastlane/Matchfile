@@ -1,6 +1,0 @@
-git_url(ENV["MATCH_GIT_URL"] || "REPLACE_WITH_PRIVATE_MATCH_REPO_URL")
-storage_mode("git")
-type("appstore")
-app_identifier(["com.sero.vllmstudio"])
-username("sherifcherfa@gmail.com")
-team_id("953GG2G474")
