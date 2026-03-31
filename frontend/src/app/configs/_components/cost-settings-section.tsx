@@ -34,12 +34,20 @@ const CURRENCIES = [
 interface CostSettings {
   electricity_rate: number;
   electricity_currency: string;
+  cloud_price_anthropic_input: number;
+  cloud_price_anthropic_output: number;
+  cloud_price_openai_input: number;
+  cloud_price_openai_output: number;
 }
 
 export function CostSettingsSection() {
   const [settings, setSettings] = useState<CostSettings>({
     electricity_rate: 0.11,
     electricity_currency: "USD",
+    cloud_price_anthropic_input: 3.0,
+    cloud_price_anthropic_output: 15.0,
+    cloud_price_openai_input: 2.5,
+    cloud_price_openai_output: 10.0,
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -53,6 +61,10 @@ export function CostSettingsSection() {
           setSettings({
             electricity_rate: response.effective.electricity_rate ?? 0.11,
             electricity_currency: response.effective.electricity_currency ?? "USD",
+            cloud_price_anthropic_input: response.effective.cloud_price_anthropic_input ?? 3.0,
+            cloud_price_anthropic_output: response.effective.cloud_price_anthropic_output ?? 15.0,
+            cloud_price_openai_input: response.effective.cloud_price_openai_input ?? 2.5,
+            cloud_price_openai_output: response.effective.cloud_price_openai_output ?? 10.0,
           });
         }
       } catch (e) {
@@ -71,6 +83,10 @@ export function CostSettingsSection() {
       await api.updateStudioSettings({
         electricity_rate: settings.electricity_rate,
         electricity_currency: settings.electricity_currency,
+        cloud_price_anthropic_input: settings.cloud_price_anthropic_input,
+        cloud_price_anthropic_output: settings.cloud_price_anthropic_output,
+        cloud_price_openai_input: settings.cloud_price_openai_input,
+        cloud_price_openai_output: settings.cloud_price_openai_output,
       });
       setStatusMessage("Saved");
     } catch (e) {
@@ -146,6 +162,88 @@ export function CostSettingsSection() {
                 <span className="text-xs text-(--dim)">{statusMessage}</span>
               )}
             </div>
+          </div>
+        )}
+      </div>
+
+      {/* Cloud API Pricing */}
+      <div className="text-xs text-(--dim) uppercase tracking-wider mt-6 mb-3">
+        Cloud API Pricing
+      </div>
+      <div className="bg-(--surface) rounded-lg p-4 sm:p-6">
+        {loading ? (
+          <div className="flex items-center justify-center py-4">
+            <Zap className="h-5 w-5 text-(--dim) animate-pulse" />
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs text-(--dim) mb-1.5">
+                  Anthropic Input ($/MTok)
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={settings.cloud_price_anthropic_input}
+                  onChange={(e) =>
+                    setSettings({ ...settings, cloud_price_anthropic_input: parseFloat(e.target.value) || 0 })
+                  }
+                  className="w-full px-3 py-2 bg-(--surface) border border-(--border) rounded-lg text-sm text-(--fg) placeholder-(--dim)/50 focus:outline-none focus:border-(--hl1)"
+                  placeholder="3.0"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-(--dim) mb-1.5">
+                  Anthropic Output ($/MTok)
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={settings.cloud_price_anthropic_output}
+                  onChange={(e) =>
+                    setSettings({ ...settings, cloud_price_anthropic_output: parseFloat(e.target.value) || 0 })
+                  }
+                  className="w-full px-3 py-2 bg-(--surface) border border-(--border) rounded-lg text-sm text-(--fg) placeholder-(--dim)/50 focus:outline-none focus:border-(--hl1)"
+                  placeholder="15.0"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs text-(--dim) mb-1.5">
+                  OpenAI Input ($/MTok)
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={settings.cloud_price_openai_input}
+                  onChange={(e) =>
+                    setSettings({ ...settings, cloud_price_openai_input: parseFloat(e.target.value) || 0 })
+                  }
+                  className="w-full px-3 py-2 bg-(--surface) border border-(--border) rounded-lg text-sm text-(--fg) placeholder-(--dim)/50 focus:outline-none focus:border-(--hl1)"
+                  placeholder="2.50"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-(--dim) mb-1.5">
+                  OpenAI Output ($/MTok)
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={settings.cloud_price_openai_output}
+                  onChange={(e) =>
+                    setSettings({ ...settings, cloud_price_openai_output: parseFloat(e.target.value) || 0 })
+                  }
+                  className="w-full px-3 py-2 bg-(--surface) border border-(--border) rounded-lg text-sm text-(--fg) placeholder-(--dim)/50 focus:outline-none focus:border-(--hl1)"
+                  placeholder="10.0"
+                />
+              </div>
+            </div>
+            <p className="text-[11px] text-(--dim)">
+              Per million token pricing for cloud API cost comparison on the Usage page
+            </p>
           </div>
         )}
       </div>

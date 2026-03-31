@@ -128,6 +128,10 @@ export const registerStudioRoutes = (app: Hono, context: AppContext): void => {
       daytona_api_key_configured: boolean;
       electricity_rate: number | undefined;
       electricity_currency: string | undefined;
+      cloud_price_anthropic_input: number | undefined;
+      cloud_price_anthropic_output: number | undefined;
+      cloud_price_openai_input: number | undefined;
+      cloud_price_openai_output: number | undefined;
     };
     effective: {
       models_dir: string;
@@ -139,6 +143,10 @@ export const registerStudioRoutes = (app: Hono, context: AppContext): void => {
       daytona_api_key_configured: boolean;
       electricity_rate: number;
       electricity_currency: string;
+      cloud_price_anthropic_input: number;
+      cloud_price_anthropic_output: number;
+      cloud_price_openai_input: number;
+      cloud_price_openai_output: number;
     };
   } => {
     const persisted = loadPersistedConfig(context.config.data_dir);
@@ -155,6 +163,10 @@ export const registerStudioRoutes = (app: Hono, context: AppContext): void => {
           typeof persisted.daytona_api_key === "string" && persisted.daytona_api_key.trim().length > 0,
         electricity_rate: persisted.electricity_rate,
         electricity_currency: persisted.electricity_currency,
+        cloud_price_anthropic_input: persisted.cloud_price_anthropic_input,
+        cloud_price_anthropic_output: persisted.cloud_price_anthropic_output,
+        cloud_price_openai_input: persisted.cloud_price_openai_input,
+        cloud_price_openai_output: persisted.cloud_price_openai_output,
       },
       effective: {
         models_dir: context.config.models_dir,
@@ -166,6 +178,10 @@ export const registerStudioRoutes = (app: Hono, context: AppContext): void => {
         daytona_api_key_configured: Boolean(context.config.daytona_api_key),
         electricity_rate: persisted.electricity_rate ?? 0.11,
         electricity_currency: persisted.electricity_currency ?? "USD",
+        cloud_price_anthropic_input: persisted.cloud_price_anthropic_input ?? 3.0,
+        cloud_price_anthropic_output: persisted.cloud_price_anthropic_output ?? 15.0,
+        cloud_price_openai_input: persisted.cloud_price_openai_input ?? 2.5,
+        cloud_price_openai_output: persisted.cloud_price_openai_output ?? 10.0,
       },
     };
   };
@@ -197,6 +213,30 @@ export const registerStudioRoutes = (app: Hono, context: AppContext): void => {
           : undefined
         : undefined;
     const electricityCurrency = parseOptionalStringUpdate(body?.electricity_currency);
+    const cloudPriceAnthropicInput =
+      body?.cloud_price_anthropic_input !== undefined
+        ? typeof body.cloud_price_anthropic_input === "number"
+          ? body.cloud_price_anthropic_input
+          : undefined
+        : undefined;
+    const cloudPriceAnthropicOutput =
+      body?.cloud_price_anthropic_output !== undefined
+        ? typeof body.cloud_price_anthropic_output === "number"
+          ? body.cloud_price_anthropic_output
+          : undefined
+        : undefined;
+    const cloudPriceOpenaiInput =
+      body?.cloud_price_openai_input !== undefined
+        ? typeof body.cloud_price_openai_input === "number"
+          ? body.cloud_price_openai_input
+          : undefined
+        : undefined;
+    const cloudPriceOpenaiOutput =
+      body?.cloud_price_openai_output !== undefined
+        ? typeof body.cloud_price_openai_output === "number"
+          ? body.cloud_price_openai_output
+          : undefined
+        : undefined;
 
     const hasAnyUpdate =
       modelsDirectory !== undefined ||
@@ -207,7 +247,11 @@ export const registerStudioRoutes = (app: Hono, context: AppContext): void => {
       daytonaAgentMode !== undefined ||
       agentFsLocalFallback !== undefined ||
       electricityRate !== undefined ||
-      electricityCurrency !== undefined;
+      electricityCurrency !== undefined ||
+      cloudPriceAnthropicInput !== undefined ||
+      cloudPriceAnthropicOutput !== undefined ||
+      cloudPriceOpenaiInput !== undefined ||
+      cloudPriceOpenaiOutput !== undefined;
 
     if (!hasAnyUpdate) {
       throw badRequest("No supported settings provided");
@@ -225,6 +269,10 @@ export const registerStudioRoutes = (app: Hono, context: AppContext): void => {
         : {}),
       ...(electricityRate !== undefined ? { electricity_rate: electricityRate } : {}),
       ...(electricityCurrency !== undefined ? { electricity_currency: electricityCurrency } : {}),
+      ...(cloudPriceAnthropicInput !== undefined ? { cloud_price_anthropic_input: cloudPriceAnthropicInput } : {}),
+      ...(cloudPriceAnthropicOutput !== undefined ? { cloud_price_anthropic_output: cloudPriceAnthropicOutput } : {}),
+      ...(cloudPriceOpenaiInput !== undefined ? { cloud_price_openai_input: cloudPriceOpenaiInput } : {}),
+      ...(cloudPriceOpenaiOutput !== undefined ? { cloud_price_openai_output: cloudPriceOpenaiOutput } : {}),
     });
 
     if (saved.models_dir) {

@@ -21,6 +21,10 @@ export interface PersistedConfig {
   providers?: ProviderConfig[];
   electricity_rate?: number;
   electricity_currency?: string;
+  cloud_price_anthropic_input?: number;
+  cloud_price_anthropic_output?: number;
+  cloud_price_openai_input?: number;
+  cloud_price_openai_output?: number;
 }
 
 export const getPersistedConfigPath = (dataDirectory: string): string => {

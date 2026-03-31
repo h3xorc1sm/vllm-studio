@@ -10,7 +10,7 @@ import { SecondaryMetrics } from "./_components/secondary-metrics";
 import { OverviewMetrics } from "./_components/overview-metrics";
 import { CostBreakdown } from "./_components/cost-breakdown";
 import { useUsage } from "./hooks/use-usage";
-import { BarChart3 } from "lucide-react";
+import { BarChart3, ChevronLeft, ChevronRight } from "lucide-react";
 
 const PERIODS = [
   { key: "d", label: "D" },
@@ -22,6 +22,7 @@ const PERIODS = [
 
 export default function UsagePage() {
   const [period, setPeriod] = useState<string>("all");
+  const [offset, setOffset] = useState(0);
   const {
     stats,
     peakMetrics,
@@ -36,7 +37,7 @@ export default function UsagePage() {
     sortedModels,
     handleSort,
     toggleRow,
-  } = useUsage(period);
+  } = useUsage(period, offset);
 
   const pageStateRender = PageState({
     loading,
@@ -61,10 +62,19 @@ export default function UsagePage() {
           <div className="flex items-center gap-2">
             {/* Period Toggle */}
             <div className="flex items-center bg-(--bg-subtle) rounded-full p-0.5">
+              {period !== "all" && (
+                <button
+                  onClick={() => setOffset((o) => o + 1)}
+                  className="px-1.5 py-1 text-(--dim) hover:text-(--fg) transition-colors"
+                  title="Previous period"
+                >
+                  <ChevronLeft className="h-3.5 w-3.5" />
+                </button>
+              )}
               {PERIODS.map((p) => (
                 <button
                   key={p.key}
-                  onClick={() => setPeriod(p.key)}
+                  onClick={() => { setPeriod(p.key); setOffset(0); }}
                   className={`px-2.5 py-1 text-xs font-medium rounded-full transition-colors ${
                     period === p.key
                       ? "bg-(--accent) text-(--fg)"
@@ -74,7 +84,20 @@ export default function UsagePage() {
                   {p.label}
                 </button>
               ))}
+              {period !== "all" && (
+                <button
+                  onClick={() => setOffset((o) => Math.max(0, o - 1))}
+                  disabled={offset === 0}
+                  className="px-1.5 py-1 text-(--dim) hover:text-(--fg) transition-colors disabled:opacity-30"
+                  title="Next period"
+                >
+                  <ChevronRight className="h-3.5 w-3.5" />
+                </button>
+              )}
             </div>
+            {offset > 0 && (
+              <span className="text-xs text-(--dim) tabular-nums">{offset} ago</span>
+            )}
             <RefreshButton onRefresh={loadStats} loading={loading} />
           </div>
         </div>
@@ -83,7 +106,11 @@ export default function UsagePage() {
         {OverviewMetrics(stats)}
 
         {/* Cost Breakdown */}
-        <CostBreakdown period={period} />
+        <CostBreakdown
+          period={period}
+          promptTokens={stats.totals.prompt_tokens}
+          completionTokens={stats.totals.completion_tokens}
+        />
 
         {/* Daily Usage Chart */}
         {DailyUsageChart(stats, dailyByModel, modelsForChart)}
@@ -102,7 +129,7 @@ export default function UsagePage() {
         {/* Performance Details & Secondary Metrics */}
         <div className="grid lg:grid-cols-2 gap-6">
           {PerformanceDetails(stats)}
-          {SecondaryMetrics(stats)}
+          {SecondaryMetrics(stats, period)}
         </div>
       </div>
     </div>

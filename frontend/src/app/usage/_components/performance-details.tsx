@@ -39,8 +39,8 @@ function MiniBar({
 }
 
 export function PerformanceDetails(stats: PerformanceStats) {
-  const maxLatency = Math.max(stats.latency.avg_ms, stats.latency.p95_ms, stats.latency.p99_ms);
-  const maxTTFT = Math.max(stats.ttft.avg_ms, stats.ttft.p95_ms, stats.ttft.p99_ms);
+  const maxLatency = Math.max(stats.latency.avg_ms, stats.latency.p95_ms, stats.latency.p99_ms) * 1.25;
+  const maxTTFT = Math.max(stats.ttft.avg_ms, stats.ttft.p95_ms, stats.ttft.p99_ms) * 1.25;
 
   return (
     <div className="bg-(--surface) rounded-lg overflow-hidden">

@@ -39,6 +39,10 @@ export function createStudioApi(core: ApiCore) {
       agent_fs_local_fallback?: boolean | null;
       electricity_rate?: number | null;
       electricity_currency?: string | null;
+      cloud_price_anthropic_input?: number | null;
+      cloud_price_anthropic_output?: number | null;
+      cloud_price_openai_input?: number | null;
+      cloud_price_openai_output?: number | null;
     }): Promise<StudioSettings & { success: boolean }> =>
       core.request("/studio/settings", {
         method: "POST",

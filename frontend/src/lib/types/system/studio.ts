@@ -18,6 +18,10 @@ export interface StudioSettings {
     daytona_api_key_configured?: boolean;
     electricity_rate?: number;
     electricity_currency?: string;
+    cloud_price_anthropic_input?: number;
+    cloud_price_anthropic_output?: number;
+    cloud_price_openai_input?: number;
+    cloud_price_openai_output?: number;
   };
   effective: {
     models_dir: string;
@@ -29,6 +33,10 @@ export interface StudioSettings {
     daytona_api_key_configured: boolean;
     electricity_rate: number;
     electricity_currency: string;
+    cloud_price_anthropic_input: number;
+    cloud_price_anthropic_output: number;
+    cloud_price_openai_input: number;
+    cloud_price_openai_output: number;
   };
 }
 

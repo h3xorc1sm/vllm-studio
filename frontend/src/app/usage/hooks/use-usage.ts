@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import api from "@/lib/api";
 import type { PeakMetrics, SortDirection, SortField, UsageStats } from "@/lib/types";
 
-export function useUsage(period?: string) {
+export function useUsage(period?: string, offset?: number) {
   const [stats, setStats] = useState<UsageStats | null>(null);
   const [peakMetrics, setPeakMetrics] = useState<Map<string, PeakMetrics>>(new Map());
   const [loading, setLoading] = useState(true);
@@ -19,7 +19,7 @@ export function useUsage(period?: string) {
       setLoading(true);
       setError(null);
       const [usageData, peakData] = await Promise.all([
-        api.getUsageStats(period),
+        api.getUsageStats(period, offset),
         api.getPeakMetrics(),
       ]);
       setStats(usageData);
@@ -36,7 +36,7 @@ export function useUsage(period?: string) {
     } finally {
       setLoading(false);
     }
-  }, [period]);
+  }, [period, offset]);
 
   useEffect(() => {
     loadStats();

@@ -123,8 +123,13 @@ export function createSystemApi(core: ApiCore) {
       return core.request(`/peak-metrics${query}`);
     },
 
-    getUsageStats: (period?: string): Promise<UsageStats> =>
-      core.request(`/usage${period ? `?period=${period}` : ""}`),
+    getUsageStats: (period?: string, offset?: number): Promise<UsageStats> => {
+      const params = new URLSearchParams();
+      if (period) params.set("period", period);
+      if (offset && offset > 0) params.set("offset", String(offset));
+      const qs = params.toString();
+      return core.request(`/usage${qs ? `?${qs}` : ""}`);
+    },
 
     getSystemConfig: (): Promise<ConfigData> => core.request("/config"),
 

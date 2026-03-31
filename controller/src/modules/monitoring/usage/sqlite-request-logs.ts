@@ -4,16 +4,26 @@ import { openSqliteDatabase } from "../../../stores/sqlite";
 
 import { calcChange, getPercentile } from "./usage-utilities";
 
-const PERIOD_SQL: Record<string, string> = {
-  d: "start_time >= datetime('now', '-24 hours')",
-  w: "start_time >= datetime('now', '-7 days')",
-  m: "start_time >= datetime('now', '-30 days')",
-  y: "start_time >= datetime('now', '-365 days')",
+const DURATIONS: Record<string, { value: number; unit: string }> = {
+  d: { value: 24, unit: "hours" },
+  w: { value: 7, unit: "days" },
+  m: { value: 30, unit: "days" },
+  y: { value: 365, unit: "days" },
 };
+
+function getPeriodWhere(period: string, offset = 0): string {
+  const dur = DURATIONS[period];
+  if (!dur) return "";
+  if (offset === 0) return `start_time >= datetime('now', '-${dur.value} ${dur.unit}')`;
+  const from = (offset + 1) * dur.value;
+  const to = offset * dur.value;
+  return `start_time >= datetime('now', '-${from} ${dur.unit}') AND start_time < datetime('now', '-${to} ${dur.unit}')`;
+}
 
 export const getUsageFromRequestLogs = (
   dbPath: string,
   period?: string,
+  offset = 0,
 ): Record<string, unknown> | null => {
   let db: Database | null = null;
   try {
@@ -25,9 +35,10 @@ export const getUsageFromRequestLogs = (
 
     if (!tableCheck) return null;
 
-    const where = period && PERIOD_SQL[period] ? `WHERE ${PERIOD_SQL[period]}` : "";
-    const successWhere = period && PERIOD_SQL[period]
-      ? `WHERE status = 'success' AND ${PERIOD_SQL[period]}`
+    const periodWhere = period && DURATIONS[period] ? getPeriodWhere(period, offset) : "";
+    const where = periodWhere ? `WHERE ${periodWhere}` : "";
+    const successWhere = periodWhere
+      ? `WHERE status = 'success' AND ${periodWhere}`
       : "WHERE status = 'success'";
 
     // Totals

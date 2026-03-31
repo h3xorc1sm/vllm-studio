@@ -17,11 +17,12 @@ export const registerUsageRoutes = (app: Hono, context: AppContext): void => {
   app.get("/usage", async (ctx) => {
     try {
       const period = ctx.req.query("period");
+      const offset = Math.max(0, parseInt(ctx.req.query("offset") ?? "0") || 0);
       const isAllTime = !period || period === "all";
       const lifetimeStore = context.stores.lifetimeMetricsStore;
 
       // Try new request_logs source first (captures all requests including streaming)
-      const requestLogsUsage = getUsageFromRequestLogs(context.config.db_path, period);
+      const requestLogsUsage = getUsageFromRequestLogs(context.config.db_path, period, offset);
       if (requestLogsUsage) {
         // Supplement from usage_hourly buckets (period-filtered, no vLLM dependency)
         const hourlyData = lifetimeStore.getUsageHourly(period);
@@ -49,9 +50,8 @@ export const registerUsageRoutes = (app: Hono, context: AppContext): void => {
             cache.miss_tokens = hourlyData.cache_queries - hourlyData.cache_hits;
             cache.hit_rate =
               Math.round((hourlyData.cache_hits / hourlyData.cache_queries) * 10000) / 100;
-            cache.hits = hourlyData.cache_hits > 0 ? 1 : 0;
-            cache.misses =
-              (hourlyData.cache_queries - hourlyData.cache_hits) > 0 ? 1 : 0;
+            cache.hits = 0;
+            cache.misses = 0;
           }
         }
 
@@ -87,8 +87,8 @@ export const registerUsageRoutes = (app: Hono, context: AppContext): void => {
               cache.hit_tokens = Math.round(prefixHits);
               cache.miss_tokens = Math.round(prefixQueries - prefixHits);
               cache.hit_rate = Math.round((prefixHits / prefixQueries) * 10000) / 100;
-              cache.hits = prefixHits > 0 ? 1 : 0;
-              cache.misses = (prefixQueries - prefixHits) > 0 ? 1 : 0;
+              cache.hits = 0;
+              cache.misses = 0;
             }
           }
         }
@@ -118,8 +118,8 @@ export const registerUsageRoutes = (app: Hono, context: AppContext): void => {
             unique_users: 0,
           },
           cache: {
-            hits: hourlyData.cache_hits > 0 ? 1 : 0,
-            misses: (hourlyData.cache_queries - hourlyData.cache_hits) > 0 ? 1 : 0,
+            hits: 0,
+            misses: 0,
             hit_tokens: hourlyData.cache_hits,
             miss_tokens: hourlyData.cache_queries - hourlyData.cache_hits,
             hit_rate: cacheHitRate,

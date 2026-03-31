@@ -51,7 +51,15 @@ function SectionCard({
   );
 }
 
-export function SecondaryMetrics(stats: SecondaryMetricsStats) {
+const PERIOD_VIEW_LABELS: Record<string, string> = {
+  d: "24h view",
+  w: "7-day hourly avg",
+  m: "30-day hourly avg",
+  y: "Annual hourly avg",
+  all: "All-time hourly pattern",
+};
+
+export function SecondaryMetrics(stats: SecondaryMetricsStats, period?: string) {
   const maxHourlyRequests = Math.max(...stats.hourly_pattern.map((h: HourlyPatternData) => h.requests), 1);
   const peakHour = stats.hourly_pattern.reduce((max, h) => h.requests > max.requests ? h : max, stats.hourly_pattern[0]);
 
@@ -127,16 +135,18 @@ export function SecondaryMetrics(stats: SecondaryMetricsStats) {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <div className="text-xs text-(--hl2) mb-1">Hits</div>
-              <div className="text-base tabular-nums">{formatNumber(stats.cache.hits)}</div>
+          {(stats.cache.hits > 0 || stats.cache.misses > 0) && (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <div className="text-xs text-(--hl2) mb-1">Hits</div>
+                <div className="text-base tabular-nums">{formatNumber(stats.cache.hits)}</div>
+              </div>
+              <div>
+                <div className="text-xs text-(--dim) mb-1">Misses</div>
+                <div className="text-base tabular-nums">{formatNumber(stats.cache.misses)}</div>
+              </div>
             </div>
-            <div>
-              <div className="text-xs text-(--dim) mb-1">Misses</div>
-              <div className="text-base tabular-nums">{formatNumber(stats.cache.misses)}</div>
-            </div>
-          </div>
+          )}
 
           <div className="pt-3 border-t border-(--border) grid grid-cols-2 gap-3 text-xs">
             <div>
@@ -156,7 +166,7 @@ export function SecondaryMetrics(stats: SecondaryMetricsStats) {
         <div className="space-y-2">
           <div className="flex items-center justify-between text-xs text-(--dim)">
             <span>Peak: {peakHour?.hour}:00 ({formatNumber(peakHour?.requests || 0)} req)</span>
-            <span>24h view</span>
+            <span>{PERIOD_VIEW_LABELS[period ?? "all"] ?? "Hourly pattern"}</span>
           </div>
 
           <div className="flex items-end gap-0.5 h-20">
