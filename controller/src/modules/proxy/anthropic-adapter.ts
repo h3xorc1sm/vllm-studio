@@ -242,8 +242,11 @@ export const translateResponseToAnthropic = (
 
   const content: AnthropicMessageResponse["content"] = [];
 
-  // Text content
-  const textContent = message?.["content"];
+  // Text content — fall back to reasoning_content/reasoning when content is empty (thinking mode)
+  let textContent = message?.["content"];
+  if (typeof textContent !== "string" || !textContent) {
+    textContent = message?.["reasoning_content"] ?? message?.["reasoning"] ?? "";
+  }
   if (typeof textContent === "string" && textContent) {
     content.push({ type: "text", text: textContent });
   }
@@ -464,8 +467,12 @@ export const createAnthropicStream = (
         const delta = (choice["delta"] ?? choice["message"]) as Record<string, unknown> | undefined;
         if (!delta) return;
 
-        // Handle text content
-        const content = typeof delta["content"] === "string" ? String(delta["content"]) : "";
+        // Handle text content — fall back to reasoning_content/reasoning when content is empty (thinking mode)
+        let content = typeof delta["content"] === "string" ? String(delta["content"]) : "";
+        if (!content) {
+          const reasoning = delta["reasoning_content"] ?? delta["reasoning"];
+          if (typeof reasoning === "string") content = reasoning;
+        }
         if (content) {
           accumulatedText += content;
         }
