@@ -43,7 +43,7 @@ set -euo pipefail
 SSH_KEY="$HOME/.ssh/linux-ai"
 REMOTE_USER="ser"
 REMOTE_HOST="192.168.1.70"
-REMOTE_DIR="/home/ser/workspace/projects/lmvllm"
+REMOTE_DIR="/home/ser/vllm/lmvllm"
 
 SSH_OPTS="-T -i $SSH_KEY -o ConnectTimeout=5"
 REMOTE="$REMOTE_USER@$REMOTE_HOST"
@@ -158,7 +158,7 @@ restart_controller() {
   step "Restarting controller on :8080"
   remote bash <<'REMOTE'
 set -e
-cd /home/ser/workspace/projects/lmvllm
+cd /home/ser/vllm/lmvllm
 docker compose stop controller 2>/dev/null || true
 pkill -f "bun.*controller/src/main.ts" 2>/dev/null || true
 fuser -k 8080/tcp >/dev/null 2>&1 || true
@@ -174,7 +174,7 @@ restart_frontend() {
   step "Building frontend"
   remote bash <<'REMOTE'
 set -euo pipefail
-cd /home/ser/workspace/projects/lmvllm/frontend
+cd /home/ser/vllm/lmvllm/frontend
 export BACKEND_URL=http://localhost:8080
 npx next build 2>&1 | tail -5
 REMOTE
@@ -183,7 +183,7 @@ REMOTE
   step "Restarting frontend on :3000"
   remote bash <<'REMOTE'
 set -euo pipefail
-cd /home/ser/workspace/projects/lmvllm/frontend
+cd /home/ser/vllm/lmvllm/frontend
 docker compose -f ../docker-compose.yml stop frontend 2>/dev/null || true
 pkill -f "next start" 2>/dev/null || true
 pkill -f "next dev" 2>/dev/null || true

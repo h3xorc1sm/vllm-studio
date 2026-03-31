@@ -235,10 +235,24 @@ export const buildVllmCommand = (recipe: Recipe): string[] => {
   }
 
   const modelId = (recipe.served_model_name || recipe.model_path || "").toLowerCase();
-  if (modelId.includes("minimax") && (modelId.includes("m2") || modelId.includes("m-2"))) {
-    if (recipe.tensor_parallel_size > 4) {
-      command.push("--enable-expert-parallel");
-    }
+
+  // Auto-enable expert parallelism for known MoE models with TP > 4
+  // Also respect explicit enable_expert_parallel in extra_args
+  const isMoEModel =
+    (modelId.includes("minimax") && (modelId.includes("m2") || modelId.includes("m-2"))) ||
+    modelId.includes("qwen3.5") ||
+    modelId.includes("qwen3-3.5") ||
+    (modelId.includes("qwen") && modelId.includes("262")) ||
+    modelId.includes("qwen3-235b") ||
+    modelId.includes("qwen3_235b");
+
+  const expertParallelExplicit = getExtraArgument(recipe.extra_args, "enable-expert-parallel");
+  const expertParallelEnabled =
+    expertParallelExplicit === true ||
+    (expertParallelExplicit !== false && isMoEModel && recipe.tensor_parallel_size > 1);
+
+  if (expertParallelEnabled) {
+    command.push("--enable-expert-parallel");
   }
 
   command.push("--max-model-len", String(recipe.max_model_len));
@@ -251,11 +265,14 @@ export const buildVllmCommand = (recipe: Recipe): string[] => {
   if (recipe.trust_remote_code) {
     command.push("--trust-remote-code");
   }
-  const toolCallParser = recipe.tool_call_parser || getDefaultToolCallParser(recipe);
+  // null means explicitly disabled; undefined/missing means use auto-detected default
+  const toolCallParser =
+    recipe.tool_call_parser !== null ? recipe.tool_call_parser : getDefaultToolCallParser(recipe);
   if (toolCallParser) {
     command.push("--tool-call-parser", toolCallParser, "--enable-auto-tool-choice");
   }
-  const reasoningParser = recipe.reasoning_parser || getDefaultReasoningParser(recipe);
+  const reasoningParser =
+    recipe.reasoning_parser !== null ? recipe.reasoning_parser : getDefaultReasoningParser(recipe);
   if (reasoningParser) {
     command.push("--reasoning-parser", reasoningParser);
   }
