@@ -53,9 +53,21 @@ function extractAuthToken(header: (name: string) => string | undefined): string 
   return null;
 }
 
+/** Strip common AI platform key prefixes so keys like sk-ant-abc match stored key abc */
+const KEY_PREFIXES = ["sk-ant-", "sk-"];
+
+function normalizeKey(key: string): string {
+  for (const prefix of KEY_PREFIXES) {
+    if (key.startsWith(prefix)) return key.slice(prefix.length);
+  }
+  return key;
+}
+
 function safeTokenEquals(expected: string, provided: string): boolean {
-  const expectedBuffer = Buffer.from(expected);
-  const providedBuffer = Buffer.from(provided);
+  const normExpected = normalizeKey(expected);
+  const normProvided = normalizeKey(provided);
+  const expectedBuffer = Buffer.from(normExpected);
+  const providedBuffer = Buffer.from(normProvided);
   if (expectedBuffer.length !== providedBuffer.length) {
     return false;
   }
