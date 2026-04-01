@@ -242,11 +242,16 @@ export const translateResponseToAnthropic = (
 
   const content: AnthropicMessageResponse["content"] = [];
 
-  // Text content — fall back to reasoning_content/reasoning when content is empty (thinking mode)
-  let textContent = message?.["content"];
-  if (typeof textContent !== "string" || !textContent) {
-    textContent = message?.["reasoning_content"] ?? message?.["reasoning"] ?? "";
+  // Thinking content (reasoning_content/reasoning from thinking mode models)
+  const reasoningContent =
+    typeof message?.["reasoning_content"] === "string" ? String(message["reasoning_content"]) :
+    typeof message?.["reasoning"] === "string" ? String(message["reasoning"]) : "";
+  if (reasoningContent) {
+    content.push({ type: "thinking", thinking: reasoningContent } as unknown as AnthropicMessageResponse["content"][number]);
   }
+
+  // Text content
+  const textContent = message?.["content"];
   if (typeof textContent === "string" && textContent) {
     content.push({ type: "text", text: textContent });
   }
@@ -356,33 +361,6 @@ export const createAnthropicStream = (
     messageStarted = true;
   };
 
-  const emitTextBlock = (controller: ReadableStreamDefaultController<Uint8Array>, text: string): void => {
-    if (!messageStarted) emitMessageStart(controller);
-
-    // Start new text block
-    enqueue(controller, "content_block_start", {
-      type: "content_block_start",
-      index: currentBlockIndex,
-      content_block: { type: "text", text: "" },
-    });
-
-    // Delta
-    if (text) {
-      enqueue(controller, "content_block_delta", {
-        type: "content_block_delta",
-        index: currentBlockIndex,
-        delta: { type: "text_delta", text },
-      });
-    }
-
-    enqueue(controller, "content_block_stop", {
-      type: "content_block_stop",
-      index: currentBlockIndex,
-    });
-
-    currentBlockIndex += 1;
-  };
-
   const emitToolUseBlocks = (controller: ReadableStreamDefaultController<Uint8Array>): void => {
     for (const [, tc] of toolCallAccumulators) {
       if (!messageStarted) emitMessageStart(controller);
@@ -449,10 +427,52 @@ export const createAnthropicStream = (
     }
   };
 
-  // Accumulate text content for stop sequence detection
-  let accumulatedText = "";
+  // Track state for progressive streaming
   let hasToolCalls = false;
-  let accumulatedTextEmitted = false;
+  let thinkingBlockOpen = false;
+  let textBlockOpen = false;
+  let accumulatedText = ""; // only for stop sequence detection
+
+  // Start/close helpers for progressive blocks
+  const startThinkingBlock = (controller: ReadableStreamDefaultController<Uint8Array>): void => {
+    if (!messageStarted) emitMessageStart(controller);
+    enqueue(controller, "content_block_start", {
+      type: "content_block_start",
+      index: currentBlockIndex,
+      content_block: { type: "thinking", thinking: "" },
+    });
+    thinkingBlockOpen = true;
+  };
+
+  const closeThinkingBlock = (controller: ReadableStreamDefaultController<Uint8Array>): void => {
+    if (!thinkingBlockOpen) return;
+    enqueue(controller, "content_block_stop", {
+      type: "content_block_stop",
+      index: currentBlockIndex,
+    });
+    currentBlockIndex += 1;
+    thinkingBlockOpen = false;
+  };
+
+  const startTextBlock = (controller: ReadableStreamDefaultController<Uint8Array>): void => {
+    if (!messageStarted) emitMessageStart(controller);
+    enqueue(controller, "content_block_start", {
+      type: "content_block_start",
+      index: currentBlockIndex,
+      content_block: { type: "text", text: "" },
+    });
+    textBlockOpen = true;
+  };
+
+  const closeTextBlock = (controller: ReadableStreamDefaultController<Uint8Array>): void => {
+    if (!textBlockOpen) return;
+    enqueue(controller, "content_block_stop", {
+      type: "content_block_stop",
+      index: currentBlockIndex,
+    });
+    currentBlockIndex += 1;
+    textBlockOpen = false;
+  };
 
   return new ReadableStream<Uint8Array>({
     async pull(controller): Promise<void> {
@@ -467,14 +487,34 @@ export const createAnthropicStream = (
         const delta = (choice["delta"] ?? choice["message"]) as Record<string, unknown> | undefined;
         if (!delta) return;
 
-        // Handle text content — fall back to reasoning_content/reasoning when content is empty (thinking mode)
-        let content = typeof delta["content"] === "string" ? String(delta["content"]) : "";
-        if (!content) {
-          const reasoning = delta["reasoning_content"] ?? delta["reasoning"];
-          if (typeof reasoning === "string") content = reasoning;
+        // Handle reasoning/thinking content — emit as thinking block
+        const reasoning = typeof (delta["reasoning_content"] ?? delta["reasoning"]) === "string"
+          ? String(delta["reasoning_content"] ?? delta["reasoning"])
+          : "";
+        if (reasoning) {
+          // Close text block if open (thinking comes first, but guard against interleaving)
+          closeTextBlock(controller);
+          if (!thinkingBlockOpen) startThinkingBlock(controller);
+          enqueue(controller, "content_block_delta", {
+            type: "content_block_delta",
+            index: currentBlockIndex,
+            delta: { type: "thinking_delta", thinking: reasoning },
+          });
+          accumulatedText += reasoning;
         }
-        if (content) {
-          accumulatedText += content;
+
+        // Handle text content — emit as text block
+        const textContent = typeof delta["content"] === "string" ? String(delta["content"]) : "";
+        if (textContent) {
+          // Close thinking block if open (transition from thinking to text)
+          closeThinkingBlock(controller);
+          if (!textBlockOpen) startTextBlock(controller);
+          enqueue(controller, "content_block_delta", {
+            type: "content_block_delta",
+            index: currentBlockIndex,
+            delta: { type: "text_delta", text: textContent },
+          });
+          accumulatedText += textContent;
         }
 
         // Handle tool calls — accumulate arguments
@@ -483,6 +523,9 @@ export const createAnthropicStream = (
           | undefined;
         if (Array.isArray(toolCalls)) {
           hasToolCalls = true;
+          // Close any open blocks before tool calls
+          closeThinkingBlock(controller);
+          closeTextBlock(controller);
           for (const tc of toolCalls) {
             const idx = tc.index ?? 0;
             if (!toolCallAccumulators.has(idx)) {
@@ -506,11 +549,9 @@ export const createAnthropicStream = (
       };
 
       const processDone = (controller: ReadableStreamDefaultController<Uint8Array>): void => {
-        // Emit accumulated text
-        if (accumulatedText && !accumulatedTextEmitted) {
-          emitTextBlock(controller, accumulatedText);
-          accumulatedTextEmitted = true;
-        }
+        // Close any open blocks
+        closeThinkingBlock(controller);
+        closeTextBlock(controller);
 
         // Determine stop reason
         let stopReason = "end_turn";
