@@ -242,18 +242,45 @@ export const translateResponseToAnthropic = (
 
   const content: AnthropicMessageResponse["content"] = [];
 
-  // Thinking content (reasoning_content/reasoning from thinking mode models)
-  const reasoningContent =
+  // Thinking content — check reasoning fields first, then parse <think/> tags from content
+  const rawReasoningField =
     typeof message?.["reasoning_content"] === "string" ? String(message["reasoning_content"]) :
     typeof message?.["reasoning"] === "string" ? String(message["reasoning"]) : "";
-  if (reasoningContent) {
-    content.push({ type: "thinking", thinking: reasoningContent } as unknown as AnthropicMessageResponse["content"][number]);
+  const rawContentField = typeof message?.["content"] === "string" ? String(message["content"]) : "";
+
+  // Extract <think/>, <thinking/>, <analysis/> blocks from content as fallback
+  let extractedReasoning = "";
+  let cleanedContent = rawContentField;
+  const thinkRegex = /<(?:think|thinking|analysis)(?:\s+[^>]*)?>[\s\S]*?<\/(?:think|thinking|analysis)>/gi;
+  // Also handle unclosed think tags (model may not close them)
+  const thinkOpenRegex = /<(?:think|thinking|analysis)(?:\s+[^>]*)?>[\s\S]*$/gi;
+
+  const thinkBlocks: string[] = [];
+  let matchResult = rawContentField.replace(thinkRegex, (_, tag) => {
+    thinkBlocks.push(tag);
+    return "";
+  });
+  // Check for unclosed think tags
+  const unclosedMatch = matchResult.match(thinkOpenRegex);
+  if (unclosedMatch) {
+    for (const m of unclosedMatch) {
+      const inner = m.replace(/^<(?:think|thinking|analysis)(?:\s+[^>]*)?>/i, "");
+      thinkBlocks.push(inner);
+    }
+    matchResult = matchResult.replace(thinkOpenRegex, "");
+  }
+  cleanedContent = matchResult.trim();
+  extractedReasoning = thinkBlocks.join("\n");
+
+  // Combine: reasoning field + extracted from content
+  const allReasoning = [rawReasoningField, extractedReasoning].filter(r => r.trim()).join("\n");
+  if (allReasoning) {
+    content.push({ type: "thinking", thinking: allReasoning } as unknown as AnthropicMessageResponse["content"][number]);
   }
 
-  // Text content
-  const textContent = message?.["content"];
-  if (typeof textContent === "string" && textContent) {
-    content.push({ type: "text", text: textContent });
+  // Text content (cleaned of think tags)
+  if (cleanedContent) {
+    content.push({ type: "text", text: cleanedContent });
   }
 
   // Tool calls
@@ -433,6 +460,99 @@ export const createAnthropicStream = (
   let textBlockOpen = false;
   let accumulatedText = ""; // only for stop sequence detection
 
+  // Think-tag parsing state (carries across chunks since tags can span deltas)
+  const thinkingOpenPrefixes = ["<thinking", "<analysis", "<think"];
+  const thinkingClosePrefixes = ["</thinking", "</analysis", "</think"];
+  const thinkingAllPrefixes = [...thinkingOpenPrefixes, ...thinkingClosePrefixes];
+  let inThink = false;
+  let thinkCarry = "";
+
+  const getThinkingTagLength = (suffix: string): { kind: "open" | "close"; length: number } | null => {
+    if (!suffix.startsWith("<")) return null;
+    const closeIndex = suffix.indexOf(">");
+    if (closeIndex < 0) return null;
+    const tag = suffix.slice(0, closeIndex + 1);
+    if (/^<(think|thinking|analysis)(?:\s+[^>]*)?>$/i.test(tag))
+      return { kind: "open", length: closeIndex + 1 };
+    if (/^<\/(think|thinking|analysis)(?:\s+[^>]*)?>$/i.test(tag))
+      return { kind: "close", length: closeIndex + 1 };
+    return null;
+  };
+
+  const isThinkingTag = (suffix: string): { kind: "open" | "close"; length: number } | null => {
+    return getThinkingTagLength(suffix);
+  };
+
+  const thinkingTagPrefixIsPartial = (suffix: string): boolean => {
+    const lower = suffix.toLowerCase();
+    if (!lower.startsWith("<")) return false;
+    for (const prefix of thinkingAllPrefixes) {
+      if (prefix.startsWith(lower)) return true;
+      if (lower.startsWith(prefix)) {
+        const next = lower[prefix.length];
+        if (!next) return true;
+        if (next === ">" || next === " " || next === "/" || next === "\t" || next === "\n" || next === "\r")
+          return true;
+      }
+    }
+    return false;
+  };
+
+  /** Parse think tags from a streaming delta, splitting into reasoning and content. */
+  const rewriteThinkDelta = (deltaText: string): { content: string; reasoning: string } => {
+    const combined = thinkCarry + (deltaText ?? "");
+    const combinedLower = combined.toLowerCase();
+    let carryIndex = combined.length;
+    let index = 0;
+    let contentOut = "";
+    let reasoningOut = "";
+
+    while (index < carryIndex) {
+      const remainingLower = combinedLower.slice(index);
+
+      if (combined[index] === "<") {
+        const thinkTag = isThinkingTag(remainingLower);
+        if (thinkTag?.kind === "open") {
+          inThink = true;
+          index += thinkTag.length;
+          continue;
+        }
+        if (thinkTag?.kind === "close") {
+          inThink = false;
+          index += thinkTag.length;
+          continue;
+        }
+        if (thinkingTagPrefixIsPartial(remainingLower)) {
+          carryIndex = index;
+          break;
+        }
+      }
+
+      const ch = combined[index] ?? "";
+      if (inThink) {
+        reasoningOut += ch;
+      } else {
+        contentOut += ch;
+      }
+      index += 1;
+    }
+
+    thinkCarry = carryIndex < combined.length ? combined.slice(carryIndex) : "";
+
+    return { content: contentOut, reasoning: reasoningOut };
+  };
+
+  /** Flush any remaining think carry buffer at stream end. */
+  const flushThinkCarry = (): { content: string; reasoning: string } => {
+    if (!thinkCarry) return { content: "", reasoning: "" };
+    const remaining = thinkCarry;
+    thinkCarry = "";
+    if (inThink) {
+      return { content: "", reasoning: remaining };
+    }
+    return { content: remaining, reasoning: "" };
+  };
+
   // Start/close helpers for progressive blocks
   const startThinkingBlock = (controller: ReadableStreamDefaultController<Uint8Array>): void => {
     if (!messageStarted) emitMessageStart(controller);
@@ -487,12 +607,18 @@ export const createAnthropicStream = (
         const delta = (choice["delta"] ?? choice["message"]) as Record<string, unknown> | undefined;
         if (!delta) return;
 
-        // Handle reasoning/thinking content — emit as thinking block
-        const reasoning = typeof (delta["reasoning_content"] ?? delta["reasoning"]) === "string"
+        // Parse think tags from delta.content (vLLM sends thinking inside <think/> in content)
+        const rawContent = typeof delta["content"] === "string" ? String(delta["content"]) : "";
+        const rawReasoning = typeof (delta["reasoning_content"] ?? delta["reasoning"]) === "string"
           ? String(delta["reasoning_content"] ?? delta["reasoning"])
           : "";
+
+        // Rewrite content through think-tag parser, also check reasoning fields as fallback
+        const { content: parsedContent, reasoning: parsedReasoning } = rewriteThinkDelta(rawContent);
+        const reasoning = parsedReasoning || rawReasoning;
+        const textContent = parsedContent;
+
         if (reasoning) {
-          // Close text block if open (thinking comes first, but guard against interleaving)
           closeTextBlock(controller);
           if (!thinkingBlockOpen) startThinkingBlock(controller);
           enqueue(controller, "content_block_delta", {
@@ -503,10 +629,7 @@ export const createAnthropicStream = (
           accumulatedText += reasoning;
         }
 
-        // Handle text content — emit as text block
-        const textContent = typeof delta["content"] === "string" ? String(delta["content"]) : "";
         if (textContent) {
-          // Close thinking block if open (transition from thinking to text)
           closeThinkingBlock(controller);
           if (!textBlockOpen) startTextBlock(controller);
           enqueue(controller, "content_block_delta", {
@@ -549,6 +672,27 @@ export const createAnthropicStream = (
       };
 
       const processDone = (controller: ReadableStreamDefaultController<Uint8Array>): void => {
+        // Flush any remaining think-tag carry buffer
+        const flushed = flushThinkCarry();
+        if (flushed.reasoning) {
+          closeTextBlock(controller);
+          if (!thinkingBlockOpen) startThinkingBlock(controller);
+          enqueue(controller, "content_block_delta", {
+            type: "content_block_delta",
+            index: currentBlockIndex,
+            delta: { type: "thinking_delta", thinking: flushed.reasoning },
+          });
+        }
+        if (flushed.content) {
+          closeThinkingBlock(controller);
+          if (!textBlockOpen) startTextBlock(controller);
+          enqueue(controller, "content_block_delta", {
+            type: "content_block_delta",
+            index: currentBlockIndex,
+            delta: { type: "text_delta", text: flushed.content },
+          });
+        }
+
         // Close any open blocks
         closeThinkingBlock(controller);
         closeTextBlock(controller);
