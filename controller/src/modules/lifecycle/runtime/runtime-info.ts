@@ -86,8 +86,12 @@ export const detectPlatformKind = (args: {
   return "unknown";
 };
 
+const sglangCache: Map<string, RuntimeBackendInfo> = new Map();
+
 export const getSglangRuntimeInfo = (config: Config): RuntimeBackendInfo => {
   const python = config.sglang_python || resolveVllmPythonPath() || "python3";
+  if (sglangCache.has(python)) return sglangCache.get(python)!;
+
   const pythonAvailable = runCommand(python, ["-V"]).status === 0;
   const result = runCommand(python, [
     "-c",
@@ -95,12 +99,14 @@ export const getSglangRuntimeInfo = (config: Config): RuntimeBackendInfo => {
   ]);
 
   if (result.status !== 0) {
-    return {
+    const info = {
       installed: false,
       version: null,
       python_path: config.sglang_python ?? null,
       upgrade_command_available: pythonAvailable,
     };
+    sglangCache.set(python, info);
+    return info;
   }
 
   let parsed: { version?: string | null; python?: string | null } | null = null;
@@ -110,12 +116,14 @@ export const getSglangRuntimeInfo = (config: Config): RuntimeBackendInfo => {
     parsed = null;
   }
 
-  return {
+  const info = {
     installed: Boolean(parsed?.version),
     version: parsed?.version ?? null,
     python_path: parsed?.python ?? config.sglang_python ?? null,
     upgrade_command_available: pythonAvailable,
   };
+  sglangCache.set(python, info);
+  return info;
 };
 
 const parseLlamaVersion = (output: string): string | null => {
@@ -148,15 +156,22 @@ const resolveExllamav3Binary = (config: Config): string | null => {
   return resolveBinary(executable) ?? (existsSync(executable) ? resolve(executable) : null);
 };
 
+const exllamav3Cache: Map<string, RuntimeBackendInfo> = new Map();
+
 export const getExllamav3RuntimeInfo = (config: Config): RuntimeBackendInfo => {
+  const configured = config.exllamav3_command || "";
+  if (exllamav3Cache.has(configured)) return exllamav3Cache.get(configured)!;
+
   const binary = resolveExllamav3Binary(config);
   if (!binary) {
-    return {
+    const result = {
       installed: false,
       version: null,
       binary_path: null,
       upgrade_command_available: false,
     };
+    exllamav3Cache.set(configured, result);
+    return result;
   }
 
   const versionResult = runCommand(binary, ["--version"]);
@@ -168,16 +183,21 @@ export const getExllamav3RuntimeInfo = (config: Config): RuntimeBackendInfo => {
     version = version ?? parseLlamaVersion(helpResult.stdout) ?? parseLlamaVersion(helpResult.stderr);
   }
 
-  return {
+  const result = {
     installed,
     version,
     binary_path: binary,
     upgrade_command_available: false,
   };
+  exllamav3Cache.set(configured, result);
+  return result;
 };
+
+const llamacppCache: Map<string, RuntimeBackendInfo> = new Map();
 
 export const getLlamacppRuntimeInfo = (config: Config): RuntimeBackendInfo => {
   const configured = config.llama_bin || "llama-server";
+  if (llamacppCache.has(configured)) return llamacppCache.get(configured)!;
   const resolved =
     resolveBinary(configured) ?? (existsSync(configured) ? resolve(configured) : null);
   const binary = resolved ?? configured;
@@ -186,29 +206,35 @@ export const getLlamacppRuntimeInfo = (config: Config): RuntimeBackendInfo => {
   if (versionResult.status !== 0) {
     const helpResult = runCommand(binary, ["--help"]);
     if (helpResult.status !== 0) {
-      return {
+      const result = {
         installed: false,
         version: null,
         binary_path: resolved,
         upgrade_command_available: isUpgradeCommandConfigured(LLAMACPP_UPGRADE_ENV),
       };
+      llamacppCache.set(configured, result);
+      return result;
     }
     const version = parseLlamaVersion(helpResult.stdout) ?? parseLlamaVersion(helpResult.stderr);
-    return {
+    const result = {
       installed: Boolean(version),
       version,
       binary_path: resolved,
       upgrade_command_available: isUpgradeCommandConfigured(LLAMACPP_UPGRADE_ENV),
     };
+    llamacppCache.set(configured, result);
+    return result;
   }
 
   const version = parseLlamaVersion(versionResult.stdout) ?? parseLlamaVersion(versionResult.stderr);
-  return {
+  const result = {
     installed: Boolean(version),
     version,
     binary_path: resolved,
     upgrade_command_available: isUpgradeCommandConfigured(LLAMACPP_UPGRADE_ENV),
   };
+  llamacppCache.set(configured, result);
+  return result;
 };
 
 export const getSystemRuntimeInfo = async (config: Config): Promise<SystemRuntimeInfo> => {
